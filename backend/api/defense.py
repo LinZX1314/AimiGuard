@@ -1135,14 +1135,19 @@ async def get_hfish_logs(
     offset: int = 0,
     threat_level: Optional[str] = None,
     service_name: Optional[str] = None,
+    days: Optional[int] = None,
     current_user: User = Depends(require_permissions("view_events")),
     db: Session = Depends(get_db),
 ):
     """分页查询 HFish 攻击日志（来源：ThreatEvent.source='hfish'）"""
     from sqlalchemy import func as sqlfunc
+    from datetime import timedelta
 
     query = db.query(ThreatEvent).filter(ThreatEvent.source == "hfish")
 
+    if days and days > 0:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        query = query.filter(ThreatEvent.created_at >= since)
     if threat_level:
         query = query.filter(ThreatEvent.threat_label == threat_level)
     if service_name:

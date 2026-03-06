@@ -86,6 +86,7 @@ export const defenseApi = {
     offset?: number
     threat_level?: string
     service_name?: string
+    days?: number
   }): Promise<{ total: number; items: HFishLog[] }> {
     const res = await apiClient.get('/defense/hfish/logs', { params })
     // 后端返回 { code:0, data: { total, items } }

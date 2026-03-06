@@ -117,6 +117,18 @@
             </Button>
           </div>
 
+          <!-- 时间范围筛选 -->
+          <div class="flex gap-1">
+            <Button
+              v-for="d in [{ v: 1, l: '24h' }, { v: 7, l: '7天' }, { v: 30, l: '30天' }]"
+              :key="d.v"
+              :variant="logDaysFilter === d.v ? 'default' : 'outline'"
+              size="sm"
+              class="cursor-pointer text-xs"
+              @click="logDaysFilter = d.v; loadLogs(0)"
+            >{{ d.l }}</Button>
+          </div>
+
           <!-- 服务名筛选 -->
           <select
             v-model="logServiceFilter"
@@ -263,6 +275,7 @@ const logOffset = ref(0)
 const logTotal = ref(0)
 const logThreatFilter = ref('')
 const logServiceFilter = ref('')
+const logDaysFilter = ref(7)
 const serviceOptions = ref<string[]>([])
 
 // IP 弹窗
@@ -301,6 +314,7 @@ const loadLogs = async (offset = 0) => {
       offset,
       threat_level: logThreatFilter.value || undefined,
       service_name: logServiceFilter.value || undefined,
+      days: logDaysFilter.value,
     })
     logs.value = result.items
     logTotal.value = result.total
@@ -370,6 +384,7 @@ const exportLogsCSV = async () => {
       offset: 0,
       threat_level: logThreatFilter.value || undefined,
       service_name: logServiceFilter.value || undefined,
+      days: logDaysFilter.value,
     })
     const rows = result.items
     if (!rows.length) { alert('暂无数据可导出'); return }
