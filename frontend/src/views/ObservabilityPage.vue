@@ -108,16 +108,18 @@
           <div v-if="loading" class="space-y-2">
             <Skeleton v-for="i in 4" :key="i" class="h-8 w-full rounded" />
           </div>
-          <div v-else v-for="(val, key) in thresholds" :key="key" class="flex items-center gap-3">
-            <label class="text-xs text-muted-foreground min-w-[140px]">{{ thresholdLabels[key as string] || key }}</label>
-            <input
-              type="number"
-              :value="val"
-              @change="(e: Event) => pendingThresholds[key as string] = parseFloat((e.target as HTMLInputElement).value)"
-              class="h-7 w-24 rounded-md border border-input bg-background px-2 text-xs text-right focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            <span class="text-[10px] text-muted-foreground">{{ (key as string).includes('pct') ? '%' : 'ms' }}</span>
-          </div>
+          <template v-else>
+            <div v-for="(val, key) in thresholds" :key="key" class="flex items-center gap-3">
+              <label class="text-xs text-muted-foreground min-w-[140px]">{{ thresholdLabels[key as string] || key }}</label>
+              <input
+                type="number"
+                :value="val"
+                @change="(e: Event) => pendingThresholds[key as string] = parseFloat((e.target as HTMLInputElement).value)"
+                class="h-7 w-24 rounded-md border border-input bg-background px-2 text-xs text-right focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span class="text-[10px] text-muted-foreground">{{ (key as string).includes('pct') ? '%' : 'ms' }}</span>
+            </div>
+          </template>
           <div class="pt-2 flex items-center gap-2">
             <Button size="sm" class="cursor-pointer text-xs" :disabled="Object.keys(pendingThresholds).length === 0 || savingThresholds" @click="saveThresholds">
               {{ savingThresholds ? '保存中…' : '保存阈值' }}

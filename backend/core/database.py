@@ -29,6 +29,72 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+_RBAC_ROLE_DEFS = (
+    ("admin", "System administrator with full access"),
+    ("operator", "Security operator"),
+    ("viewer", "Read-only viewer"),
+)
+
+_RBAC_PERMISSION_DEFS = (
+    ("ai_chat", "ai", "chat", "Use AI chat"),
+    ("view_ai_sessions", "ai", "view", "View AI sessions"),
+    ("system:config", "system", "config", "Manage system configuration"),
+    ("defense:manage", "defense", "manage", "Manage defense integrations"),
+    ("view_events", "defense", "view", "View defense events"),
+    ("approve_event", "defense", "approve", "Approve defense events"),
+    ("reject_event", "defense", "reject", "Reject defense events"),
+    ("firewall_sync", "firewall", "sync", "Execute firewall sync tasks"),
+    ("view_firewall_tasks", "firewall", "view", "View firewall sync tasks"),
+    ("scan:execute", "scan", "execute", "Execute scan tasks"),
+    ("scan:view", "scan", "view", "View scan tasks"),
+    ("view_push", "push", "view", "View push channels"),
+    ("manage_push", "push", "manage", "Manage push channels"),
+    ("manage_plugins", "plugin", "manage", "Manage plugins"),
+    ("view_plugins", "plugin", "view", "View plugins"),
+    ("create_tts_task", "tts", "create", "Create TTS tasks"),
+    ("view_tts_tasks", "tts", "view", "View TTS tasks"),
+    ("view_audit", "audit", "view", "View audit logs"),
+    ("view_system_mode", "system", "view_mode", "View system mode"),
+    ("set_system_mode", "system", "set_mode", "Set system mode"),
+    ("system_rollback", "system", "rollback", "Rollback system snapshot"),
+    ("generate_report", "report", "generate", "Generate security reports"),
+)
+
+_RBAC_ROLE_PERMISSION_NAMES = {
+    "viewer": (
+        "view_events",
+        "scan:view",
+        "view_ai_sessions",
+        "view_audit",
+        "view_push",
+        "view_plugins",
+        "view_tts_tasks",
+        "view_firewall_tasks",
+        "view_system_mode",
+    ),
+    "operator": (
+        "view_events",
+        "approve_event",
+        "reject_event",
+        "scan:view",
+        "scan:execute",
+        "ai_chat",
+        "view_ai_sessions",
+        "firewall_sync",
+        "view_firewall_tasks",
+        "view_push",
+        "manage_push",
+        "view_plugins",
+        "create_tts_task",
+        "view_tts_tasks",
+        "view_audit",
+        "view_system_mode",
+        "system:config",
+        "defense:manage",
+        "generate_report",
+    ),
+}
+
 
 def get_db():
     db = SessionLocal()
@@ -410,5 +476,118 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+def _ensure_default_rbac_data() -> None:
+    """Backfill missing RBAC roles/permissions for existing databases."""
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    try:
+        roles_by_name: dict[str, Role] = {}
+        for role_name, role_desc in _RBAC_ROLE_DEFS:
+            role = db.query(Role).filter(Role.name == role_name).first()
+            if role is None:
+                role = Role(name=role_name, description=role_desc, created_at=now, updated_at=now)
+                db.add(role)
+                db.flush()
+            elif not role.description:
+                role.description = role_desc
+            roles_by_name[role_name] = role
+
+        perms_by_name: dict[str, Permission] = {}
+        for name, resource, action, desc in _RBAC_PERMISSION_DEFS:
+            permission = db.query(Permission).filter(Permission.name == name).first()
+            if permission is None:
+                # Backward compatibility: old DBs may have legacy permission names
+                # with the same resource/action pair.
+                permission = (
+                    db.query(Permission)
+                    .filter(Permission.resource == resource, Permission.action == action)
+                    .first()
+                )
+                if permission is not None and permission.name != name:
+                    name_conflict = db.query(Permission).filter(Permission.name == name).first()
+                    if name_conflict is None:
+                        permission.name = name
+            if permission is None:
+                permission = Permission(
+                    name=name,
+                    resource=resource,
+                    action=action,
+                    description=desc,
+                    created_at=now,
+                )
+                db.add(permission)
+                db.flush()
+            else:
+                if not permission.resource:
+                    permission.resource = resource
+                if not permission.action:
+                    permission.action = action
+                if not permission.description:
+                    permission.description = desc
+            perms_by_name[name] = permission
+
+        all_permission_ids = {perm.id for perm in db.query(Permission).all() if perm.id is not None}
+        for role_name, role in roles_by_name.items():
+            existing_permission_ids = {
+                rp.permission_id
+                for rp in db.query(RolePermission).filter(RolePermission.role_id == role.id).all()
+            }
+            if role_name == "admin":
+                target_permission_ids = all_permission_ids
+            else:
+                target_permission_ids = {
+                    perms_by_name[name].id
+                    for name in _RBAC_ROLE_PERMISSION_NAMES.get(role_name, ())
+                    if name in perms_by_name and perms_by_name[name].id is not None
+                }
+
+            for permission_id in target_permission_ids:
+                if permission_id in existing_permission_ids:
+                    continue
+                db.add(RolePermission(role_id=role.id, permission_id=permission_id, created_at=now))
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+    # 轻量迁移：SQLite 上为既有表补齐新增列（兼容历史数据库）
+    # 说明：SQLAlchemy create_all 不会对已存在表执行 ALTER TABLE。
+    with engine.begin() as conn:
+        def _sqlite_columns(table_name: str) -> set[str]:
+            rows = conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+            return {str(r[1]) for r in rows}
+
+        def _ensure_sqlite_column(table_name: str, column_name: str, column_type_sql: str) -> None:
+            cols = _sqlite_columns(table_name)
+            if column_name in cols:
+                return
+            conn.exec_driver_sql(
+                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type_sql}"
+            )
+
+        # scan_finding: 新增 Nmap 主机发现字段，兼容旧库
+        _ensure_sqlite_column("scan_finding", "mac_address", "VARCHAR")
+        _ensure_sqlite_column("scan_finding", "vendor", "VARCHAR")
+        _ensure_sqlite_column("scan_finding", "hostname", "VARCHAR")
+        _ensure_sqlite_column("scan_finding", "state", "VARCHAR")
+        _ensure_sqlite_column("scan_finding", "os_type", "VARCHAR")
+        _ensure_sqlite_column("scan_finding", "os_accuracy", "VARCHAR")
+
+        # threat_event: 历史库可能缺少以下字段，查询 ORM 全字段时会触发 no such column。
+        _ensure_sqlite_column("threat_event", "service_port", "VARCHAR")
+        _ensure_sqlite_column("threat_event", "ip_location", "VARCHAR")
+        _ensure_sqlite_column("threat_event", "client_id", "VARCHAR")
+        _ensure_sqlite_column("threat_event", "client_name", "VARCHAR")
+
+        # audit_log: 审计哈希链字段（日报/周报等写审计时依赖）
+        _ensure_sqlite_column("audit_log", "integrity_hash", "VARCHAR")
+        _ensure_sqlite_column("audit_log", "prev_hash", "VARCHAR")
+
+    _ensure_default_rbac_data()

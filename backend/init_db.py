@@ -52,24 +52,34 @@ def insert_sample_data(conn: sqlite3.Connection):
     
     # 2. Create permissions
     permissions = [
-        ("view_dashboard", "dashboard", "view", "查看仪表盘"),
-        ("view_threats", "threat", "view", "查看威胁事件"),
-        ("approve_threat", "threat", "approve", "审批威胁事件"),
-        ("reject_threat", "threat", "reject", "驳回威胁事件"),
-        ("view_scans", "scan", "view", "查看扫描任务"),
-        ("create_scan", "scan", "create", "创建扫描任务"),
-        ("view_reports", "report", "view", "查看报告"),
-        ("manage_devices", "device", "manage", "管理设备"),
-        ("manage_users", "user", "manage", "管理用户"),
-        ("manage_system", "system", "manage", "管理系统设置"),
         ("ai_chat", "ai", "chat", "AI 对话"),
-        ("view_ai_sessions", "ai", "view", "查看 AI 会话")
+        ("view_ai_sessions", "ai", "view", "查看 AI 会话"),
+        ("system:config", "system", "config", "系统配置"),
+        ("defense:manage", "defense", "manage", "防御管理"),
+        ("view_events", "defense", "view", "查看事件"),
+        ("approve_event", "defense", "approve", "批准事件"),
+        ("reject_event", "defense", "reject", "拒绝事件"),
+        ("firewall_sync", "firewall", "sync", "防火墙同步"),
+        ("view_firewall_tasks", "firewall", "view", "查看防火墙任务"),
+        ("scan:execute", "scan", "execute", "执行扫描"),
+        ("scan:view", "scan", "view", "查看扫描"),
+        ("view_push", "push", "view", "查看推送"),
+        ("manage_push", "push", "manage", "管理推送"),
+        ("manage_plugins", "plugin", "manage", "管理插件"),
+        ("view_plugins", "plugin", "view", "查看插件"),
+        ("create_tts_task", "tts", "create", "创建 TTS 任务"),
+        ("view_tts_tasks", "tts", "view", "查看 TTS 任务"),
+        ("view_audit", "audit", "view", "查看审计日志"),
+        ("view_system_mode", "system", "view_mode", "查看系统模式"),
+        ("set_system_mode", "system", "set_mode", "设置系统模式"),
+        ("system_rollback", "system", "rollback", "系统回滚"),
+        ("generate_report", "report", "generate", "生成报告"),
     ]
     cursor.executemany(
         "INSERT INTO permission (name, resource, action, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
         [(name, res, act, desc, now, now) for name, res, act, desc in permissions]
     )
-    print("✓ Created 12 permissions")
+    print(f"✓ Created {len(permissions)} permissions")
     
     # 3. Assign permissions to roles
     # Admin gets all permissions
@@ -82,13 +92,23 @@ def insert_sample_data(conn: sqlite3.Connection):
         [(admin_role_id, pid, now) for pid in all_permission_ids]
     )
     
-    # Operator gets view + approve/reject + create_scan
+    # Operator gets read + operate permissions
     cursor.execute("SELECT id FROM role WHERE name = 'operator'")
     operator_role_id = cursor.fetchone()[0]
     cursor.execute("""
         SELECT id FROM permission 
-        WHERE name IN ('view_dashboard', 'view_threats', 'approve_threat', 'reject_threat', 
-                       'view_scans', 'create_scan', 'view_reports')
+        WHERE name IN (
+          'view_events', 'approve_event', 'reject_event',
+          'scan:view', 'scan:execute',
+          'ai_chat', 'view_ai_sessions',
+          'firewall_sync', 'view_firewall_tasks',
+          'view_push', 'manage_push',
+          'view_plugins',
+          'create_tts_task', 'view_tts_tasks',
+          'view_audit', 'view_system_mode',
+          'system:config', 'defense:manage',
+          'generate_report'
+        )
     """)
     operator_permission_ids = [row[0] for row in cursor.fetchall()]
     cursor.executemany(
@@ -96,12 +116,22 @@ def insert_sample_data(conn: sqlite3.Connection):
         [(operator_role_id, pid, now) for pid in operator_permission_ids]
     )
     
-    # Viewer gets only view permissions
+    # Viewer gets read-only permissions
     cursor.execute("SELECT id FROM role WHERE name = 'viewer'")
     viewer_role_id = cursor.fetchone()[0]
     cursor.execute("""
-        SELECT id FROM permission 
-        WHERE action = 'view'
+        SELECT id FROM permission
+        WHERE name IN (
+          'view_events',
+          'scan:view',
+          'view_ai_sessions',
+          'view_audit',
+          'view_push',
+          'view_plugins',
+          'view_tts_tasks',
+          'view_firewall_tasks',
+          'view_system_mode'
+        )
     """)
     viewer_permission_ids = [row[0] for row in cursor.fetchall()]
     cursor.executemany(

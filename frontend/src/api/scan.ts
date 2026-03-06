@@ -165,7 +165,7 @@ export const scanApi = {
   // ── Nmap 配置 ──
   async getNmapConfig(): Promise<{ nmap_path: string | null; ip_ranges: string[]; scan_interval: number; enabled: boolean }> {
     const res = await apiClient.get('/scan/nmap/config')
-    return res.data
+    return res as { nmap_path: string | null; ip_ranges: string[]; scan_interval: number; enabled: boolean }
   },
 
   async saveNmapConfig(config: {
@@ -187,7 +187,7 @@ export const scanApi = {
 
   async getWin7Hosts(taskId: number) {
     const res = await apiClient.get(`/scan/tasks/${taskId}/win7-hosts`)
-    return res.data
+    return res
   },
 
   // ── Nmap 扫描主机结果 ──

@@ -29,6 +29,18 @@
         </Card>
       </div>
 
+      <Card v-if="showDemoHint" class="border-dashed border-amber-500/30 bg-amber-500/5">
+        <CardContent class="flex flex-col gap-2 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="space-y-1">
+            <p class="text-sm font-medium text-foreground">当前环境没有探测样本</p>
+            <p class="text-xs text-muted-foreground">
+              可运行 <code>python backend/seed_demo_data.py</code> 导入演示资产、扫描任务、漏洞发现和 AI 审计数据。
+            </p>
+          </div>
+          <Badge variant="outline" class="w-fit border-amber-500/30 bg-amber-500/10 text-amber-300">Demo Seed</Badge>
+        </CardContent>
+      </Card>
+
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- Recent Tasks -->
         <Card>
@@ -94,13 +106,16 @@
             <CardHeader class="pb-3">
               <CardTitle class="text-base">探测链路状态</CardTitle>
             </CardHeader>
-            <CardContent class="space-y-2 text-sm">
-              <div v-for="item in chainStatus" :key="item.name" class="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <span>{{ item.name }}</span>
-                <span :class="item.ok ? 'text-emerald-500' : 'text-amber-500'">{{ item.ok ? '正常' : item.note }}</span>
+          <CardContent class="space-y-2 text-sm">
+            <div v-for="item in chainStatus" :key="item.name" class="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div class="min-w-0">
+                <p>{{ item.name }}</p>
+                <p v-if="item.metric" class="mt-0.5 text-xs text-muted-foreground">{{ item.metric }}</p>
               </div>
-            </CardContent>
-          </Card>
+              <span :class="item.ok ? 'text-emerald-500' : 'text-amber-500'">{{ item.note }}</span>
+            </div>
+          </CardContent>
+        </Card>
         </div>
       </div>
 
@@ -208,6 +223,7 @@ import {
   CategoryScale, LinearScale, BarElement, Title,
 } from 'chart.js'
 import { scanApi, type ScanTask, type ScanFinding } from '@/api/scan'
+import { overviewApi, type OverviewChainStatus } from '@/api/overview'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -221,6 +237,7 @@ const recentTasks = ref<ScanTask[]>([])
 const trendTasks = ref<ScanTask[]>([])
 const highFindings = ref<ScanFinding[]>([])
 const taskStateCounts = ref({ CREATED: 0, RUNNING: 0, REPORTED: 0, FAILED: 0 })
+const chainStatusData = ref<OverviewChainStatus | null>(null)
 
 const stats = ref({
   totalAssets: 0,
@@ -274,6 +291,16 @@ const severitySummary = computed(() => {
   ]
 })
 
+const showDemoHint = computed(() => {
+  return (
+    !loading.value &&
+    stats.value.totalAssets === 0 &&
+    stats.value.totalFindings === 0 &&
+    stats.value.runningTasks === 0 &&
+    recentTasks.value.length === 0
+  )
+})
+
 // ── 漏洞饼图数据 ──
 const severityChartData = computed(() => ({
   labels: severitySummary.value.map(s => s.label),
@@ -296,10 +323,7 @@ const doughnutOptions = {
 }
 
 const chainStatus = computed(() => [
-  { name: '任务调度器', ok: true, note: '' },
-  { name: '扫描执行器', ok: true, note: '' },
-  { name: '结果入库', ok: stats.value.totalFindings >= 0, note: '' },
-  { name: '资产管理', ok: stats.value.totalAssets >= 0, note: '' },
+  ...(chainStatusData.value?.probe ?? []),
 ])
 
 // ── 任务状态分布饼图 ──
@@ -382,6 +406,7 @@ const loadAll = async () => {
       findingsAll, findingsHigh, findingsMed, findingsLow, findingsInfo,
       stateCreated, stateRunning, stateReported, stateFailed,
       tasksTrend,
+      chainSnapshot,
     ] = await Promise.all([
       scanApi.getAssets({ page_size: 1 }),
       scanApi.getAssets({ enabled: true, page_size: 1 }),
@@ -397,6 +422,7 @@ const loadAll = async () => {
       scanApi.getTasks({ state: 'REPORTED', page_size: 1 }),
       scanApi.getTasks({ state: 'FAILED', page_size: 1 }),
       scanApi.getTasks({ page: 1, page_size: 100 }),
+      overviewApi.getChainStatus(),
     ])
 
     stats.value.totalAssets = assetsAll.total
@@ -418,6 +444,7 @@ const loadAll = async () => {
     recentTasks.value = tasksRecent.items
     trendTasks.value = tasksTrend.items
     highFindings.value = findingsHigh.items
+    chainStatusData.value = chainSnapshot ?? { defense: [], probe: [], generated_at: new Date().toISOString() }
   } catch (e) {
     console.error('Failed to load probe dashboard:', e)
   } finally {

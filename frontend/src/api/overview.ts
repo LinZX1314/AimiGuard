@@ -114,26 +114,45 @@ export interface DefenseStats {
   top_ips: TopIP[]
 }
 
+export interface ChainStatusItem {
+  key: string
+  name: string
+  ok: boolean
+  note: string
+  metric?: string | null
+}
+
+export interface OverviewChainStatus {
+  defense: ChainStatusItem[]
+  probe: ChainStatusItem[]
+  generated_at: string
+}
+
 // ── API ──
 
 export const overviewApi = {
   async getMetrics(): Promise<OverviewMetrics> {
     const res = await apiClient.get('/overview/metrics')
-    return res.data
+    return res as OverviewMetrics
   },
 
   async getTrends(range: TrendRange = '7d'): Promise<OverviewTrends> {
     const res = await apiClient.get('/overview/trends', { params: { range } })
-    return res.data
+    return res as OverviewTrends
   },
 
   async getTodos(): Promise<OverviewTodos> {
     const res = await apiClient.get('/overview/todos')
-    return res.data
+    return res as OverviewTodos
   },
 
   async getDefenseStats(range: TrendRange = '7d'): Promise<DefenseStats> {
     const res = await apiClient.get('/overview/defense-stats', { params: { range } })
-    return res.data
+    return res as DefenseStats
+  },
+
+  async getChainStatus(): Promise<OverviewChainStatus> {
+    const res = await apiClient.get('/overview/chain-status')
+    return res as OverviewChainStatus
   },
 }

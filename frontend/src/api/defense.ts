@@ -71,7 +71,7 @@ export const defenseApi = {
   // ── HFish 配置 ──
   async getHFishConfig(): Promise<HFishConfig> {
     const res = await apiClient.get('/defense/hfish/config')
-    return res.data
+    return res as HFishConfig
   },
 
   async saveHFishConfig(config: HFishConfigRequest) {

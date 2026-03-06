@@ -574,6 +574,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   result TEXT NOT NULL CHECK(result IN ('success','failed')),
   error_message TEXT,
   trace_id TEXT NOT NULL,
+  integrity_hash TEXT,
+  prev_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

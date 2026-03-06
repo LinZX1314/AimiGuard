@@ -41,6 +41,18 @@
         </Card>
       </div>
 
+      <Card v-if="showDemoHint" class="border-dashed border-amber-500/30 bg-amber-500/5">
+        <CardContent class="flex flex-col gap-2 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="space-y-1">
+            <p class="text-sm font-medium text-foreground">当前环境没有业务样本</p>
+            <p class="text-xs text-muted-foreground">
+              可运行 <code>python backend/seed_demo_data.py</code> 一键导入防御、探测、AI、审计演示数据。
+            </p>
+          </div>
+          <Badge variant="outline" class="w-fit border-amber-500/30 bg-amber-500/10 text-amber-300">Demo Seed</Badge>
+        </CardContent>
+      </Card>
+
       <!-- 趋势图 + 待办 -->
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- 告警趋势折线图 -->
@@ -51,7 +63,7 @@
           </CardHeader>
           <CardContent>
             <div v-if="loading" class="h-44 flex items-center justify-center text-muted-foreground text-sm">加载中…</div>
-            <div v-else-if="trends.alert_trend.length === 0" class="h-44 flex items-center justify-center text-muted-foreground text-sm">暂无数据</div>
+            <div v-else-if="!trends?.alert_trend?.length" class="h-44 flex items-center justify-center text-muted-foreground text-sm">暂无数据</div>
             <div v-else class="h-44">
               <Line :data="alertTrendChartData" :options="lineChartOptions" />
             </div>
@@ -160,9 +172,12 @@
               :key="item.name"
               class="flex items-center justify-between rounded-md border border-border px-3 py-2"
             >
-              <span>{{ item.name }}</span>
+              <div class="min-w-0">
+                <p>{{ item.name }}</p>
+                <p v-if="item.metric" class="mt-0.5 text-xs text-muted-foreground">{{ item.metric }}</p>
+              </div>
               <span :class="item.ok ? 'text-emerald-500' : 'text-amber-500'">
-                {{ item.ok ? '正常' : item.note }}
+                {{ item.note }}
               </span>
             </div>
           </CardContent>
@@ -232,7 +247,15 @@ import {
   Legend,
   Filler,
 } from 'chart.js'
-import { overviewApi, type OverviewMetrics, type OverviewTrends, type OverviewTodos, type DefenseStats, type TrendRange } from '@/api/overview'
+import {
+  overviewApi,
+  type OverviewChainStatus,
+  type OverviewMetrics,
+  type OverviewTrends,
+  type OverviewTodos,
+  type DefenseStats,
+  type TrendRange,
+} from '@/api/overview'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -250,6 +273,7 @@ const metrics = ref<OverviewMetrics | null>(null)
 const trends = ref<OverviewTrends>({ range: '7d', alert_trend: [], high_alert_trend: [], task_trend: [] })
 const todos = ref<OverviewTodos | null>(null)
 const defenseStats = ref<DefenseStats | null>(null)
+const chainStatusData = ref<OverviewChainStatus | null>(null)
 
 const kpiCards = computed(() => {
   const d = metrics.value?.defense
@@ -287,14 +311,21 @@ const kpiCards = computed(() => {
 })
 
 const chainStatus = computed(() => {
+  return chainStatusData.value?.defense ?? []
+})
+
+const showDemoHint = computed(() => {
   const d = metrics.value?.defense
   const p = metrics.value?.probe
-  return [
-    { name: '告警接入（HFish）', ok: true, note: '' },
-    { name: 'AI 评分引擎', ok: true, note: '' },
-    { name: '审批与执行', ok: (d?.manual_required ?? 0) === 0, note: `${d?.manual_required} 条需人工` },
-    { name: '探测扫描', ok: (p?.total_assets ?? 0) >= 0, note: '' },
-  ]
+  if (!d || !p) return false
+  return (
+    d.today_alerts === 0 &&
+    d.pending_events === 0 &&
+    d.today_blocked === 0 &&
+    p.total_assets === 0 &&
+    p.total_findings === 0 &&
+    p.running_tasks === 0
+  )
 })
 
 // ── 图表数据 ──
@@ -424,16 +455,18 @@ const scoreColor = (score: number | null | undefined) => {
 const loadAll = async () => {
   loading.value = true
   try {
-    const [m, tr, td, ds] = await Promise.all([
+    const [m, tr, td, ds, cs] = await Promise.all([
       overviewApi.getMetrics(),
       overviewApi.getTrends(range.value),
       overviewApi.getTodos(),
       overviewApi.getDefenseStats(range.value),
+      overviewApi.getChainStatus(),
     ])
     metrics.value = m
-    trends.value = tr
-    todos.value = td
-    defenseStats.value = ds
+    trends.value = tr ?? { range: range.value, alert_trend: [], high_alert_trend: [], task_trend: [] }
+    todos.value = td ?? { pending_events: [], failed_tasks: [], high_findings: [], counts: { pending_events: 0, manual_required: 0, high_findings_new: 0 } }
+    defenseStats.value = ds ?? { range: range.value, total: 0, high_total: 0, threat_level_dist: [], service_dist: [], top_ips: [] }
+    chainStatusData.value = cs ?? { defense: [], probe: [], generated_at: new Date().toISOString() }
   } catch (e) {
     console.error('Overview load failed:', e)
   } finally {

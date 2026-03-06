@@ -9,9 +9,9 @@ import hmac
 import uuid
 import os
 
-from core.database import get_db, FirewallSyncTask, User
+from core.database import get_db, FirewallSyncTask, User, CollectorConfig
 from core.response import APIResponse
-from api.auth import require_permissions
+from api.auth import require_permissions, require_role
 from services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/firewall", tags=["firewall"])
@@ -32,13 +32,83 @@ def _compute_request_hash(ip: str, action: str, vendor: str) -> str:
     return hashlib.sha256(f"{ip}:{action}:{vendor}".encode()).hexdigest()
 
 
-def _compute_signature(payload: str) -> str:
+def _to_bool(value: Optional[str], default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _to_int(value: Optional[str], default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _get_config_row(db: Session, key: str) -> Optional[CollectorConfig]:
+    return db.query(CollectorConfig).filter(
+        CollectorConfig.collector_type == "firewall",
+        CollectorConfig.config_key == key,
+    ).first()
+
+
+def _get_config_value(db: Session, key: str) -> Optional[str]:
+    row = _get_config_row(db, key)
+    return row.config_value if row else None
+
+
+def _upsert_config(
+    db: Session,
+    key: str,
+    value: str,
+    *,
+    is_sensitive: int = 0,
+    enabled: int = 1,
+    description: Optional[str] = None,
+) -> None:
+    row = _get_config_row(db, key)
+    if row:
+        row.config_value = value
+        row.is_sensitive = is_sensitive
+        row.enabled = enabled
+        if description:
+            row.description = description
+        row.updated_at = _utc_now()
+        return
+
+    db.add(CollectorConfig(
+        collector_type="firewall",
+        config_key=key,
+        config_value=value,
+        is_sensitive=is_sensitive,
+        enabled=enabled,
+        description=description,
+    ))
+
+
+def _load_firewall_config(db: Session) -> dict:
+    """读取防火墙动态配置（缺失时返回默认值）"""
+    default_vendor = _get_config_value(db, "default_vendor") or "generic"
+    return {
+        "enabled": _to_bool(_get_config_value(db, "enabled"), True),
+        "api_base_url": _get_config_value(db, "api_base_url"),
+        "default_vendor": default_vendor,
+        "default_policy_id": _get_config_value(db, "default_policy_id"),
+        "timeout_seconds": _to_int(_get_config_value(db, "timeout_seconds"), 10),
+        "sign_secret": _get_config_value(db, "sign_secret") or FIREWALL_SIGN_SECRET,
+        "has_custom_sign_secret": _get_config_value(db, "sign_secret") is not None,
+    }
+
+
+def _compute_signature(payload: str, sign_secret: str) -> str:
     """HMAC-SHA256 签名"""
-    return hmac.new(FIREWALL_SIGN_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(sign_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def _verify_signature(payload: str, provided_sig: str) -> bool:
-    expected = _compute_signature(payload)
+def _verify_signature(payload: str, provided_sig: str, sign_secret: str) -> bool:
+    expected = _compute_signature(payload, sign_secret)
     return hmac.compare_digest(expected, provided_sig)
 
 
@@ -57,6 +127,93 @@ class FirewallReceiptRequest(BaseModel):
     signature: Optional[str] = None
 
 
+class FirewallConfigResponse(BaseModel):
+    enabled: bool = True
+    api_base_url: Optional[str] = None
+    default_vendor: str = "generic"
+    default_policy_id: Optional[str] = None
+    timeout_seconds: int = 10
+    has_custom_sign_secret: bool = False
+
+
+class FirewallConfigRequest(BaseModel):
+    enabled: bool = True
+    api_base_url: Optional[str] = None
+    default_vendor: str = "generic"
+    default_policy_id: Optional[str] = None
+    timeout_seconds: int = 10
+    sign_secret: Optional[str] = None  # 留空表示不修改
+
+
+@router.get("/config", response_model=FirewallConfigResponse)
+async def get_firewall_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """获取防火墙动态配置"""
+    cfg = _load_firewall_config(db)
+    return FirewallConfigResponse(
+        enabled=cfg["enabled"],
+        api_base_url=cfg["api_base_url"],
+        default_vendor=cfg["default_vendor"],
+        default_policy_id=cfg["default_policy_id"],
+        timeout_seconds=cfg["timeout_seconds"],
+        has_custom_sign_secret=cfg["has_custom_sign_secret"],
+    )
+
+
+@router.post("/config")
+async def save_firewall_config(
+    config: FirewallConfigRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """保存防火墙动态配置"""
+    if config.timeout_seconds < 1 or config.timeout_seconds > 300:
+        raise HTTPException(400, "timeout_seconds 必须在 1~300 之间")
+
+    default_vendor = (config.default_vendor or "generic").strip() or "generic"
+    _upsert_config(db, "enabled", "true" if config.enabled else "false", description="是否启用防火墙联动")
+    _upsert_config(db, "api_base_url", (config.api_base_url or "").strip(), description="防火墙 API 基础地址")
+    _upsert_config(db, "default_vendor", default_vendor, description="默认防火墙厂商")
+    _upsert_config(
+        db,
+        "default_policy_id",
+        (config.default_policy_id or "").strip(),
+        description="默认策略 ID",
+    )
+    _upsert_config(
+        db,
+        "timeout_seconds",
+        str(config.timeout_seconds),
+        description="防火墙请求超时时间（秒）",
+    )
+    if config.sign_secret is not None and config.sign_secret.strip():
+        _upsert_config(
+            db,
+            "sign_secret",
+            config.sign_secret.strip(),
+            is_sensitive=1,
+            description="防火墙回执签名密钥",
+        )
+
+    db.commit()
+
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="save_firewall_config",
+        target="firewall_config",
+        target_type="collector_config",
+        result="success",
+        trace_id=trace_id,
+    )
+
+    return APIResponse.success(message="防火墙配置已保存")
+
+
 @router.post("/sync")
 async def sync_to_firewall(
     req: FirewallSyncRequest,
@@ -65,8 +222,14 @@ async def sync_to_firewall(
     current_user: User = Depends(require_permissions("firewall_sync")),
 ):
     """创建防火墙同步任务（带幂等键）"""
+    cfg = _load_firewall_config(db)
+    if not cfg["enabled"]:
+        raise HTTPException(400, "防火墙同步未启用，请先在联动配置中开启")
+
     trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
-    request_hash = _compute_request_hash(req.ip, req.action, req.firewall_vendor or "generic")
+    vendor = (req.firewall_vendor or cfg["default_vendor"] or "generic").strip() or "generic"
+    policy_id = (req.policy_id or cfg["default_policy_id"] or None)
+    request_hash = _compute_request_hash(req.ip, req.action, vendor)
 
     existing = db.query(FirewallSyncTask).filter(
         FirewallSyncTask.request_hash == request_hash,
@@ -81,8 +244,8 @@ async def sync_to_firewall(
 
     task = FirewallSyncTask(
         ip=req.ip,
-        firewall_vendor=req.firewall_vendor or "generic",
-        policy_id=req.policy_id,
+        firewall_vendor=vendor,
+        policy_id=policy_id,
         action=req.action,
         request_hash=request_hash,
         state="PENDING",
@@ -92,7 +255,7 @@ async def sync_to_firewall(
     db.commit()
     db.refresh(task)
 
-    sig = _compute_signature(f"{task.id}:{req.ip}:{req.action}")
+    sig = _compute_signature(f"{task.id}:{req.ip}:{req.action}", cfg["sign_secret"])
 
     AuditService.log(
         db=db, actor=str(current_user.username),
@@ -127,6 +290,7 @@ async def process_receipt(
     current_user: User = Depends(require_permissions("firewall_sync")),
 ):
     """处理防火墙回执（签名校验 + 状态更新）"""
+    cfg = _load_firewall_config(db)
     task = db.query(FirewallSyncTask).filter(FirewallSyncTask.id == task_id).first()
     if not task:
         raise HTTPException(404, "任务不存在")
@@ -140,7 +304,7 @@ async def process_receipt(
     # 签名校验（可选但推荐）
     if receipt.signature:
         payload = f"{task_id}:{task.ip}:{task.action}"
-        if not _verify_signature(payload, receipt.signature):
+        if not _verify_signature(payload, receipt.signature, cfg["sign_secret"]):
             raise HTTPException(403, "签名校验失败")
 
     trace_id = getattr(request.state, "trace_id", None) or task.trace_id

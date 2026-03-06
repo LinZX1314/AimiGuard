@@ -83,24 +83,16 @@
                 />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" class="w-[22rem] border-l border-border p-0">
-              <div class="border-b border-border px-4 py-3">
-                <div class="flex items-center justify-between">
-                  <SheetTitle class="text-sm font-semibold">通知中心</SheetTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 cursor-pointer text-xs"
-                    @click="markAllNotificationsRead"
-                  >
-                    全部已读
-                  </Button>
-                </div>
+            <SheetContent side="right" class="w-[22rem] border-l border-border p-0 gap-0">
+              <!-- 标题栏 -->
+              <div class="border-b border-border px-4 py-3 shrink-0">
+                <SheetTitle class="text-sm font-semibold">通知中心</SheetTitle>
                 <SheetDescription class="sr-only">查看系统实时通知并支持全部标记为已读。</SheetDescription>
               </div>
-              <div class="max-h-[calc(100vh-4rem)] space-y-2 overflow-y-auto px-4 py-3">
+              <!-- 通知列表 -->
+              <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
                 <div
-                  v-for="item in notifications"
+                  v-for="item in pagedNotifications"
                   :key="item.id"
                   class="rounded-md border border-border bg-card px-3 py-2"
                 >
@@ -114,6 +106,40 @@
                   <p class="mt-1 text-xs text-muted-foreground">{{ item.content }}</p>
                   <p class="mt-2 text-[11px] text-muted-foreground/80">{{ item.time }}</p>
                 </div>
+                <p v-if="notifications.length === 0" class="py-8 text-center text-xs text-muted-foreground">暂无通知</p>
+              </div>
+              <!-- 底部工具栏：全部已读 + 分页 -->
+              <div class="border-t border-border px-3 py-2 shrink-0 flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 cursor-pointer text-xs"
+                  @click="markAllNotificationsRead"
+                >
+                  全部已读
+                </Button>
+                <div v-if="notifTotalPages > 1" class="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-6 w-6 cursor-pointer"
+                    :disabled="notifPage === 1"
+                    @click="notifPage--"
+                  >
+                    <ChevronLeftIcon class="size-3" />
+                  </Button>
+                  <span class="text-xs text-muted-foreground tabular-nums">{{ notifPage }} / {{ notifTotalPages }}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-6 w-6 cursor-pointer"
+                    :disabled="notifPage === notifTotalPages"
+                    @click="notifPage++"
+                  >
+                    <ChevronRight class="size-3" />
+                  </Button>
+                </div>
+                <span v-else class="text-xs text-muted-foreground tabular-nums">{{ notifications.length }} 条</span>
               </div>
             </SheetContent>
           </Sheet>
@@ -373,6 +399,7 @@ import {
   Bell,
   Blocks,
   BrainCircuit,
+  ChevronLeft as ChevronLeftIcon,
   ChevronRight,
   FileSearch,
   LogOut,
@@ -400,6 +427,13 @@ const notifications = ref([
   { id: 'n-2', title: '审计任务完成', content: '最近一次导出任务已完成。', time: '5 分钟前', read: false },
   { id: 'n-3', title: '扫描任务提示', content: '存在待确认扫描结果。', time: '15 分钟前', read: true },
 ])
+const NOTIF_PAGE_SIZE = 5
+const notifPage = ref(1)
+const notifTotalPages = computed(() => Math.max(1, Math.ceil(notifications.value.length / NOTIF_PAGE_SIZE)))
+const pagedNotifications = computed(() => {
+  const start = (notifPage.value - 1) * NOTIF_PAGE_SIZE
+  return notifications.value.slice(start, start + NOTIF_PAGE_SIZE)
+})
 const shellRef = ref<HTMLElement | null>(null)
 const sidebarRef = ref<HTMLElement | null>(null)
 
@@ -699,7 +733,7 @@ const resetAnimatedState = () => {
   if (transitionTitleRef.value) gsap.set(transitionTitleRef.value, { autoAlpha: 0, scale: 1, letterSpacing: '0.5em', clearProps: 'all' })
 }
 
-const runModeTransition = (targetMode: ModeKey) => {
+const runModeTransition = async (targetMode: ModeKey) => {
   // 无论当前在哪个页面（包括 settings/integrations/audit 等中性页面），
   // 切换时都必须触发完整动画，动画结束后跳转到目标模式的默认页。
   const sidebarEl = sidebarRef.value
@@ -728,6 +762,13 @@ const runModeTransition = (targetMode: ModeKey) => {
       isModeSwitching.value = false
     })
     return
+  }
+
+  // Ensure the new title text is rendered before GSAP snapshots transforms.
+  await nextTick()
+  if (titleEl) {
+    // Force layout so translate(-50%, -50%) is calculated with real glyph metrics.
+    void titleEl.offsetWidth
   }
 
   // Initial States
@@ -761,6 +802,11 @@ const runModeTransition = (targetMode: ModeKey) => {
     gsap.set(titleEl, {
       autoAlpha: 0,
       scale: 0.8,
+      x: 0,
+      y: 0,
+      xPercent: -50,
+      yPercent: -50,
+      transformOrigin: '50% 50%',
       letterSpacing: '1em',
       textShadow: `0 0 0px ${accentColor}`
     })
@@ -849,6 +895,8 @@ const runModeTransition = (targetMode: ModeKey) => {
       .to(titleEl, {
         autoAlpha: 0,
         scale: 1.5,
+        x: 0,
+        y: 0,
         filter: 'blur(10px)',
         letterSpacing: '0.5em',
         duration: 0.4,
@@ -941,7 +989,7 @@ const runModeTransition = (targetMode: ModeKey) => {
 const switchMode = (mode: ModeKey) => {
   if (mode === activeMode.value) return
   if (isModeSwitching.value) return
-  runModeTransition(mode)
+  void runModeTransition(mode)
 }
 
 const onModeChange = (nextMode: string | number) => {
@@ -960,6 +1008,7 @@ const goToSecuritySettings = () => {
 
 const markAllNotificationsRead = () => {
   notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
+  notifPage.value = 1
 }
 
 const goToProfile = () => {

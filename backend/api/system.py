@@ -5,8 +5,17 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
 import os
+import json
 
-from core.database import get_db, AuditLog, User, ThreatEvent, ScanTask, FirewallSyncTask
+from core.database import (
+    get_db,
+    AuditLog,
+    User,
+    ThreatEvent,
+    ScanTask,
+    FirewallSyncTask,
+    ModelProfile,
+)
 from api.auth import get_current_user, get_user_role, get_user_permissions, require_permissions
 from services.audit_service import AuditService
 from services.mode_service import get_current_mode, set_mode
@@ -62,6 +71,38 @@ class RollbackRequest(BaseModel):
     target_version: str
     reason: str
     trace_id: Optional[str] = None
+
+
+class AIAPIConfigResponse(BaseModel):
+    provider: str
+    base_url: str
+    model_name: str
+    enabled: bool
+    api_key_configured: bool
+
+
+class AIAPIConfigRequest(BaseModel):
+    provider: str = "ollama"
+    base_url: str
+    model_name: str
+    api_key: Optional[str] = None
+    enabled: bool = True
+
+
+class TTSConfigResponse(BaseModel):
+    provider: str
+    endpoint: Optional[str]
+    model_name: str
+    voice_model: str
+    enabled: bool
+
+
+class TTSConfigRequest(BaseModel):
+    provider: str = "local"
+    endpoint: Optional[str] = None
+    model_name: str = "local-tts-v1"
+    voice_model: Optional[str] = None
+    enabled: bool = True
 
 
 def _ensure_operator_or_admin(current_user: User, db: Session):
@@ -137,6 +178,25 @@ def _record_release_status(
     )
 
 
+def _parse_config_json(raw: Optional[str]) -> dict:
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _get_primary_model_profile(db: Session, model_type: str) -> Optional[ModelProfile]:
+    return (
+        db.query(ModelProfile)
+        .filter(ModelProfile.model_type == model_type)
+        .order_by(ModelProfile.priority.asc(), ModelProfile.id.asc())
+        .first()
+    )
+
+
 @router.get("/health")
 async def health_check():
     return {"status": "ok", "service": "aimiguan"}
@@ -205,6 +265,236 @@ async def get_system_version(db: Session = Depends(get_db)):
         "build_time": BUILD_TIME,
         "schema_version": schema_version,
         "env": deploy_env,
+    }
+
+
+@router.get("/ai-config", response_model=AIAPIConfigResponse)
+@compat_router.get("/ai-config", response_model=AIAPIConfigResponse)
+async def get_ai_api_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("system:config")),
+):
+    profile = _get_primary_model_profile(db, "llm")
+    cfg = _parse_config_json(profile.config_json if profile else None)
+
+    provider = str(cfg.get("provider") or os.getenv("LLM_PROVIDER", "ollama"))
+    base_url = str(
+        (profile.endpoint if profile else None)
+        or cfg.get("base_url")
+        or os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    )
+    model_name = str(
+        (profile.model_name if profile else None)
+        or cfg.get("model_name")
+        or os.getenv("LLM_MODEL", "llama2")
+    )
+
+    return AIAPIConfigResponse(
+        provider=provider,
+        base_url=base_url,
+        model_name=model_name,
+        enabled=bool(profile.enabled) if profile else True,
+        api_key_configured=bool(cfg.get("api_key")),
+    )
+
+
+@router.post("/ai-config")
+@compat_router.post("/ai-config")
+async def save_ai_api_config(
+    payload: AIAPIConfigRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("system:config")),
+):
+    provider = (payload.provider or "ollama").strip()
+    base_url = (payload.base_url or "").strip()
+    model_name = (payload.model_name or "").strip()
+    if not base_url:
+        raise HTTPException(status_code=400, detail="AI API 地址不能为空")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="模型名称不能为空")
+
+    now = _utc_now()
+    profile = _get_primary_model_profile(db, "llm")
+    existing_cfg = _parse_config_json(profile.config_json if profile else None)
+    incoming_api_key = (payload.api_key or "").strip()
+    final_api_key = incoming_api_key or str(existing_cfg.get("api_key") or "")
+
+    cfg = {
+        "provider": provider,
+        "base_url": base_url,
+        "model_name": model_name,
+    }
+    if final_api_key:
+        cfg["api_key"] = final_api_key
+
+    is_local = 0 if provider.lower() in {"openai", "anthropic", "azure", "api"} else 1
+    enabled = 1 if payload.enabled else 0
+    if profile is None:
+        profile = ModelProfile(
+            model_name=model_name,
+            model_type="llm",
+            is_local=is_local,
+            endpoint=base_url,
+            priority=10,
+            enabled=enabled,
+            config_json=json.dumps(cfg, ensure_ascii=False),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(profile)
+    else:
+        profile.model_name = model_name
+        profile.endpoint = base_url
+        profile.is_local = is_local
+        profile.enabled = enabled
+        profile.config_json = json.dumps(cfg, ensure_ascii=False)
+        profile.updated_at = now
+
+    db.commit()
+
+    # 运行时热更新（避免重启才能生效）
+    os.environ["LLM_PROVIDER"] = provider
+    os.environ["LLM_BASE_URL"] = base_url
+    os.environ["LLM_MODEL"] = model_name
+    if final_api_key:
+        os.environ["LLM_API_KEY"] = final_api_key
+    try:
+        from services.ai_engine import ai_engine
+        ai_engine.llm_client.provider = provider
+        ai_engine.llm_client.base_url = base_url
+        ai_engine.llm_client.model = model_name
+    except Exception:
+        pass
+
+    trace_id = getattr(req.state, "trace_id", None)
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="update_ai_api_config",
+        target=model_name,
+        target_type="system_config",
+        trace_id=trace_id,
+    )
+
+    return {
+        "code": 0,
+        "data": {
+            "provider": provider,
+            "base_url": base_url,
+            "model_name": model_name,
+            "enabled": bool(enabled),
+            "api_key_configured": bool(final_api_key),
+        },
+        "message": "AI API 配置已保存",
+    }
+
+
+@router.get("/tts-config", response_model=TTSConfigResponse)
+@compat_router.get("/tts-config", response_model=TTSConfigResponse)
+async def get_tts_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("system:config")),
+):
+    profile = _get_primary_model_profile(db, "tts")
+    cfg = _parse_config_json(profile.config_json if profile else None)
+
+    provider = str(cfg.get("provider") or os.getenv("TTS_PROVIDER", "local"))
+    endpoint = (
+        (profile.endpoint if profile else None)
+        or cfg.get("endpoint")
+        or os.getenv("TTS_BASE_URL")
+        or None
+    )
+    model_name = str(
+        (profile.model_name if profile else None)
+        or cfg.get("model_name")
+        or os.getenv("TTS_MODEL", "local-tts-v1")
+    )
+    voice_model = str(cfg.get("voice_model") or model_name)
+
+    return TTSConfigResponse(
+        provider=provider,
+        endpoint=endpoint,
+        model_name=model_name,
+        voice_model=voice_model,
+        enabled=bool(profile.enabled) if profile else True,
+    )
+
+
+@router.post("/tts-config")
+@compat_router.post("/tts-config")
+async def save_tts_config(
+    payload: TTSConfigRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("system:config")),
+):
+    provider = (payload.provider or "local").strip()
+    model_name = (payload.model_name or "").strip()
+    voice_model = (payload.voice_model or "").strip() or model_name
+    endpoint = (payload.endpoint or "").strip() or None
+    if not model_name:
+        raise HTTPException(status_code=400, detail="TTS 模型名称不能为空")
+
+    now = _utc_now()
+    profile = _get_primary_model_profile(db, "tts")
+    cfg = {
+        "provider": provider,
+        "endpoint": endpoint,
+        "model_name": model_name,
+        "voice_model": voice_model,
+    }
+    is_local = 0 if provider.lower() in {"openai", "azure", "api"} else 1
+    enabled = 1 if payload.enabled else 0
+    if profile is None:
+        profile = ModelProfile(
+            model_name=model_name,
+            model_type="tts",
+            is_local=is_local,
+            endpoint=endpoint,
+            priority=10,
+            enabled=enabled,
+            config_json=json.dumps(cfg, ensure_ascii=False),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(profile)
+    else:
+        profile.model_name = model_name
+        profile.endpoint = endpoint
+        profile.is_local = is_local
+        profile.enabled = enabled
+        profile.config_json = json.dumps(cfg, ensure_ascii=False)
+        profile.updated_at = now
+
+    db.commit()
+
+    os.environ["TTS_PROVIDER"] = provider
+    os.environ["TTS_MODEL"] = model_name
+    if endpoint:
+        os.environ["TTS_BASE_URL"] = endpoint
+
+    trace_id = getattr(req.state, "trace_id", None)
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="update_tts_config",
+        target=model_name,
+        target_type="system_config",
+        trace_id=trace_id,
+    )
+
+    return {
+        "code": 0,
+        "data": {
+            "provider": provider,
+            "endpoint": endpoint,
+            "model_name": model_name,
+            "voice_model": voice_model,
+            "enabled": bool(enabled),
+        },
+        "message": "TTS 配置已保存",
     }
 
 

@@ -5,13 +5,14 @@ Overview 聚合接口
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, case
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.auth import require_permissions
 from core.database import (
     Asset,
+    CollectorConfig,
     ExecutionTask,
     ScanFinding,
     ScanTask,
@@ -31,6 +32,177 @@ def _iso_z(dt: Optional[datetime]) -> Optional[str]:
     if dt is None:
         return None
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _config_map(db: Session, collector_type: str) -> Dict[str, str]:
+    rows = (
+        db.query(CollectorConfig)
+        .filter(CollectorConfig.collector_type == collector_type)
+        .all()
+    )
+    return {str(row.config_key): str(row.config_value or "") for row in rows}
+
+
+def _config_bool(configs: Dict[str, str], key: str = "enabled", default: bool = False) -> bool:
+    raw = configs.get(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _status_item(key: str, name: str, ok: bool, note: str, metric: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "key": key,
+        "name": name,
+        "ok": ok,
+        "note": note,
+        "metric": metric,
+    }
+
+
+def _build_chain_status(db: Session) -> Dict[str, List[Dict[str, Any]]]:
+    now = _utc_now()
+    last_24h = now - timedelta(hours=24)
+    last_7d = now - timedelta(days=7)
+
+    hfish_config = _config_map(db, "hfish")
+    nmap_config = _config_map(db, "nmap")
+    hfish_enabled = _config_bool(hfish_config, default=False)
+    nmap_enabled = _config_bool(nmap_config, default=False)
+
+    threat_24h = db.query(func.count(ThreatEvent.id)).filter(
+        ThreatEvent.created_at >= last_24h
+    ).scalar() or 0
+    threat_7d = db.query(func.count(ThreatEvent.id)).filter(
+        ThreatEvent.created_at >= last_7d
+    ).scalar() or 0
+    scored_7d = db.query(func.count(ThreatEvent.id)).filter(
+        ThreatEvent.created_at >= last_7d,
+        ThreatEvent.ai_score.isnot(None),
+    ).scalar() or 0
+    unscored_7d = max(threat_7d - scored_7d, 0)
+
+    execution_7d = db.query(func.count(ExecutionTask.id)).filter(
+        ExecutionTask.created_at >= last_7d
+    ).scalar() or 0
+    execution_success_7d = db.query(func.count(ExecutionTask.id)).filter(
+        ExecutionTask.created_at >= last_7d,
+        ExecutionTask.state == "SUCCESS",
+    ).scalar() or 0
+    execution_failed_7d = db.query(func.count(ExecutionTask.id)).filter(
+        ExecutionTask.created_at >= last_7d,
+        ExecutionTask.state.in_(["FAILED", "RETRYING"]),
+    ).scalar() or 0
+    execution_manual_required = db.query(func.count(ExecutionTask.id)).filter(
+        ExecutionTask.state == "MANUAL_REQUIRED"
+    ).scalar() or 0
+
+    assets_total = db.query(func.count(Asset.id)).scalar() or 0
+    enabled_assets = db.query(func.count(Asset.id)).filter(
+        Asset.enabled == 1
+    ).scalar() or 0
+
+    scan_total_7d = db.query(func.count(ScanTask.id)).filter(
+        ScanTask.created_at >= last_7d
+    ).scalar() or 0
+    scan_running = db.query(func.count(ScanTask.id)).filter(
+        ScanTask.state == "RUNNING"
+    ).scalar() or 0
+    scan_reported_7d = db.query(func.count(ScanTask.id)).filter(
+        ScanTask.created_at >= last_7d,
+        ScanTask.state == "REPORTED",
+    ).scalar() or 0
+    scan_failed_7d = db.query(func.count(ScanTask.id)).filter(
+        ScanTask.created_at >= last_7d,
+        ScanTask.state.in_(["FAILED", "FAILED_TIMEOUT", "FAILED_PARSE", "UNREACHABLE"]),
+    ).scalar() or 0
+    findings_7d = db.query(func.count(ScanFinding.id)).filter(
+        ScanFinding.created_at >= last_7d
+    ).scalar() or 0
+
+    defense = [
+        _status_item(
+            "hfish_ingest",
+            "告警接入（HFish）",
+            hfish_enabled and threat_24h > 0,
+            "最近 24h 有入站事件" if hfish_enabled and threat_24h > 0 else (
+                "HFish 未启用" if not hfish_enabled else "最近 24h 无入站事件"
+            ),
+            f"24h {threat_24h} 条 / 7d {threat_7d} 条",
+        ),
+        _status_item(
+            "ai_scoring",
+            "AI 评分引擎",
+            threat_7d > 0 and unscored_7d == 0,
+            "评分完整" if threat_7d > 0 and unscored_7d == 0 else (
+                "最近 7 天无事件样本" if threat_7d == 0 else f"{unscored_7d} 条事件未评分"
+            ),
+            f"已评分 {scored_7d}/{threat_7d}",
+        ),
+        _status_item(
+            "approval_execution",
+            "审批与执行",
+            execution_7d > 0 and execution_manual_required == 0 and execution_failed_7d == 0,
+            "执行闭环正常" if execution_7d > 0 and execution_manual_required == 0 and execution_failed_7d == 0 else (
+                "最近 7 天无处置任务" if execution_7d == 0 else (
+                    f"{execution_manual_required} 条需人工介入" if execution_manual_required > 0 else f"{execution_failed_7d} 条执行异常"
+                )
+            ),
+            f"成功 {execution_success_7d} / 异常 {execution_failed_7d} / 人工 {execution_manual_required}",
+        ),
+        _status_item(
+            "probe_summary",
+            "探测扫描",
+            nmap_enabled and enabled_assets > 0 and scan_total_7d > 0 and scan_failed_7d == 0,
+            "探测链路正常" if nmap_enabled and enabled_assets > 0 and scan_total_7d > 0 and scan_failed_7d == 0 else (
+                "Nmap 未启用" if not nmap_enabled else (
+                    "无已启用资产" if enabled_assets == 0 else (
+                        "最近 7 天无扫描任务" if scan_total_7d == 0 else f"{scan_failed_7d} 条扫描失败"
+                    )
+                )
+            ),
+            f"资产 {enabled_assets}/{assets_total} / 任务 {scan_total_7d} / 发现 {findings_7d}",
+        ),
+    ]
+
+    probe = [
+        _status_item(
+            "task_scheduler",
+            "任务调度器",
+            nmap_enabled and enabled_assets > 0,
+            "调度配置已就绪" if nmap_enabled and enabled_assets > 0 else (
+                "Nmap 未启用" if not nmap_enabled else "无已启用资产"
+            ),
+            f"已启用资产 {enabled_assets}/{assets_total}",
+        ),
+        _status_item(
+            "scan_executor",
+            "扫描执行器",
+            scan_total_7d > 0 and scan_failed_7d == 0,
+            "最近 7 天执行正常" if scan_total_7d > 0 and scan_failed_7d == 0 else (
+                "最近 7 天无执行记录" if scan_total_7d == 0 else f"{scan_failed_7d} 条扫描失败"
+            ),
+            f"运行中 {scan_running} / 最近 7 天 {scan_total_7d} 条",
+        ),
+        _status_item(
+            "result_ingest",
+            "结果入库",
+            scan_reported_7d > 0,
+            "结果已入库" if scan_reported_7d > 0 else "暂无已完成任务",
+            f"已完成 {scan_reported_7d} / 新增发现 {findings_7d}",
+        ),
+        _status_item(
+            "asset_inventory",
+            "资产管理",
+            enabled_assets > 0,
+            "资产池已就绪" if enabled_assets > 0 else (
+                "未配置资产" if assets_total == 0 else "资产均已停用"
+            ),
+            f"已启用 {enabled_assets}/{assets_total}",
+        ),
+    ]
+
+    return {"defense": defense, "probe": probe}
 
 
 # ──────────────────────────────────────────────────────────
@@ -129,13 +301,29 @@ async def get_metrics(
     }
 
 
+@router.get("/chain-status")
+async def get_chain_status(
+    current_user: User = Depends(require_permissions("view_events")),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    snapshot = _build_chain_status(db)
+    return {
+        "code": 0,
+        "data": {
+            "defense": snapshot["defense"],
+            "probe": snapshot["probe"],
+            "generated_at": _iso_z(_utc_now()),
+        },
+    }
+
+
 # ──────────────────────────────────────────────────────────
 # GET /api/v1/overview/trends
 # ──────────────────────────────────────────────────────────
 
 @router.get("/trends")
 async def get_trends(
-    range: str = "7d",
+    range_value: str = Query("7d", alias="range"),
     current_user: User = Depends(require_permissions("view_events")),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -147,10 +335,10 @@ async def get_trends(
     """
     now = _utc_now()
 
-    if range == "24h":
+    if range_value == "24h":
         days = 1
         bucket_hours = 1
-    elif range == "30d":
+    elif range_value == "30d":
         days = 30
         bucket_hours = 24
     else:  # 7d
@@ -210,7 +398,7 @@ async def get_trends(
     return {
         "code": 0,
         "data": {
-            "range": range,
+            "range": range_value,
             "alert_trend": _fill_days(alert_rows, since, days),
             "high_alert_trend": _fill_days(high_alert_rows, since, days),
             "task_trend": _fill_days(task_rows, since, days),
