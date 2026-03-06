@@ -754,6 +754,7 @@ class NmapConfigRequest(BaseModel):
     ip_ranges: List[str] = Field(..., description="扫描 IP 范围列表")
     scan_interval: int = Field(604800, description="扫描间隔（秒），默认7天")
     enabled: bool = Field(True, description="是否启用")
+    vuln_scripts_by_tag: Optional[Dict[str, List[str]]] = Field(None, description="按OS标签分组的漏洞脚本规则")
 
 
 class NmapConfigResponse(BaseModel):
@@ -761,6 +762,7 @@ class NmapConfigResponse(BaseModel):
     ip_ranges: List[str] = []
     scan_interval: int = 604800
     enabled: bool = False
+    vuln_scripts_by_tag: Optional[Dict[str, List[str]]] = None
 
 
 @router.post("/nmap/config")
@@ -779,6 +781,27 @@ async def save_nmap_config(
             scan_interval=config.scan_interval,
             enabled=config.enabled
         )
+
+        # 持久化漏洞脚本规则（单独存储为 JSON 字符串）
+        if config.vuln_scripts_by_tag is not None:
+            from core.database import CollectorConfig, SessionLocal
+            _db = SessionLocal()
+            try:
+                _key = "vuln_scripts_by_tag"
+                existing = _db.query(CollectorConfig).filter(
+                    CollectorConfig.collector_type == "nmap",
+                    CollectorConfig.config_key == _key
+                ).first()
+                _val = json.dumps(config.vuln_scripts_by_tag, ensure_ascii=False)
+                if existing:
+                    existing.config_value = _val
+                else:
+                    _db.add(CollectorConfig(
+                        collector_type="nmap", config_key=_key, config_value=_val, is_sensitive=0, enabled=1
+                    ))
+                _db.commit()
+            finally:
+                _db.close()
         
         AuditService.log(
             db=db,
@@ -806,14 +829,31 @@ async def save_nmap_config(
 async def get_nmap_config(
     current_user: object = Depends(require_role("admin")),
 ):
-    """获取 Nmap 配置"""
+    """获取 Nmap 配置（含漏洞脚本规则）"""
     from services.nmap_scanner import nmap_scanner
-    
+    from core.database import CollectorConfig, SessionLocal
+
+    # 读取漏洞脚本规则
+    vuln_scripts: Optional[Dict[str, List[str]]] = None
+    _db = SessionLocal()
+    try:
+        row = _db.query(CollectorConfig).filter(
+            CollectorConfig.collector_type == "nmap",
+            CollectorConfig.config_key == "vuln_scripts_by_tag"
+        ).first()
+        if row and row.config_value:
+            vuln_scripts = json.loads(row.config_value)
+    except Exception:
+        pass
+    finally:
+        _db.close()
+
     return NmapConfigResponse(
         nmap_path=nmap_scanner.nmap_path,
         ip_ranges=nmap_scanner.ip_ranges,
         scan_interval=nmap_scanner.scan_interval,
-        enabled=nmap_scanner.enabled
+        enabled=nmap_scanner.enabled,
+        vuln_scripts_by_tag=vuln_scripts
     )
 
 
@@ -1140,3 +1180,102 @@ async def trigger_vuln_scan(
         data={"trace_id": trace_id, "targets": targets},
         message=f"漏洞扫描已启动，共 {len(targets)} 个目标"
     )
+
+
+# ===== Nmap 自动发现资产（基于 ScanFinding 的 IP 去重视图）=====
+
+
+@router.get("/nmap/assets")
+async def get_nmap_assets(
+    ip: Optional[str] = None,
+    mac: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: object = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Nmap 自动发现资产列表（按 IP 去重，返回每个 IP 最新的主机发现记录）
+    模拟参考实现的 GET /api/nmap/assets 语义
+    """
+    from sqlalchemy import distinct
+
+    # 找出每个 IP 最新的 host-discovery ScanFinding
+    subq = (
+        db.query(
+            ScanFinding.asset.label("ip"),
+            sqlfunc.max(ScanFinding.id).label("max_id"),
+        )
+        .filter(ScanFinding.state.isnot(None))
+        .group_by(ScanFinding.asset)
+        .subquery()
+    )
+
+    query = db.query(ScanFinding).join(
+        subq, ScanFinding.id == subq.c.max_id
+    )
+
+    if ip:
+        query = query.filter(ScanFinding.asset.contains(ip))
+    if mac:
+        query = query.filter(ScanFinding.mac_address.contains(mac))
+
+    total = query.count()
+    limit = min(limit, 200)
+    items = query.order_by(ScanFinding.created_at.desc()).offset(offset).limit(limit).all()
+
+    def _to_asset(f: ScanFinding) -> Dict[str, Any]:
+        try:
+            evidence = json.loads(f.evidence) if f.evidence else {}
+        except Exception:
+            evidence = {}
+        return {
+            "id": f.id,
+            "current_ip": f.asset,
+            "mac_address": f.mac_address or None,
+            "vendor": f.vendor or None,
+            "hostname": f.hostname or None,
+            "state": f.state or "up",
+            "os_type": f.os_type or None,
+            "open_ports": evidence.get("open_ports", []),
+            "last_seen": _iso_z(f.created_at),
+            "scan_task_id": f.scan_task_id,
+        }
+
+    return APIResponse.success({
+        "total": total,
+        "items": [_to_asset(f) for f in items],
+    })
+
+
+@router.get("/nmap/assets/{asset_ip}/ips")
+async def get_nmap_asset_ip_history(
+    asset_ip: str,
+    current_user: object = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    某个 IP 的扫描历史记录（跨不同扫描任务）
+    模拟参考实现的 GET /api/nmap/assets/{id}/ips 语义
+    """
+    records = (
+        db.query(ScanFinding)
+        .filter(ScanFinding.asset == asset_ip, ScanFinding.state.isnot(None))
+        .order_by(ScanFinding.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    def _to_history(f: ScanFinding) -> Dict[str, Any]:
+        return {
+            "id": f.id,
+            "ip": f.asset,
+            "scan_task_id": f.scan_task_id,
+            "state": f.state,
+            "seen_time": _iso_z(f.created_at),
+        }
+
+    return APIResponse.success({
+        "asset_ip": asset_ip,
+        "history": [_to_history(f) for f in records],
+    })

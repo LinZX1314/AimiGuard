@@ -31,6 +31,11 @@
           Nmap 主机
           <Badge v-if="nmapHostTotal > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ nmapHostTotal }}</Badge>
         </TabsTrigger>
+        <TabsTrigger value="discovered-assets" class="gap-2">
+          <Scan class="size-4" />
+          发现资产
+          <Badge v-if="discoveredTotal > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ discoveredTotal }}</Badge>
+        </TabsTrigger>
       </TabsList>
 
       <!-- ===== Tab: 资产管理 ===== -->
@@ -627,7 +632,132 @@
           </div>
         </div>
       </TabsContent>
+
+      <!-- ===== Tab: 发现资产 ===== -->
+      <TabsContent value="discovered-assets" class="space-y-4">
+        <!-- Toolbar -->
+        <div class="flex items-center gap-3 flex-wrap">
+          <Input
+            v-model="discoveredIpFilter"
+            placeholder="过滤 IP..."
+            class="h-8 w-40 text-sm"
+            @change="loadDiscoveredAssets(0)"
+          />
+          <Button variant="outline" size="sm" class="cursor-pointer gap-1 ml-auto" :disabled="discoveredLoading" @click="loadDiscoveredAssets(0)">
+            <RefreshCw class="size-3.5" :class="discoveredLoading ? 'animate-spin' : ''" />
+            刷新
+          </Button>
+        </div>
+
+        <!-- 资产列表 -->
+        <div class="rounded-lg border border-border overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-muted/30 border-b border-border">
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">IP 地址</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">MAC / 厂商</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">操作系统</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">开放端口</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">状态</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">最后发现时间</th>
+                <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="discoveredLoading">
+                <td colspan="7" class="text-center py-10 text-muted-foreground text-sm">加载中...</td>
+              </tr>
+              <tr v-else-if="discoveredAssets.length === 0">
+                <td colspan="7" class="py-12">
+                  <div class="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Scan class="size-10 opacity-30" />
+                    <span class="text-sm">暂无发现资产，请先在 Nmap 主机 Tab 执行扫描</span>
+                  </div>
+                </td>
+              </tr>
+              <tr v-for="asset in discoveredAssets" :key="asset.id" class="border-b border-border/50 hover:bg-muted/20">
+                <td class="px-4 py-2.5 font-mono text-sm font-medium text-primary cursor-pointer hover:underline" @click="openDiscoveredAssetDetail(asset)">
+                  {{ asset.current_ip }}
+                </td>
+                <td class="px-4 py-2.5">
+                  <p class="font-mono text-xs">{{ asset.mac_address || '—' }}</p>
+                  <p class="text-xs text-muted-foreground">{{ asset.vendor || '' }}</p>
+                </td>
+                <td class="px-4 py-2.5 text-xs">{{ asset.os_type || '未识别' }}</td>
+                <td class="px-4 py-2.5 text-xs text-muted-foreground">
+                  {{ Array.isArray(asset.open_ports) ? asset.open_ports.length : 0 }} 个
+                </td>
+                <td class="px-4 py-2.5">
+                  <Badge :class="asset.state === 'up' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-muted text-muted-foreground'">
+                    {{ asset.state }}
+                  </Badge>
+                </td>
+                <td class="px-4 py-2.5 text-xs text-muted-foreground">
+                  {{ asset.last_seen?.slice(0, 19).replace('T', ' ') ?? '—' }}
+                </td>
+                <td class="px-4 py-2.5">
+                  <Button variant="ghost" size="sm" class="cursor-pointer h-6 text-xs gap-1" @click="openDiscoveredAssetDetail(asset)">
+                    <Eye class="size-3" />
+                    历史
+                  </Button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 分页 -->
+        <div class="flex items-center justify-between text-sm text-muted-foreground">
+          <span>共发现 {{ discoveredTotal }} 个资产</span>
+          <div class="flex gap-1">
+            <Button variant="outline" size="sm" class="cursor-pointer" :disabled="discoveredOffset === 0" @click="loadDiscoveredAssets(discoveredOffset - NMAP_LIMIT)">
+              <ChevronLeft class="size-4" />
+            </Button>
+            <span class="px-3 py-1 text-xs">第 {{ Math.floor(discoveredOffset / NMAP_LIMIT) + 1 }} 页</span>
+            <Button variant="outline" size="sm" class="cursor-pointer" :disabled="discoveredOffset + NMAP_LIMIT >= discoveredTotal" @click="loadDiscoveredAssets(discoveredOffset + NMAP_LIMIT)">
+              <ChevronRight class="size-4" />
+            </Button>
+          </div>
+        </div>
+      </TabsContent>
     </Tabs>
+
+    <!-- 发现资产 IP 历史弹窗 -->
+    <div
+      v-if="assetHistoryOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      @click.self="assetHistoryOpen = false"
+    >
+      <div class="mx-4 w-full max-w-md rounded-xl border border-border bg-background shadow-2xl max-h-[70vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
+          <div class="flex items-center gap-2">
+            <Scan class="size-4 text-primary" />
+            <span class="font-semibold text-sm">扫描历史</span>
+            <code class="text-xs text-muted-foreground ml-1">{{ selectedDiscoveredAsset?.current_ip }}</code>
+          </div>
+          <button class="text-muted-foreground hover:text-foreground" @click="assetHistoryOpen = false">
+            <X class="size-4" />
+          </button>
+        </div>
+        <div class="p-4 overflow-y-auto">
+          <div v-if="assetHistoryLoading" class="py-6 text-center text-muted-foreground text-sm">加载中...</div>
+          <div v-else-if="!assetHistory.length" class="py-6 text-center text-muted-foreground text-sm">暂无历史记录</div>
+          <div v-else class="space-y-2">
+            <div
+              v-for="h in assetHistory"
+              :key="h.id"
+              class="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              <div class="flex items-center gap-3">
+                <Badge :class="h.state === 'up' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-muted text-muted-foreground'" class="text-xs h-5">{{ h.state || '—' }}</Badge>
+                <span class="font-mono text-xs">任务 #{{ h.scan_task_id }}</span>
+              </div>
+              <span class="text-xs text-muted-foreground">{{ h.seen_time?.slice(0, 19).replace('T', ' ') ?? '—' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Nmap 主机详情弹窗 -->
     <NmapHostDetailDialog
@@ -739,8 +869,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { scanApi, type Asset, type ScanTask, type ScanFinding, type ScanProfile, type NmapHost, type NmapScan, type NmapStats, type VulnStats } from '@/api/scan'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { scanApi, type Asset, type ScanTask, type ScanFinding, type ScanProfile, type NmapHost, type NmapScan, type NmapStats, type VulnStats, type DiscoveredAsset, type AssetIpHistory } from '@/api/scan'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -1086,15 +1216,68 @@ const triggerNmapScan = async () => {
   } catch (e) { console.error(e); nmapScanning.value = false }
 }
 
+// ===== 发现资产 =====
+const discoveredAssets = ref<DiscoveredAsset[]>([])
+const discoveredTotal = ref(0)
+const discoveredOffset = ref(0)
+const discoveredLoading = ref(false)
+const discoveredIpFilter = ref('')
+const assetHistoryOpen = ref(false)
+const assetHistoryLoading = ref(false)
+const assetHistory = ref<AssetIpHistory[]>([])
+const selectedDiscoveredAsset = ref<DiscoveredAsset | null>(null)
+
+const loadDiscoveredAssets = async (offset = 0) => {
+  discoveredLoading.value = true
+  discoveredOffset.value = offset
+  try {
+    const result = await scanApi.getDiscoveredAssets({
+      ip: discoveredIpFilter.value || undefined,
+      limit: NMAP_LIMIT,
+      offset,
+    })
+    discoveredAssets.value = result.items
+    discoveredTotal.value = result.total
+  } catch (e) { console.error(e) } finally { discoveredLoading.value = false }
+}
+
+const openDiscoveredAssetDetail = async (asset: DiscoveredAsset) => {
+  selectedDiscoveredAsset.value = asset
+  assetHistory.value = []
+  assetHistoryOpen.value = true
+  assetHistoryLoading.value = true
+  try {
+    assetHistory.value = await scanApi.getAssetIpHistory(asset.current_ip)
+  } catch (e) { console.error(e) } finally { assetHistoryLoading.value = false }
+}
+
 // ===== Init =====
 watch(activeTab, (tab) => {
   if (tab === 'assets') loadAssets(1)
   else if (tab === 'tasks') loadTasks(1)
   else if (tab === 'findings') { loadFindings(1); loadVulnStats() }
   else if (tab === 'nmap-hosts') { loadNmapHosts(); loadNmapScans(); loadNmapStats() }
+  else if (tab === 'discovered-assets') loadDiscoveredAssets(0)
 })
+
+let _scanPollTimer: ReturnType<typeof setInterval> | null = null
+
+const startScanPoll = () => {
+  if (_scanPollTimer) return
+  _scanPollTimer = setInterval(() => {
+    if (activeTab.value === 'tasks') loadTasks(taskPage.value)
+    else if (activeTab.value === 'nmap-hosts') loadNmapHosts(nmapHostOffset.value)
+    else if (activeTab.value === 'findings') loadFindings(findingPage.value)
+  }, 30_000)
+}
+
+const stopScanPoll = () => {
+  if (_scanPollTimer) { clearInterval(_scanPollTimer); _scanPollTimer = null }
+}
 
 onMounted(async () => {
   await Promise.all([loadAssets(1), loadProfiles()])
+  startScanPoll()
 })
+onUnmounted(stopScanPoll)
 </script>

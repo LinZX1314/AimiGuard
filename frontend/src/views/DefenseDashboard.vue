@@ -127,10 +127,16 @@
             <option v-for="svc in serviceOptions" :key="svc" :value="svc">{{ svc }}</option>
           </select>
 
-          <Button variant="outline" size="sm" class="cursor-pointer gap-1 ml-auto" :disabled="logLoading" @click="loadLogs(logOffset)">
-            <RefreshCw class="size-3.5" :class="logLoading ? 'animate-spin' : ''" />
-            刷新
-          </Button>
+          <div class="flex gap-1.5 ml-auto">
+            <Button variant="outline" size="sm" class="cursor-pointer gap-1" @click="exportLogsCSV">
+              <Download class="size-3.5" />
+              导出 CSV
+            </Button>
+            <Button variant="outline" size="sm" class="cursor-pointer gap-1" :disabled="logLoading" @click="loadLogs(logOffset)">
+              <RefreshCw class="size-3.5" :class="logLoading ? 'animate-spin' : ''" />
+              刷新
+            </Button>
+          </div>
         </div>
 
         <!-- 日志表格 -->
@@ -221,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { defenseApi, type HFishLog } from '@/api/defense'
 import { apiClient } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -229,7 +235,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Activity, Monitor, RefreshCw, Search, ShieldAlert, ShieldCheck, X } from 'lucide-vue-next'
+import { Activity, Download, Monitor, RefreshCw, Search, ShieldAlert, ShieldCheck, X } from 'lucide-vue-next'
 import NmapHostDetailDialog from '@/components/NmapHostDetailDialog.vue'
 
 interface ThreatEvent {
@@ -357,5 +363,55 @@ const getScoreColor = (score: number) => {
 const formatTime = (t: string) =>
   t ? new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 
-onMounted(loadEvents)
+const exportLogsCSV = async () => {
+  try {
+    const result = await defenseApi.getHFishLogs({
+      limit: 2000,
+      offset: 0,
+      threat_level: logThreatFilter.value || undefined,
+      service_name: logServiceFilter.value || undefined,
+    })
+    const rows = result.items
+    if (!rows.length) { alert('暂无数据可导出'); return }
+    const header = ['ID', '攻击IP', '归属地', '蜜罐节点', '客户端名称', '服务名', '端口', '威胁等级', '时间']
+    const csvRows = [header.join(',')]
+    for (const r of rows) {
+      csvRows.push([
+        r.id,
+        r.attack_ip,
+        `"${(r.ip_location || '').replace(/"/g, '""')}"`,
+        r.client_id,
+        `"${(r.client_name || '').replace(/"/g, '""')}"`,
+        r.service_name,
+        r.service_port,
+        r.threat_level,
+        r.create_time_str,
+      ].join(','))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hfish_attack_logs_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { console.error('导出失败', e) }
+}
+
+let _pollTimer: ReturnType<typeof setInterval> | null = null
+
+const startPoll = () => {
+  stopPoll()
+  _pollTimer = setInterval(() => {
+    if (activeTab.value === 'events') loadEvents()
+    else if (activeTab.value === 'logs') loadLogs(logOffset.value)
+  }, 30_000)
+}
+
+const stopPoll = () => {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
+}
+
+onMounted(() => { loadEvents(); startPoll() })
+onUnmounted(stopPoll)
 </script>

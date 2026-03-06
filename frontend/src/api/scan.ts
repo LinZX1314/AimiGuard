@@ -214,6 +214,26 @@ export const scanApi = {
     return res?.data ?? null
   },
 
+  // ── Nmap 自动发现资产 ──
+  async getDiscoveredAssets(params?: {
+    mac?: string
+    ip?: string
+    limit?: number
+    offset?: number
+  }): Promise<{ total: number; items: DiscoveredAsset[] }> {
+    const res = await apiClient.get('/scan/nmap/assets', { params })
+    const d = res?.data ?? res
+    if (d?.total !== undefined) return d
+    if (Array.isArray(d)) return { total: d.length, items: d }
+    return { total: 0, items: [] }
+  },
+
+  async getAssetIpHistory(assetIp: string): Promise<AssetIpHistory[]> {
+    const res = await apiClient.get(`/scan/nmap/assets/${assetIp}/ips`)
+    const d = res?.data ?? res
+    return Array.isArray(d?.history) ? d.history : []
+  },
+
   // ── 漏洞统计 ──
   async getVulnStats(): Promise<VulnStats> {
     const res = await apiClient.get('/scan/nmap/vuln/stats')
@@ -262,22 +282,23 @@ export interface NmapStats {
 
 export interface DiscoveredAsset {
   id: number
-  mac_address: string | null
   current_ip: string
-  hostname: string | null
+  mac_address: string | null
   vendor: string | null
+  hostname: string | null
   state: string
   os_type: string | null
-  first_seen: string
-  last_seen: string
+  open_ports: number[]
+  last_seen: string | null
+  scan_task_id: number
 }
 
 export interface AssetIpHistory {
   id: number
-  asset_id: number
   ip: string
-  scan_id: number | null
-  seen_time: string
+  scan_task_id: number | null
+  state: string | null
+  seen_time: string | null
 }
 
 export interface VulnStats {
