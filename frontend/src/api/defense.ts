@@ -12,6 +12,7 @@ export interface ThreatEvent {
 
 export interface HFishConfig {
   host_port: string | null
+  api_base_url: string | null
   sync_interval: number
   enabled: boolean
 }
@@ -21,6 +22,7 @@ export interface HFishConfigRequest {
   api_key: string
   sync_interval: number
   enabled: boolean
+  api_base_url?: string
 }
 
 // ── HFish 攻击日志 ──

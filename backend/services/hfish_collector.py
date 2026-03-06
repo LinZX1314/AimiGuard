@@ -24,6 +24,7 @@ class HFishCollector:
     
     def __init__(self):
         self.host_port: Optional[str] = None
+        self.api_base_url: Optional[str] = None
         self.api_key: Optional[str] = None
         self.sync_interval: int = 60
         self.enabled: bool = False
@@ -48,6 +49,8 @@ class HFishCollector:
             for config in configs:
                 if config.config_key == "host_port":
                     self.host_port = config.config_value
+                elif config.config_key == "api_base_url":
+                    self.api_base_url = config.config_value
                 elif config.config_key == "api_key":
                     self.api_key = config.config_value
                 elif config.config_key == "sync_interval":
@@ -59,15 +62,23 @@ class HFishCollector:
         finally:
             db.close()
     
-    def save_config(self, host_port: str, api_key: str, sync_interval: int = 60, enabled: bool = True):
+    def save_config(
+        self,
+        host_port: str,
+        api_key: str,
+        sync_interval: int = 60,
+        enabled: bool = True,
+        api_base_url: Optional[str] = None,
+    ):
         """保存配置到数据库"""
         db = SessionLocal()
         try:
             configs = {
                 "host_port": (host_port, 0),
-                "api_key": (api_key, 1),  # 敏感信息
+                "api_base_url": (api_base_url or "", 0),
+                "api_key": (api_key, 1),
                 "sync_interval": (str(sync_interval), 0),
-                "enabled": ("true" if enabled else "false", 0)
+                "enabled": ("true" if enabled else "false", 0),
             }
             
             for key, (value, is_sensitive) in configs.items():
@@ -119,11 +130,12 @@ class HFishCollector:
         Returns:
             攻击日志列表
         """
-        if not self.host_port or not self.api_key:
+        if not self.api_key or (not self.host_port and not self.api_base_url):
             logger.error("HFish 配置未设置")
             return []
-        
-        url = f"https://{self.host_port}/api/v1/attack/detail?api_key={self.api_key}"
+
+        base = self.api_base_url.rstrip("/") if self.api_base_url else f"https://{self.host_port}"
+        url = f"{base}/api/v1/attack/detail?api_key={self.api_key}"
         
         payload = {
             "start_time": start_time,
@@ -255,7 +267,7 @@ class HFishCollector:
     def get_last_sync_timestamp(self, db: Session) -> int:
         """获取最后同步的时间戳"""
         last_event = db.query(ThreatEvent).filter(
-            ThreatEvent.source == "hfish"
+            ThreatEvent.source_vendor == "hfish"
         ).order_by(ThreatEvent.created_at.desc()).first()
         
         if last_event and last_event.created_at:

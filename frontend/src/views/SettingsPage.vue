@@ -149,6 +149,40 @@
         </CardContent>
       </Card>
 
+      <!-- 快捷导航 -->
+      <Card>
+        <CardHeader class="pb-3">
+          <CardTitle class="text-base flex items-center gap-2">
+            <Info class="size-4 text-muted-foreground" />
+            更多设置
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="grid gap-2 sm:grid-cols-2 text-sm">
+            <router-link
+              to="/integrations"
+              class="flex items-center gap-2 rounded-md border border-border px-3 py-2.5 hover:bg-muted/30 transition-colors"
+            >
+              <Shield class="size-4 text-cyan-400 shrink-0" />
+              <div>
+                <p class="font-medium">插件与联动</p>
+                <p class="text-xs text-muted-foreground">HFish / Nmap / 推送通道 / 设备凭证管理</p>
+              </div>
+            </router-link>
+            <router-link
+              to="/audit"
+              class="flex items-center gap-2 rounded-md border border-border px-3 py-2.5 hover:bg-muted/30 transition-colors"
+            >
+              <Info class="size-4 text-amber-400 shrink-0" />
+              <div>
+                <p class="font-medium">审计日志</p>
+                <p class="text-xs text-muted-foreground">查看系统操作审计记录</p>
+              </div>
+            </router-link>
+          </div>
+        </CardContent>
+      </Card>
+
       <!-- 确认切换 ACTIVE 弹窗 -->
       <div
         v-if="confirmOpen"

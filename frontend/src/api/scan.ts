@@ -168,7 +168,13 @@ export const scanApi = {
     return res.data
   },
 
-  async saveNmapConfig(config: { nmap_path: string; ip_ranges: string[]; scan_interval: number; enabled: boolean }) {
+  async saveNmapConfig(config: {
+    nmap_path: string
+    ip_ranges: string[]
+    scan_interval: number
+    enabled: boolean
+    vuln_scripts_by_tag?: Record<string, string[]>
+  }) {
     return apiClient.post('/scan/nmap/config', config)
   },
 

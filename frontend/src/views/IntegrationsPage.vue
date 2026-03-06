@@ -41,6 +41,16 @@
                 class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
+            <div class="space-y-1.5 md:col-span-2">
+              <label class="text-sm font-medium">蜜罐 API 接口地址（完整 URL）</label>
+              <input
+                v-model="hfishForm.api_base_url"
+                type="text"
+                placeholder="https://192.168.1.100:4433（留空则自动拼接 host:port）"
+                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+              />
+              <p class="text-xs text-muted-foreground">自定义蜜罐系统的完整基础 URL，支持 HTTP/HTTPS 和自定义路径前缀；留空则默认使用 https://host:port</p>
+            </div>
             <div class="space-y-1.5">
               <label class="text-sm font-medium">同步间隔（秒）</label>
               <input
@@ -352,6 +362,137 @@
         </CardContent>
       </Card>
 
+      <!-- ── 交换机 / 设备凭证管理 ── -->
+      <Card>
+        <CardHeader class="flex-row items-center justify-between pb-3">
+          <div class="space-y-0.5">
+            <CardTitle class="text-base flex items-center gap-2">
+              <Server class="size-4 text-cyan-400" />
+              交换机 / 设备凭证管理
+            </CardTitle>
+            <p class="text-xs text-muted-foreground">管理网络设备的 SSH/Telnet 登录凭证，支持每台设备多组密码</p>
+          </div>
+          <Button variant="outline" size="sm" class="cursor-pointer gap-1.5" @click="showAddDevice = !showAddDevice">
+            <Plus class="size-3.5" />
+            添加设备
+          </Button>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <!-- 新建设备表单 -->
+          <div v-if="showAddDevice" class="rounded-lg border border-border p-4 space-y-3 bg-muted/20">
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">设备名称</label>
+                <input v-model="deviceForm.name" placeholder="如：核心交换机-1"
+                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">IP 地址</label>
+                <input v-model="deviceForm.ip" placeholder="192.168.1.1"
+                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">端口</label>
+                <input v-model.number="deviceForm.port" type="number" min="1" max="65535"
+                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">厂商</label>
+                <select v-model="deviceForm.vendor"
+                  class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
+                  <option value="huawei">华为</option>
+                  <option value="h3c">H3C</option>
+                  <option value="cisco">Cisco</option>
+                  <option value="ruijie">锐捷</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">设备类型</label>
+                <input v-model="deviceForm.device_type" placeholder="交换机 / 路由器 / 防火墙"
+                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">备注</label>
+                <input v-model="deviceForm.description" placeholder="可选"
+                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <Button size="sm" class="cursor-pointer" :disabled="deviceCreating" @click="createDevice">
+                {{ deviceCreating ? '创建中…' : '创建设备' }}
+              </Button>
+              <Button variant="ghost" size="sm" class="cursor-pointer" @click="showAddDevice = false">取消</Button>
+              <span v-if="deviceMsg" class="text-xs" :class="deviceMsgOk ? 'text-emerald-400' : 'text-destructive'">{{ deviceMsg }}</span>
+            </div>
+          </div>
+
+          <!-- 设备列表 -->
+          <div v-if="devicesLoading" class="space-y-2">
+            <Skeleton v-for="i in 2" :key="i" class="h-20 w-full rounded" />
+          </div>
+          <div v-else-if="devices.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+            暂无已配置设备
+          </div>
+          <div v-else class="space-y-3">
+            <div v-for="dev in devices" :key="dev.id" class="rounded-lg border border-border p-4 space-y-3">
+              <!-- 设备信息头 -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-sm">{{ dev.name }}</span>
+                      <Badge variant="outline" class="text-[10px] h-4 capitalize">{{ dev.vendor }}</Badge>
+                      <Badge v-if="dev.device_type" variant="outline" class="text-[10px] h-4">{{ dev.device_type }}</Badge>
+                      <Badge :class="dev.enabled ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-muted text-muted-foreground'" class="text-[10px] h-4">
+                        {{ dev.enabled ? '启用' : '禁用' }}
+                      </Badge>
+                    </div>
+                    <p class="text-xs text-muted-foreground font-mono">{{ dev.ip }}:{{ dev.port }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <Button variant="outline" size="sm" class="cursor-pointer text-xs h-7" @click="toggleDevice(dev)">
+                    {{ dev.enabled ? '禁用' : '启用' }}
+                  </Button>
+                  <Button variant="ghost" size="sm" class="cursor-pointer text-destructive text-xs h-7" @click="removeDevice(dev.id)">
+                    删除
+                  </Button>
+                </div>
+              </div>
+
+              <!-- 凭证列表 -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-medium text-muted-foreground">登录凭证（{{ dev.credentials?.length || 0 }}）</span>
+                  <button class="text-xs text-primary hover:underline cursor-pointer" @click="promptAddCredential(dev.id)">
+                    + 添加凭证
+                  </button>
+                </div>
+                <div v-if="dev.credentials && dev.credentials.length > 0" class="space-y-1">
+                  <div v-for="cred in dev.credentials" :key="cred.id"
+                    class="flex items-center justify-between rounded border border-border/50 px-3 py-1.5 bg-muted/10">
+                    <div class="flex items-center gap-3 text-xs">
+                      <span class="font-mono">{{ cred.username }}</span>
+                      <span class="text-muted-foreground">********</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button class="text-xs text-primary hover:underline cursor-pointer" @click="promptUpdateCredential(dev.id, cred)">
+                        修改
+                      </button>
+                      <button class="text-xs text-destructive/70 hover:text-destructive cursor-pointer ml-2" @click="removeCredential(dev.id, cred.id)">
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="text-xs text-muted-foreground/60 py-1">暂无凭证，请添加</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <!-- ── 其他联动（占位） ── -->
       <div class="grid gap-4 md:grid-cols-2">
         <Card class="opacity-70">
@@ -385,10 +526,11 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { BellRing, Bug, Plus, RefreshCw, Shield, Zap } from 'lucide-vue-next'
+import { BellRing, Bug, Plus, RefreshCw, Server, Shield, Zap } from 'lucide-vue-next'
 import { apiClient } from '@/api/client'
 import { defenseApi, type HFishConfig } from '@/api/defense'
 import { scanApi } from '@/api/scan'
+import { deviceApi, type DeviceInfo, type DeviceCredential } from '@/api/device'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -397,8 +539,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 const Radar = Zap
 
 // ── HFish 状态 ──
-const hfishConfig = ref<HFishConfig>({ host_port: null, sync_interval: 60, enabled: false })
-const hfishForm = reactive({ host_port: '', api_key: '', sync_interval: 60, enabled: false })
+const hfishConfig = ref<HFishConfig>({ host_port: null, api_base_url: null, sync_interval: 60, enabled: false })
+const hfishForm = reactive({ host_port: '', api_base_url: '', api_key: '', sync_interval: 60, enabled: false })
 const hfishSaving = ref(false)
 const hfishSyncing = ref(false)
 const hfishMsg = ref('')
@@ -423,6 +565,7 @@ const loadHFishConfig = async () => {
     const cfg = await defenseApi.getHFishConfig()
     hfishConfig.value = cfg
     hfishForm.host_port = cfg.host_port ?? ''
+    hfishForm.api_base_url = cfg.api_base_url ?? ''
     hfishForm.api_key = ''
     hfishForm.sync_interval = cfg.sync_interval
     hfishForm.enabled = cfg.enabled
@@ -456,6 +599,7 @@ const saveHFishConfig = async () => {
       api_key: hfishForm.api_key || '',
       sync_interval: hfishForm.sync_interval,
       enabled: hfishForm.enabled,
+      api_base_url: hfishForm.api_base_url.trim() || undefined,
     })
     hfishConfig.value.enabled = hfishForm.enabled
     showMsg(hfishMsg, hfishMsgOk, '配置已保存', true)
@@ -571,7 +715,7 @@ const saveVulnScripts = async () => {
       scan_interval: nmapForm.scan_interval,
       enabled: nmapForm.enabled,
       vuln_scripts_by_tag: vulnScriptsMap.value,
-    } as any)
+    })
     vulnMsg.value = '漏洞规则已保存'
     vulnMsgOk.value = true
   } catch (e: any) {
@@ -669,10 +813,126 @@ const deleteChannel = async (id: number) => {
   } catch { /* ignore */ }
 }
 
+// ── 设备凭证管理 ──
+const devices = ref<DeviceInfo[]>([])
+const devicesLoading = ref(false)
+const showAddDevice = ref(false)
+const deviceCreating = ref(false)
+const deviceMsg = ref('')
+const deviceMsgOk = ref(true)
+const deviceForm = reactive({
+  name: '',
+  ip: '',
+  port: 22,
+  vendor: 'huawei',
+  device_type: '',
+  description: '',
+})
+
+const showDeviceMsg = (msg: string, ok: boolean) => {
+  deviceMsg.value = msg
+  deviceMsgOk.value = ok
+  setTimeout(() => { deviceMsg.value = '' }, 3000)
+}
+
+const loadDevices = async () => {
+  devicesLoading.value = true
+  try {
+    const data = await deviceApi.list()
+    devices.value = Array.isArray(data) ? data : []
+  } catch {
+    devices.value = []
+  } finally {
+    devicesLoading.value = false
+  }
+}
+
+const createDevice = async () => {
+  if (!deviceForm.name.trim() || !deviceForm.ip.trim() || !deviceForm.vendor) {
+    showDeviceMsg('请填写设备名称、IP 和厂商', false)
+    return
+  }
+  deviceCreating.value = true
+  try {
+    await deviceApi.create({
+      name: deviceForm.name.trim(),
+      ip: deviceForm.ip.trim(),
+      port: deviceForm.port,
+      vendor: deviceForm.vendor,
+      device_type: deviceForm.device_type.trim() || undefined,
+      description: deviceForm.description.trim() || undefined,
+    })
+    showDeviceMsg('设备已创建', true)
+    showAddDevice.value = false
+    deviceForm.name = ''
+    deviceForm.ip = ''
+    deviceForm.port = 22
+    deviceForm.device_type = ''
+    deviceForm.description = ''
+    await loadDevices()
+  } catch (e: any) {
+    showDeviceMsg(e?.displayMessage || '创建失败', false)
+  } finally {
+    deviceCreating.value = false
+  }
+}
+
+const toggleDevice = async (dev: DeviceInfo) => {
+  try {
+    await deviceApi.update(dev.id, { enabled: !dev.enabled })
+    await loadDevices()
+  } catch { /* ignore */ }
+}
+
+const removeDevice = async (id: number) => {
+  if (!window.confirm('确定删除该设备及所有关联凭证？')) return
+  try {
+    await deviceApi.remove(id)
+    await loadDevices()
+  } catch { /* ignore */ }
+}
+
+const promptAddCredential = async (deviceId: number) => {
+  const username = window.prompt('请输入用户名')
+  if (!username?.trim()) return
+  const password = window.prompt('请输入密码')
+  if (!password) return
+  try {
+    await deviceApi.addCredential(deviceId, username.trim(), password)
+    await loadDevices()
+  } catch (e: any) {
+    showDeviceMsg(e?.displayMessage || '添加凭证失败', false)
+  }
+}
+
+const promptUpdateCredential = async (deviceId: number, cred: DeviceCredential) => {
+  const username = window.prompt('用户名（留空不修改）', cred.username)
+  const password = window.prompt('新密码（留空不修改）')
+  const payload: { username?: string; password?: string } = {}
+  if (username && username !== cred.username) payload.username = username
+  if (password) payload.password = password
+  if (Object.keys(payload).length === 0) return
+  try {
+    await deviceApi.updateCredential(deviceId, cred.id, payload)
+    await loadDevices()
+  } catch (e: any) {
+    showDeviceMsg(e?.displayMessage || '修改凭证失败', false)
+  }
+}
+
+const removeCredential = async (deviceId: number, credId: number) => {
+  if (!window.confirm('确定删除该凭证？')) return
+  try {
+    await deviceApi.removeCredential(deviceId, credId)
+    await loadDevices()
+  } catch { /* ignore */ }
+}
+
 onMounted(() => {
   loadHFishConfig()
   loadNmapConfig()
   loadChannels()
   loadVulnScripts()
+  loadDevices()
 })
 </script>

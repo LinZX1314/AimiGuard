@@ -1049,23 +1049,12 @@ async def get_nmap_stats(
     online = base.filter(ScanFinding.state == "up").count()
     offline = base.filter(ScanFinding.state == "down").count()
 
-    os_rows = (
-        db.query(ScanFinding.os_type, sqlfunc.count(ScanFinding.id).label("cnt"))
-        .filter(ScanFinding.state.isnot(None), ScanFinding.os_type.isnot(None), ScanFinding.os_type != "")
-        .group_by(ScanFinding.os_type)
-        .order_by(sqlfunc.count(ScanFinding.id).desc())
-        .limit(10)
-        .all()
+    os_query = db.query(ScanFinding.os_type, sqlfunc.count(ScanFinding.id).label("cnt")).filter(
+        ScanFinding.state.isnot(None), ScanFinding.os_type.isnot(None), ScanFinding.os_type != ""
     )
     if scan_id:
-        os_rows = (
-            db.query(ScanFinding.os_type, sqlfunc.count(ScanFinding.id).label("cnt"))
-            .filter(ScanFinding.scan_task_id == scan_id, ScanFinding.state.isnot(None), ScanFinding.os_type.isnot(None), ScanFinding.os_type != "")
-            .group_by(ScanFinding.os_type)
-            .order_by(sqlfunc.count(ScanFinding.id).desc())
-            .limit(10)
-            .all()
-        )
+        os_query = os_query.filter(ScanFinding.scan_task_id == scan_id)
+    os_rows = os_query.group_by(ScanFinding.os_type).order_by(sqlfunc.count(ScanFinding.id).desc()).limit(10).all()
 
     return APIResponse.success({
         "total": total,

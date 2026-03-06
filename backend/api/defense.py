@@ -1015,10 +1015,12 @@ class HFishConfigRequest(BaseModel):
     api_key: str = Field(..., description="HFish API 密钥")
     sync_interval: int = Field(60, description="同步间隔（秒）")
     enabled: bool = Field(True, description="是否启用")
+    api_base_url: Optional[str] = Field(None, description="完整 API 基础地址，如 https://192.168.1.100:4433，留空则自动拼接 host_port")
 
 
 class HFishConfigResponse(BaseModel):
     host_port: Optional[str] = None
+    api_base_url: Optional[str] = None
     sync_interval: int = 60
     enabled: bool = False
 
@@ -1037,7 +1039,8 @@ async def save_hfish_config(
             host_port=config.host_port,
             api_key=config.api_key,
             sync_interval=config.sync_interval,
-            enabled=config.enabled
+            enabled=config.enabled,
+            api_base_url=config.api_base_url,
         )
         
         # 审计日志
@@ -1074,8 +1077,9 @@ async def get_hfish_config(
     
     return HFishConfigResponse(
         host_port=hfish_collector.host_port,
+        api_base_url=hfish_collector.api_base_url,
         sync_interval=hfish_collector.sync_interval,
-        enabled=hfish_collector.enabled
+        enabled=hfish_collector.enabled,
     )
 
 
@@ -1143,7 +1147,7 @@ async def get_hfish_logs(
     from sqlalchemy import func as sqlfunc
     from datetime import timedelta
 
-    query = db.query(ThreatEvent).filter(ThreatEvent.source == "hfish")
+    query = db.query(ThreatEvent).filter(ThreatEvent.source_vendor == "hfish")
 
     if days and days > 0:
         since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -1187,7 +1191,7 @@ async def get_hfish_stats(
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     base = db.query(ThreatEvent).filter(
-        ThreatEvent.source == "hfish",
+        ThreatEvent.source_vendor == "hfish",
         ThreatEvent.created_at >= since,
     )
 
@@ -1196,7 +1200,7 @@ async def get_hfish_stats(
     # 威胁等级分布
     threat_rows = (
         db.query(ThreatEvent.threat_label, sqlfunc.count(ThreatEvent.id).label("cnt"))
-        .filter(ThreatEvent.source == "hfish", ThreatEvent.created_at >= since)
+        .filter(ThreatEvent.source_vendor == "hfish", ThreatEvent.created_at >= since)
         .group_by(ThreatEvent.threat_label)
         .all()
     )
@@ -1205,7 +1209,7 @@ async def get_hfish_stats(
     # 服务分布 TOP 10
     svc_rows = (
         db.query(ThreatEvent.service_name, sqlfunc.count(ThreatEvent.id).label("cnt"))
-        .filter(ThreatEvent.source == "hfish", ThreatEvent.created_at >= since, ThreatEvent.service_name.isnot(None))
+        .filter(ThreatEvent.source_vendor == "hfish", ThreatEvent.created_at >= since, ThreatEvent.service_name.isnot(None))
         .group_by(ThreatEvent.service_name)
         .order_by(sqlfunc.count(ThreatEvent.id).desc())
         .limit(10)
@@ -1216,7 +1220,7 @@ async def get_hfish_stats(
     # TOP IP
     ip_rows = (
         db.query(ThreatEvent.ip, sqlfunc.count(ThreatEvent.id).label("cnt"))
-        .filter(ThreatEvent.source == "hfish", ThreatEvent.created_at >= since)
+        .filter(ThreatEvent.source_vendor == "hfish", ThreatEvent.created_at >= since)
         .group_by(ThreatEvent.ip)
         .order_by(sqlfunc.count(ThreatEvent.id).desc())
         .limit(10)
@@ -1230,7 +1234,7 @@ async def get_hfish_stats(
             sqlfunc.strftime("%Y-%m-%d", ThreatEvent.created_at).label("date"),
             sqlfunc.count(ThreatEvent.id).label("cnt"),
         )
-        .filter(ThreatEvent.source == "hfish", ThreatEvent.created_at >= since)
+        .filter(ThreatEvent.source_vendor == "hfish", ThreatEvent.created_at >= since)
         .group_by(sqlfunc.strftime("%Y-%m-%d", ThreatEvent.created_at))
         .order_by(sqlfunc.strftime("%Y-%m-%d", ThreatEvent.created_at))
         .all()
