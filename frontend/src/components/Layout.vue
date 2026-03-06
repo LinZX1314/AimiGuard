@@ -366,7 +366,6 @@ import {
 import gsap from 'gsap'
 import {
   Activity,
-  Activity,
   Bell,
   BrainCircuit,
   ChevronRight,
