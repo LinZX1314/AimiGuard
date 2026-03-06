@@ -101,6 +101,12 @@ async def sync_to_firewall(
         reason=req.reason, trace_id=trace_id,
     )
 
+    try:
+        from services.metrics_service import metrics
+        metrics.inc("firewall_sync_total")
+    except Exception:
+        pass
+
     return APIResponse.success(
         {
             "task_id": task.id,

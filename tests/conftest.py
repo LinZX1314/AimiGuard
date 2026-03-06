@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 # 在导入任何 backend 模块之前设置测试数据库
 TEST_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_all.db"))
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
+os.environ["TESTING"] = "1"
 
 # 添加 backend 到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -104,6 +105,15 @@ def setup_test_database():
             ("view_firewall_tasks", "firewall", "view", "查看防火墙任务"),
             ("scan:execute", "scan", "execute", "执行扫描"),
             ("scan:view", "scan", "view", "查看扫描"),
+            ("view_push", "push", "view", "查看推送通道"),
+            ("manage_push", "push", "manage", "管理推送通道"),
+            ("manage_plugins", "plugin", "manage", "管理插件"),
+            ("view_plugins", "plugin", "view", "查看插件"),
+            ("create_tts_task", "tts", "create", "创建TTS任务"),
+            ("view_tts_tasks", "tts", "view", "查看TTS任务"),
+            ("view_audit", "audit", "view", "查看审计日志"),
+            ("view_system_mode", "system", "view_mode", "查看系统模式"),
+            ("set_system_mode", "system", "set_mode", "设置系统模式"),
         ]
         for name, resource, action, desc in permissions:
             db.execute(
@@ -297,18 +307,29 @@ def viewer_token(client, setup_test_database):
 
 @pytest.fixture(scope="function", autouse=True)
 def reset_test_data():
-    """每个测试函数运行前清理非核心数据"""
+    """每个测试函数运行前：恢复依赖覆盖 + 清理非核心数据"""
+    app.dependency_overrides[get_db] = override_get_db
+
     db = TestingSessionLocal()
     try:
-        # 清理测试数据（保留 admin 用户和角色）
-        db.execute(text("DELETE FROM ai_chat_message"))
-        db.execute(text("DELETE FROM ai_chat_session"))
-        db.execute(text("DELETE FROM push_channel"))
-        db.execute(text("DELETE FROM scan_task"))
-        db.execute(text("DELETE FROM scan_finding"))
-        db.execute(text("DELETE FROM asset WHERE id > 0"))  # 清理所有资产
-        db.execute(text("DELETE FROM threat_event"))
-        db.execute(text("DELETE FROM user WHERE id > 1"))  # 清理测试用户（保留 admin）
+        tables_to_clean = [
+            "ai_chat_message", "ai_chat_session", "push_channel",
+            "scan_task", "scan_finding", "threat_event",
+            "ai_tts_task", "firewall_sync_task", "plugin_registry",
+        ]
+        for tbl in tables_to_clean:
+            try:
+                db.execute(text(f"DELETE FROM {tbl}"))
+            except Exception:
+                db.rollback()
+        try:
+            db.execute(text("DELETE FROM asset WHERE id > 0"))
+        except Exception:
+            db.rollback()
+        try:
+            db.execute(text("DELETE FROM user WHERE id > 3"))
+        except Exception:
+            db.rollback()
         db.commit()
     finally:
         db.close()

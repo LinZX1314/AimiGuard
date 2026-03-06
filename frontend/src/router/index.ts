@@ -12,6 +12,7 @@ import OverviewPage from '../views/OverviewPage.vue'
 import ProbeDashboardPage from '../views/ProbeDashboardPage.vue'
 import IntegrationsPage from '../views/IntegrationsPage.vue'
 import AuditPage from '../views/AuditPage.vue'
+import ObservabilityPage from '../views/ObservabilityPage.vue'
 import ForbiddenPage from '../views/ForbiddenPage.vue'
 
 type UserRole = 'admin' | 'operator' | 'viewer'
@@ -129,6 +130,12 @@ const router = createRouter({
           name: 'audit',
           component: AuditPage,
           meta: { requiredRoles: ['operator', 'admin'] }
+        },
+        {
+          path: '/observability',
+          name: 'observability',
+          component: ObservabilityPage,
+          meta: { requiredRoles: ['admin'] }
         },
         {
           path: '/profile',

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from core.database import init_db
+from core.logging_config import setup_logging
 from core.response import (
     http_exception_handler,
     validation_exception_handler,
@@ -40,6 +41,7 @@ def print_banner():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    setup_logging()
     print_banner()
     init_db()
     print("✓ 数据库初始化完成")

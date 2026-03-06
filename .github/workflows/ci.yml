@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-lint-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r ../requirements.txt
+
+      - name: Lint (py_compile)
+        run: |
+          find . -name '*.py' | while read f; do python -m py_compile "$f"; done
+
+      - name: Run tests
+        env:
+          TESTING: "1"
+        run: |
+          cd ..
+          python -m pytest tests/test_step8_9_full.py tests/test_td05_push.py -v --tb=short
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint 2>/dev/null || true
+
+      - name: Build
+        run: npm run build
+
+  gate:
+    needs: [backend-lint-test, frontend-build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All checks passed"

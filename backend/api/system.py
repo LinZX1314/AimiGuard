@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 import os
 
-from core.database import get_db, AuditLog, User
+from core.database import get_db, AuditLog, User, ThreatEvent, ScanTask, FirewallSyncTask
 from api.auth import get_current_user, get_user_role, get_user_permissions, require_permissions
 from services.audit_service import AuditService
 from services.mode_service import get_current_mode, set_mode
@@ -370,4 +370,127 @@ async def verify_audit_chain(
     return {
         "code": 0,
         "data": result,
+    }
+
+
+# ── 可观测性：指标 + 告警阈值 ──
+
+@router.get("/metrics")
+@compat_router.get("/metrics")
+async def get_system_metrics(
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """系统运行指标快照（请求量、延迟、错误率、运行时间）"""
+    from services.metrics_service import metrics
+    from sqlalchemy import func
+
+    snap = metrics.snapshot()
+
+    # 补充数据库指标
+    total_events = db.query(func.count(ThreatEvent.id)).scalar() or 0
+    total_scans = db.query(func.count(ScanTask.id)).scalar() or 0
+    failed_scans = db.query(func.count(ScanTask.id)).filter(ScanTask.state == "FAILED").scalar() or 0
+    fw_total = db.query(func.count(FirewallSyncTask.id)).scalar() or 0
+    fw_failed = db.query(func.count(FirewallSyncTask.id)).filter(
+        FirewallSyncTask.state.in_(["FAILED", "MANUAL_REQUIRED"])
+    ).scalar() or 0
+
+    snap["database"] = {
+        "threat_events": total_events,
+        "scan_tasks": total_scans,
+        "scan_fail_rate": round(failed_scans / total_scans * 100, 1) if total_scans > 0 else 0,
+        "firewall_tasks": fw_total,
+        "firewall_fail_rate": round(fw_failed / fw_total * 100, 1) if fw_total > 0 else 0,
+    }
+
+    return {"code": 0, "data": snap}
+
+
+# 告警阈值（内存存储，可通过 API 调整）
+_alert_thresholds = {
+    "scan_fail_rate_pct": 20.0,
+    "firewall_fail_rate_pct": 10.0,
+    "api_p95_ms": 3000.0,
+    "scan_timeout_rate_pct": 15.0,
+}
+
+
+@router.get("/alert-thresholds")
+async def get_alert_thresholds(
+    current_user: User = Depends(require_permissions("view_system_mode")),
+):
+    """获取告警阈值配置"""
+    return {"code": 0, "data": _alert_thresholds}
+
+
+@router.put("/alert-thresholds")
+async def update_alert_thresholds(
+    request: Request,
+    current_user: User = Depends(require_permissions("set_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """更新告警阈值"""
+    body = await request.json()
+    updated = []
+    for key in _alert_thresholds:
+        if key in body:
+            _alert_thresholds[key] = float(body[key])
+            updated.append(key)
+
+    if updated:
+        trace_id = getattr(request.state, "trace_id", None)
+        AuditService.log(
+            db=db, actor=str(current_user.username),
+            action="update_alert_thresholds",
+            target=",".join(updated),
+            target_type="system_config",
+            trace_id=trace_id,
+        )
+
+    return {"code": 0, "data": _alert_thresholds, "message": f"已更新 {len(updated)} 项"}
+
+
+@router.get("/alert-check")
+async def check_alerts(
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """检查是否有指标超过告警阈值"""
+    from services.metrics_service import metrics
+    from sqlalchemy import func
+
+    alerts = []
+
+    # 扫描失败率
+    total_scans = db.query(func.count(ScanTask.id)).scalar() or 0
+    failed_scans = db.query(func.count(ScanTask.id)).filter(ScanTask.state == "FAILED").scalar() or 0
+    if total_scans > 0:
+        rate = failed_scans / total_scans * 100
+        if rate >= _alert_thresholds["scan_fail_rate_pct"]:
+            alerts.append({"metric": "scan_fail_rate", "value": round(rate, 1), "threshold": _alert_thresholds["scan_fail_rate_pct"], "severity": "HIGH"})
+
+    # 防火墙失败率
+    fw_total = db.query(func.count(FirewallSyncTask.id)).scalar() or 0
+    fw_failed = db.query(func.count(FirewallSyncTask.id)).filter(
+        FirewallSyncTask.state.in_(["FAILED", "MANUAL_REQUIRED"])
+    ).scalar() or 0
+    if fw_total > 0:
+        rate = fw_failed / fw_total * 100
+        if rate >= _alert_thresholds["firewall_fail_rate_pct"]:
+            alerts.append({"metric": "firewall_fail_rate", "value": round(rate, 1), "threshold": _alert_thresholds["firewall_fail_rate_pct"], "severity": "HIGH"})
+
+    # API P95 延迟
+    api_stats = metrics.get_latency_stats("api_request")
+    if api_stats["count"] > 10 and api_stats["p95_ms"] >= _alert_thresholds["api_p95_ms"]:
+        alerts.append({"metric": "api_p95_latency", "value": api_stats["p95_ms"], "threshold": _alert_thresholds["api_p95_ms"], "severity": "MEDIUM"})
+
+    return {
+        "code": 0,
+        "data": {
+            "has_alerts": len(alerts) > 0,
+            "alert_count": len(alerts),
+            "alerts": alerts,
+            "checked_at": _utc_iso(),
+        },
     }

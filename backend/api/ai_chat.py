@@ -4,6 +4,7 @@ from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+import time
 
 from core.database import (
     get_db, AIChatSession, AIChatMessage, ThreatEvent, ScanTask, ScanFinding, User,
@@ -132,8 +133,16 @@ async def chat(
     db.add(user_msg)
     
     # 构建上下文摘要
+    _t0 = time.monotonic()
     context_summary = _build_context_summary(db, req, session)
     response_content = _generate_ai_reply(req.message, context_summary)
+    _elapsed = (time.monotonic() - _t0) * 1000
+    try:
+        from services.metrics_service import metrics
+        metrics.inc("ai_chat_requests")
+        metrics.record_latency("ai_chat", _elapsed)
+    except Exception:
+        pass
     
     ai_msg = AIChatMessage(
         session_id=session.id,

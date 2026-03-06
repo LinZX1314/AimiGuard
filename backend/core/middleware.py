@@ -3,23 +3,57 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from typing import Callable
 from collections import defaultdict
+import logging
 import time
 import uuid
 from functools import wraps
+
+logger = logging.getLogger("aimiguan")
 
 
 class TraceIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         trace_id = request.headers.get("X-Trace-ID") or str(uuid.uuid4())
         request.state.trace_id = trace_id
+
+        start = time.monotonic()
         response = await call_next(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+
         response.headers["X-Trace-ID"] = trace_id
+
+        # 结构化日志
+        status = response.status_code
+        method = request.method
+        path = request.url.path
+        logger.info(
+            "request",
+            extra={
+                "trace_id": trace_id,
+                "method": method,
+                "path": path,
+                "status": status,
+                "elapsed_ms": round(elapsed_ms, 2),
+            },
+        )
+
+        # 指标采集
+        try:
+            from services.metrics_service import metrics
+            metrics.inc("http_requests_total")
+            if status >= 400:
+                metrics.inc("http_errors_total")
+            metrics.record_latency("api_request", elapsed_ms)
+        except Exception:
+            pass
+
         return response
 
 
 # ── 接口限流中间件 ──
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
+    """滑动窗口限流中间件。设置环境变量 TESTING=1 时自动禁用。"""
     """
     滑动窗口限流。
     - 全局默认：60 次/分
@@ -50,10 +84,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return False
 
     async def dispatch(self, request: Request, call_next: Callable):
+        import os
+        if os.environ.get("TESTING") == "1":
+            return await call_next(request)
+
         client_ip = self._client_ip(request)
         path = request.url.path
 
-        # 登录接口加严限流
         is_login = path.endswith("/auth/login") and request.method == "POST"
         if is_login:
             key = f"login:{client_ip}"

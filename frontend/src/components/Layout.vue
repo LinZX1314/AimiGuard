@@ -167,6 +167,14 @@
                 <ShieldAlert class="mr-2 size-4" />
                 安全设置
               </DropdownMenuItem>
+              <DropdownMenuItem v-if="role === 'admin'" class="cursor-pointer" @click="router.push('/observability')">
+                <Activity class="mr-2 size-4" />
+                系统可观测性
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="role === 'admin' || role === 'operator'" class="cursor-pointer" @click="router.push('/audit')">
+                <FileSearch class="mr-2 size-4" />
+                审计日志
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem class="cursor-pointer text-destructive focus:text-destructive" @click="handleLogout">
                 <LogOut class="mr-2 size-4" />
@@ -358,9 +366,11 @@ import {
 import gsap from 'gsap'
 import {
   Activity,
+  Activity,
   Bell,
   BrainCircuit,
   ChevronRight,
+  FileSearch,
   LogOut,
   Moon,
   PanelLeft,
