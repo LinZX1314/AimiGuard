@@ -14,7 +14,7 @@
 | UI 框架 | Vuetify 3 | 自定义 UI（radix-vue + Tailwind CSS） |
 | 数据请求 | 原生 `fetch()` 直连本地 API | axios + `/api/v1` + JWT Bearer Token |
 | 状态管理 | 组件内 `ref/reactive` | Pinia + composables |
-| 图表 | Chart.js（CDN） | 暂无图表库（缺失！） |
+| 图表 | Chart.js（CDN） | chart.js + vue-chartjs（✅ 已引入）|
 | 认证 | 无认证 | JWT Token + 角色控制（admin/operator/viewer） |
 | 路由 | Flask 路由 | Vue Router 4（前端路由） |
 | 后端 | Flask（Python） | 独立后端（通过 `/api/v1` 接入） |
@@ -29,15 +29,15 @@
 |--------|-------------------|-----------------|------|
 | HFish 配置页面（地址/密钥/间隔/启用） | ✅ `vuetify_settings.html` | ✅ `IntegrationsPage.vue` | **已有** |
 | 手动触发同步按钮 | ✅ | ✅ `defenseApi.triggerHFishSync()` | **已有** |
-| 攻击日志列表页面 | ✅ `vuetify_hfish.html`（独立页面） | ⚠️ 仅 `DefenseRealtime.vue` 有实时流，无完整攻击日志页 | **缺失** |
-| 攻击日志：分页展示 | ✅ | ❌ | **缺失** |
-| 攻击日志：按威胁等级筛选 | ✅ | ❌ | **缺失** |
-| 攻击日志：按服务名筛选 | ✅ | ❌ | **缺失** |
-| 攻击日志：点击 IP 联动 Nmap 详情弹窗 | ✅ | ⚠️ `DefenseDashboard.vue` 有 IP→Nmap 弹窗，但依赖后端接口 | **部分** |
-| 威胁统计（按等级/服务/IP） | ✅ `GET /api/hfish/stats` | ❌ 主项目没有此数据视图 | **缺失** |
-| 近 7 天攻击趋势折线图 | ✅ Chart.js 实现 | ❌ 无图表库，无此视图 | **缺失** |
-| TOP 10 攻击来源 IP 排行 | ✅ | ❌ | **缺失** |
-| TOP 10 被攻击服务统计 | ✅ | ❌ | **缺失** |
+| 攻击日志列表页面 | ✅ `vuetify_hfish.html`（独立页面） | ✅ `DefenseDashboard.vue` 攻击日志 Tab（完整实现）| **已有** |
+| 攻击日志：分页展示 | ✅ | ✅ | **已有** |
+| 攻击日志：按威胁等级筛选 | ✅ | ✅ | **已有** |
+| 攻击日志：按服务名筛选 | ✅ | ✅ | **已有** |
+| 攻击日志：点击 IP 联动 Nmap 详情弹窗 | ✅ | ✅ `NmapHostDetailDialog.vue` 独立组件，已复用 | **已有** |
+| 威胁统计（按等级/服务/IP） | ✅ `GET /api/hfish/stats` | ✅ `OverviewPage.vue` 威胁等级饼图 + 服务柱状图 + TOP IP | **已有** |
+| 近 7 天攻击趋势折线图 | ✅ Chart.js 实现 | ✅ `OverviewPage.vue` 告警趋势折线图（含高危双线）| **已有** |
+| TOP 10 攻击来源 IP 排行 | ✅ | ✅ `OverviewPage.vue` TOP 攻击来源 IP 表格 | **已有** |
+| TOP 10 被攻击服务统计 | ✅ | ✅ `OverviewPage.vue` TOP 被攻击服务柱状图 | **已有** |
 
 ---
 
@@ -47,12 +47,12 @@
 |--------|-------------------|-----------------|------|
 | Nmap 配置（IP 范围/参数/间隔/启用） | ✅ `vuetify_settings.html` | ✅ `IntegrationsPage.vue`（`scanApi.saveNmapConfig`） | **已有** |
 | 手动触发 Nmap 扫描 | ✅ `POST /api/nmap/scan` | ✅ `scanApi.triggerNmapScan()` | **已有** |
-| 扫描历史列表（下拉选择） | ✅ `vuetify_nmap.html` | ❌ `ScanManager.vue` 只有任务列表，无扫描历史 | **缺失** |
-| 主机列表（按扫描选择） | ✅ | ❌ | **缺失** |
-| 主机详情弹窗（OS/MAC/端口/服务） | ✅ | ❌ ScanManager 只有发现项，无主机详情视图 | **缺失** |
-| 资产追踪（按 MAC，含 IP 历史） | ✅ `GET /api/nmap/assets` + `/ips` | ❌ 主项目 Asset 概念是管理扫描目标，不是 Nmap 发现的设备 | **缺失** |
-| 主机状态统计（up/down 分布） | ✅ `GET /api/nmap/stats` | ❌ | **缺失** |
-| 厂商分布统计 | ✅ | ❌ | **缺失** |
+| 扫描历史列表（下拉选择） | ✅ `vuetify_nmap.html` | ✅ `ScanManager.vue` Nmap 主机 Tab 有扫描历史下拉 | **已有** |
+| 主机列表（按扫描选择） | ✅ | ✅ | **已有** |
+| 主机详情弹窗（OS/MAC/端口/服务） | ✅ | ✅ `NmapHostDetailDialog.vue` | **已有** |
+| 资产追踪（按 MAC，含 IP 历史） | ✅ `GET /api/nmap/assets` + `/ips` | ✅ `ScanManager.vue` 发现资产 Tab + 后端 `/scan/nmap/assets` | **已有** |
+| 主机状态统计（up/down 分布） | ✅ `GET /api/nmap/stats` | ✅ `ScanManager.vue` Nmap 主机 Tab 统计卡片 | **已有** |
+| 厂商分布统计 | ✅ | ✅ | **已有** |
 | OS 标签自动识别 | ✅ `auto_detect_os_tags()` | ✅（后端逻辑，`getWin7Hosts` 有使用） | **已有（后端）** |
 
 ---
@@ -64,10 +64,10 @@
 | 漏洞扫描结果列表 | ✅ `vuetify_vuln.html` | ✅ `ScanManager.vue` 漏洞发现 Tab | **已有** |
 | 漏洞结果按严重等级筛选 | ✅ | ✅ | **已有** |
 | 漏洞结果状态更新 | ❌（无此功能） | ✅ `scanApi.updateFindingStatus()` | **主项目更好** |
-| 手动触发漏洞扫描 | ✅ `POST /api/nmap/vuln/scan` | ❌（无此按钮） | **缺失** |
-| 漏洞统计（vulnerable/safe/error 计数） | ✅ `GET /api/nmap/vuln/stats` | ❌（无此视图） | **缺失** |
-| 受影响设备数（按 MAC 去重） | ✅ | ❌ | **缺失** |
-| 漏洞脚本规则可视化配置 | ✅ 按标签配置漏洞脚本 | ❌ | **缺失** |
+| 手动触发漏洞扫描 | ✅ `POST /api/nmap/vuln/scan` | ✅ `ScanManager.vue` 漏洞 Tab 立即漏洞扫描按钮 | **已有** |
+| 漏洞统计（vulnerable/safe/error 计数） | ✅ `GET /api/nmap/vuln/stats` | ✅ `ScanManager.vue` 漏洞 Tab 统计卡片 | **已有** |
+| 受影响设备数（按 MAC 去重） | ✅ | ✅ | **已有** |
+| 漏洞脚本规则可视化配置 | ✅ 按标签配置漏洞脚本 | ✅ `IntegrationsPage.vue` Nmap 配置区漏洞规则编辑 | **已有** |
 | 扫描 Profile 配置 | ❌ | ✅ `scanApi.getProfiles()` | **主项目已有** |
 
 ---
@@ -77,8 +77,8 @@
 | 功能点 | 参考实现（已跑通） | 主项目 frontend | 状态 |
 |--------|-------------------|-----------------|------|
 | 综合统计卡片（攻击/主机/漏洞） | ✅ `vuetify_index.html` | ✅ `OverviewPage.vue`（有 KPI 卡片） | **已有** |
-| 攻击趋势图（折线图） | ✅ Chart.js | ⚠️ 无图表库，OverviewPage 有数据无图表 | **缺图表** |
-| 威胁分布饼图 | ✅ | ❌ | **缺失** |
+| 攻击趋势图（折线图） | ✅ Chart.js | ✅ `OverviewPage.vue` 告警趋势折线图 | **已有** |
+| 威胁分布饼图 | ✅ | ✅ `OverviewPage.vue` 威胁等级分布饼图 | **已有** |
 | TOP 攻击 IP 排行 | ✅ | ✅ `OverviewPage.vue` 有 TOP 攻击 IP | **已有** |
 | 探测侧仪表盘（扫描任务/资产/漏洞） | ❌（无此概念） | ✅ `ProbeDashboardPage.vue` | **主项目独有** |
 
@@ -90,7 +90,7 @@
 |--------|-------------------|-----------------|------|
 | HFish 配置 | ✅ | ✅ IntegrationsPage | **已有** |
 | Nmap 配置 | ✅ | ✅ IntegrationsPage | **已有** |
-| 漏洞脚本规则编辑（可视化+JSON） | ✅ | ❌ | **缺失** |
+| 漏洞脚本规则编辑（可视化+JSON） | ✅ | ✅ `IntegrationsPage.vue` | **已有** |
 | API 密钥脱敏保护（GET 不返回，POST 留空保留） | ✅ | ✅（后端逻辑） | **已有** |
 | 防御模式/主动探测模式切换 | ❌ | ✅ `SettingsPage.vue` + `Layout.vue` 切换动画 | **主项目独有** |
 | 推送通道配置（Webhook/企微/钉钉/邮件） | ❌ | ✅ `IntegrationsPage.vue` | **主项目独有** |
@@ -273,64 +273,67 @@
 
 | 参考实现 API | 主项目对应 API | 状态 |
 |-------------|---------------|------|
-| `GET /api/hfish/logs?limit&offset&threat_level&service_name` | `GET /api/v1/defense/events`（字段不完全一致） | **需确认/补充** |
-| `GET /api/hfish/stats`（按等级/服务/IP/趋势分别统计） | `GET /api/v1/overview/defense-stats` | **需确认字段** |
-| `GET /api/nmap/hosts?scan_id&state` | ❌ 主项目无此接口 | **需新增** |
-| `GET /api/nmap/scans`（扫描历史列表） | ❌ 主项目无此接口 | **需新增** |
-| `GET /api/nmap/stats`（状态/厂商统计） | ❌ 主项目无此接口 | **需新增** |
-| `GET /api/nmap/host/<ip>` | ❌ 可能已有但未确认 | **需确认** |
-| `GET /api/nmap/assets?mac&ip` | ❌ 主项目 `/scan/assets` 是手动管理目标 | **需新增（Nmap发现资产）** |
-| `GET /api/nmap/assets/<id>/ips` | ❌ | **需新增** |
-| `GET /api/nmap/vuln/stats` | ❌ 主项目无此汇总接口 | **需新增** |
-| `POST /api/nmap/vuln/scan` | ❌ 主项目无手动触发漏洞扫描接口 | **需新增** |
-| `GET /api/settings`（含漏洞脚本规则） | `GET /api/v1/scan/nmap/config`（字段不同） | **需扩充字段** |
+| `GET /api/hfish/logs?limit&offset&threat_level&service_name` | ✅ `GET /api/v1/defense/hfish/logs` | **已实现** |
+| `GET /api/hfish/stats`（按等级/服务/IP/趋势分别统计） | ✅ `GET /api/v1/defense/hfish/stats` + `GET /api/v1/overview/defense-stats` | **已实现** |
+| `GET /api/nmap/hosts?scan_id&state` | ✅ `GET /api/v1/scan/nmap/hosts` | **已实现** |
+| `GET /api/nmap/scans`（扫描历史列表） | ✅ `GET /api/v1/scan/nmap/scans` | **已实现** |
+| `GET /api/nmap/stats`（状态/厂商统计） | ✅ `GET /api/v1/scan/nmap/stats` | **已实现** |
+| `GET /api/nmap/host/<ip>` | ✅ `GET /api/v1/scan/nmap/host/{ip}` | **已实现** |
+| `GET /api/nmap/assets?mac&ip` | ✅ `GET /api/v1/scan/nmap/assets` | **已实现** |
+| `GET /api/nmap/assets/<id>/ips` | ✅ `GET /api/v1/scan/nmap/assets/{ip}/ips` | **已实现** |
+| `GET /api/nmap/vuln/stats` | ✅ `GET /api/v1/scan/nmap/vuln/stats` | **已实现** |
+| `POST /api/nmap/vuln/scan` | ✅ `POST /api/v1/scan/nmap/vuln/scan` | **已实现** |
+| `GET /api/settings`（含漏洞脚本规则） | ✅ `GET /api/v1/scan/nmap/config`（含 vuln_scripts_by_tag）| **已实现** |
 
 ---
 
 ## 五、TODO 列表（按优先级）
 
+> **最后更新**：2026-03-06（已根据本地代码实际状态自动核对）
+
 ### 🔴 P1 — 立即处理
 
-- [ ] **P1-1** 引入图表库（推荐 `echarts` 或 `chart.js + vue-chartjs`），在 `package.json` 添加依赖
-- [ ] **P1-2** `OverviewPage.vue`：攻击趋势折线图（近7天，调用 `overviewApi.getTrends`）
-- [ ] **P1-3** `OverviewPage.vue`：威胁等级分布饼图（高/中/低）
-- [ ] **P1-4** `OverviewPage.vue`：TOP 10 攻击服务柱状图
-- [ ] **P1-5** 新增或完善攻击日志页（在 `DefenseDashboard.vue` 增加攻击日志 Tab，或新建 `AttackLogsPage.vue`）
-  - 分页列表（limit/offset）
-  - 按威胁等级筛选（高危/中危/低危）
-  - 按服务名筛选
-  - 时间倒序排列
-- [ ] **P1-6** 后端：确认并补充 `GET /api/v1/defense/hfish/logs` 接口（分页+过滤参数）
-- [ ] **P1-7** 前端 `src/api/defense.ts`：新增 `getHFishLogs(params)` 方法
+- [x] **P1-1** 引入图表库（`chart.js + vue-chartjs`），在 `package.json` 添加依赖 ✅ 已完成
+- [x] **P1-2** `OverviewPage.vue`：攻击趋势折线图（近7天，调用 `overviewApi.getTrends`）✅ 已完成（含高危告警双线）
+- [x] **P1-3** `OverviewPage.vue`：威胁等级分布饼图（高/中/低）✅ 已完成（Doughnut 图）
+- [x] **P1-4** `OverviewPage.vue`：TOP 10 攻击服务柱状图 ✅ 已完成（横向 Bar 图）
+- [x] **P1-5** 完善攻击日志页（`DefenseDashboard.vue` 增加 HFish 攻击日志 Tab）✅ 已完成
+  - 分页列表（limit/offset）✅
+  - 按威胁等级筛选（高危/中危/低危）✅
+  - 按服务名筛选 ✅
+  - 时间范围筛选（24h/7天/30天）✅
+  - 导出 CSV ✅
+- [x] **P1-6** 后端：`GET /api/v1/defense/hfish/logs` 接口（分页+过滤参数）✅ 已实现
+- [x] **P1-7** 前端 `src/api/defense.ts`：`getHFishLogs(params)` 方法 ✅ 已实现
 
 ### 🟠 P2 — 本周完成
 
-- [ ] **P2-1** `ScanManager.vue` 增加"Nmap 主机"Tab
-  - 扫描历史列表（下拉选择 scan_id）
-  - 主机列表（IP / MAC / 厂商 / OS 标签 / 状态 / 端口数）
-  - 点击主机弹窗：OS 信息 / 端口列表 / 服务版本
-- [ ] **P2-2** 后端：新增 `GET /api/v1/scan/nmap/hosts` 接口（scan_id/state 过滤）
-- [ ] **P2-3** 后端：新增 `GET /api/v1/scan/nmap/scans` 接口（扫描历史列表）
-- [ ] **P2-4** 后端：新增 `GET /api/v1/scan/nmap/host/<ip>` 接口（单主机详情）
-- [ ] **P2-5** `ScanManager.vue` 漏洞 Tab：增加统计卡片（总计/存在漏洞/安全/受影响设备）
-- [ ] **P2-6** `ScanManager.vue` 漏洞 Tab：增加"立即漏洞扫描"按钮
-- [ ] **P2-7** 后端：确认/新增 `GET /api/v1/scan/nmap/vuln/stats` 接口
-- [ ] **P2-8** 后端：确认/新增 `POST /api/v1/scan/nmap/vuln/scan` 接口（手动触发漏洞扫描）
-- [ ] **P2-9** `IntegrationsPage.vue` Nmap 配置区：增加漏洞脚本规则可视化编辑
-  - 按 OS 标签分组（linux/win7/win10 等）
-  - 每组可增删漏洞脚本
-  - 支持 JSON 高级编辑
-- [ ] **P2-10** 后端：`POST /api/v1/scan/nmap/config` 增加 `vuln_scripts_by_tag` 字段支持
-- [ ] **P2-11** `ProbeDashboardPage.vue`：引入图表库后补充探测仪表盘图表（漏洞分布饼图、任务状态分布）
-- [ ] **P2-12** 后端：新增 `GET /api/v1/scan/nmap/assets`（Nmap 自动发现资产列表，区别于手动管理资产）
-- [ ] **P2-13** 后端：新增 `GET /api/v1/scan/nmap/assets/<id>/ips`（资产 IP 历史记录）
+- [x] **P2-1** `ScanManager.vue` 增加"Nmap 主机"Tab ✅ 已完成
+  - 扫描历史列表（下拉选择 scan_id）✅
+  - 主机列表（IP / MAC / 厂商 / OS 标签 / 状态 / 端口数）✅
+  - 点击主机弹窗：OS 信息 / 端口列表 / 服务版本 ✅（`NmapHostDetailDialog.vue` 独立组件）
+- [x] **P2-2** 后端：`GET /api/v1/scan/nmap/hosts` 接口（scan_id/state 过滤）✅ 已实现
+- [x] **P2-3** 后端：`GET /api/v1/scan/nmap/scans` 接口（扫描历史列表）✅ 已实现
+- [x] **P2-4** 后端：`GET /api/v1/scan/nmap/host/<ip>` 接口（单主机详情）✅ 已实现
+- [x] **P2-5** `ScanManager.vue` 漏洞 Tab：统计卡片（总计/存在漏洞/安全/受影响设备）✅ 已完成
+- [x] **P2-6** `ScanManager.vue` 漏洞 Tab："立即漏洞扫描"按钮 ✅ 已完成
+- [x] **P2-7** 后端：`GET /api/v1/scan/nmap/vuln/stats` 接口 ✅ 已实现
+- [x] **P2-8** 后端：`POST /api/v1/scan/nmap/vuln/scan` 接口（手动触发漏洞扫描）✅ 已实现
+- [x] **P2-9** `IntegrationsPage.vue` Nmap 配置区：漏洞脚本规则可视化编辑 ✅ 已完成
+  - 按 OS 标签分组（linux/win7/win10 等）✅
+  - 每组可增删漏洞脚本 ✅
+  - 支持 JSON 高级编辑 ✅
+- [x] **P2-10** 后端：`POST /api/v1/scan/nmap/config` 支持 `vuln_scripts_by_tag` 字段 ✅ 已实现
+- [x] **P2-11** `ProbeDashboardPage.vue`：探测仪表盘图表 ✅ 已完成（漏洞分布饼图、任务状态饼图、趋势柱状图）
+- [x] **P2-12** 后端：`GET /api/v1/scan/nmap/assets`（Nmap 自动发现资产列表）✅ 已实现
+- [x] **P2-13** 后端：`GET /api/v1/scan/nmap/assets/<id>/ips`（资产 IP 历史记录）✅ 已实现
 
 ### 🟡 P3 — 有空再做
 
-- [ ] **P3-1** 统一 IP 联动弹窗组件（提取为 `NmapHostDetail.vue`），在攻击日志、实时检测、威胁处置等页面复用
-- [ ] **P3-2** 各数据列表页增加手动刷新按钮 + 自动轮询配置
-- [ ] **P3-3** 攻击日志页：增加导出功能（CSV/JSON）
-- [ ] **P3-4** `OverviewPage.vue`：接口数据确认（`overviewApi.getDefenseStats` 字段对齐）
+- [x] **P3-1** 统一 IP 联动弹窗组件 ✅ 已完成（`NmapHostDetailDialog.vue` 独立组件，在 DefenseDashboard 和 ScanManager 中复用）
+- [ ] **P3-2** 各数据列表页增加手动刷新按钮 + 自动轮询配置（攻击日志、Nmap 主机、漏洞结果页）
+- [x] **P3-3** 攻击日志页：导出功能（CSV）✅ 已完成
+- [ ] **P3-4** `OverviewPage.vue`：接口数据确认（`overviewApi.getDefenseStats` 字段对齐，确认 `threat_level_dist` / `service_dist` / `top_ips` 字段是否已由后端返回）
 - [ ] **P3-5** 确认 `POST /api/v1/push/channels/:id/test` 后端是否已实现，完善测试推送 UI 反馈
 
 ---
