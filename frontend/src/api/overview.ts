@@ -128,6 +128,14 @@ export interface OverviewChainStatus {
   generated_at: string
 }
 
+let chainStatusEndpointAvailable: boolean | null = null
+
+const createEmptyChainStatus = (): OverviewChainStatus => ({
+  defense: [],
+  probe: [],
+  generated_at: new Date().toISOString(),
+})
+
 // ── API ──
 
 export const overviewApi = {
@@ -152,7 +160,20 @@ export const overviewApi = {
   },
 
   async getChainStatus(): Promise<OverviewChainStatus> {
-    const res = await apiClient.get('/overview/chain-status')
-    return res as OverviewChainStatus
+    if (chainStatusEndpointAvailable === false) {
+      return createEmptyChainStatus()
+    }
+
+    try {
+      const res = await apiClient.get('/overview/chain-status')
+      chainStatusEndpointAvailable = true
+      return (res as OverviewChainStatus) ?? createEmptyChainStatus()
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        chainStatusEndpointAvailable = false
+        return createEmptyChainStatus()
+      }
+      throw error
+    }
   },
 }

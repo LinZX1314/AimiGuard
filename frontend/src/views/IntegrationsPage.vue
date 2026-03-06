@@ -785,6 +785,43 @@
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog :open="promptDialog.open" @update:open="handlePromptDialogToggle">
+        <DialogContent class="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{{ promptDialog.title }}</DialogTitle>
+            <DialogDescription>{{ promptDialog.description }}</DialogDescription>
+          </DialogHeader>
+          <div class="space-y-3 pt-2">
+            <div v-for="field in promptDialog.fields" :key="field.key" class="space-y-1.5">
+              <label class="text-sm font-medium">{{ field.label }}</label>
+              <input
+                v-model="field.value"
+                :type="field.type"
+                :placeholder="field.placeholder"
+                class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" class="cursor-pointer" @click="closePromptDialog(null)">取消</Button>
+            <Button class="cursor-pointer" @click="submitPromptDialog">{{ promptDialog.confirmLabel }}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog :open="confirmDialog.open" @update:open="handleConfirmDialogToggle">
+        <DialogContent class="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{{ confirmDialog.title }}</DialogTitle>
+            <DialogDescription>{{ confirmDialog.description }}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" class="cursor-pointer" @click="closeConfirmDialog(false)">取消</Button>
+            <Button class="cursor-pointer" @click="closeConfirmDialog(true)">{{ confirmDialog.confirmLabel }}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   </div>
 </template>
@@ -792,7 +829,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { BellRing, BrainCircuit, Bug, Plus, RefreshCw, Server, Shield, Volume2, Zap } from 'lucide-vue-next'
-import { apiClient } from '@/api/client'
+import { apiClient, getRequestErrorMessage, hasAccessToken } from '@/api/client'
 import { defenseApi, type HFishConfig } from '@/api/defense'
 import { scanApi } from '@/api/scan'
 import { deviceApi, type DeviceInfo, type DeviceCredential } from '@/api/device'
@@ -802,6 +839,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const Radar = Zap
@@ -880,6 +918,162 @@ const ttsEngineForm = reactive({
 const ttsEngineSaving = ref(false)
 const ttsEngineMsg = ref('')
 const ttsEngineMsgOk = ref(true)
+
+const normalizeAIApiConfig = (cfg?: Partial<AIAPIConfig> | null): AIAPIConfig => ({
+  provider: cfg?.provider || 'ollama',
+  base_url: cfg?.base_url || 'http://localhost:11434',
+  model_name: cfg?.model_name || 'llama2',
+  enabled: cfg?.enabled ?? true,
+  api_key_configured: Boolean(cfg?.api_key_configured),
+})
+
+const normalizeTTSConfig = (cfg?: Partial<TTSConfig> | null): TTSConfig => ({
+  provider: cfg?.provider || 'local',
+  endpoint: cfg?.endpoint ?? null,
+  model_name: cfg?.model_name || 'local-tts-v1',
+  voice_model: cfg?.voice_model || cfg?.model_name || 'local-tts-v1',
+  enabled: cfg?.enabled ?? true,
+})
+
+const normalizePushChannel = (value: unknown): PushChannel | null => {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, any>
+  const id = Number(record.id)
+  if (!Number.isFinite(id)) return null
+  return {
+    id,
+    channel_type: typeof record.channel_type === 'string' && record.channel_type.trim() ? record.channel_type : 'webhook',
+    channel_name: typeof record.channel_name === 'string' && record.channel_name.trim() ? record.channel_name : `channel-${id}`,
+    target: typeof record.target === 'string' ? record.target : '',
+    enabled: record.enabled === true || Number(record.enabled) === 1 ? 1 : 0,
+  }
+}
+
+const normalizeCredential = (value: unknown): DeviceCredential | null => {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, any>
+  const id = Number(record.id)
+  const deviceId = Number(record.device_id)
+  if (!Number.isFinite(id) || !Number.isFinite(deviceId)) return null
+  return {
+    id,
+    device_id: deviceId,
+    username: typeof record.username === 'string' ? record.username : '',
+    created_at: typeof record.created_at === 'string' ? record.created_at : null,
+    updated_at: typeof record.updated_at === 'string' ? record.updated_at : null,
+  }
+}
+
+const normalizeDevice = (value: unknown): DeviceInfo | null => {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, any>
+  const id = Number(record.id)
+  const port = Number(record.port)
+  if (!Number.isFinite(id)) return null
+  return {
+    id,
+    name: typeof record.name === 'string' ? record.name : `device-${id}`,
+    ip: typeof record.ip === 'string' ? record.ip : '',
+    port: Number.isFinite(port) ? port : 22,
+    vendor: typeof record.vendor === 'string' && record.vendor.trim() ? record.vendor : 'generic',
+    device_type: typeof record.device_type === 'string' ? record.device_type : null,
+    enabled: Boolean(record.enabled ?? true),
+    description: typeof record.description === 'string' ? record.description : null,
+    credentials: Array.isArray(record.credentials)
+      ? record.credentials.map(normalizeCredential).filter((item): item is DeviceCredential => item !== null)
+      : [],
+    created_at: typeof record.created_at === 'string' ? record.created_at : null,
+    updated_at: typeof record.updated_at === 'string' ? record.updated_at : null,
+  }
+}
+
+interface PromptDialogField {
+  key: string
+  label: string
+  type: 'text' | 'password'
+  placeholder?: string
+  value: string
+}
+
+const promptDialog = reactive({
+  open: false,
+  title: '',
+  description: '',
+  confirmLabel: '确定',
+  fields: [] as PromptDialogField[],
+  resolver: null as null | ((value: Record<string, string> | null) => void),
+})
+
+const confirmDialog = reactive({
+  open: false,
+  title: '',
+  description: '',
+  confirmLabel: '确认',
+  resolver: null as null | ((value: boolean) => void),
+})
+
+const closePromptDialog = (value: Record<string, string> | null) => {
+  promptDialog.open = false
+  const resolver = promptDialog.resolver
+  promptDialog.resolver = null
+  resolver?.(value)
+}
+
+const handlePromptDialogToggle = (open: boolean) => {
+  if (!open && promptDialog.open) {
+    closePromptDialog(null)
+    return
+  }
+  promptDialog.open = open
+}
+
+const openPromptDialog = (config: {
+  title: string
+  description: string
+  confirmLabel?: string
+  fields: Array<Omit<PromptDialogField, 'value'> & { value?: string }>
+}) => new Promise<Record<string, string> | null>((resolve) => {
+  promptDialog.title = config.title
+  promptDialog.description = config.description
+  promptDialog.confirmLabel = config.confirmLabel || '确定'
+  promptDialog.fields = config.fields.map(field => ({
+    ...field,
+    value: field.value ?? '',
+  }))
+  promptDialog.resolver = resolve
+  promptDialog.open = true
+})
+
+const submitPromptDialog = () => {
+  const values = promptDialog.fields.reduce<Record<string, string>>((acc, field) => {
+    acc[field.key] = field.value
+    return acc
+  }, {})
+  closePromptDialog(values)
+}
+
+const closeConfirmDialog = (value: boolean) => {
+  confirmDialog.open = false
+  const resolver = confirmDialog.resolver
+  confirmDialog.resolver = null
+  resolver?.(value)
+}
+
+const handleConfirmDialogToggle = (open: boolean) => {
+  if (!open && confirmDialog.open) {
+    closeConfirmDialog(false)
+    return
+  }
+  confirmDialog.open = open
+}
+
+const openConfirmDialog = (config: { title: string; description: string; confirmLabel?: string }) => new Promise<boolean>((resolve) => {
+  confirmDialog.title = config.title
+  confirmDialog.description = config.description
+  confirmDialog.confirmLabel = config.confirmLabel || '确认'
+  confirmDialog.resolver = resolve
+  confirmDialog.open = true
+})
 
 const showMsg = (msgRef: typeof hfishMsg, okRef: typeof hfishMsgOk, msg: string, ok: boolean) => {
   msgRef.value = msg
@@ -976,22 +1170,15 @@ const saveFirewallConfig = async () => {
 
 const loadAIApiConfig = async () => {
   try {
-    const cfg = await systemApi.getAIConfig()
-    if (!cfg) return
-    aiApiConfig.value = {
-      provider: cfg.provider || 'ollama',
-      base_url: cfg.base_url || 'http://localhost:11434',
-      model_name: cfg.model_name || 'llama2',
-      enabled: cfg.enabled ?? true,
-      api_key_configured: cfg.api_key_configured ?? false,
-    }
-    aiApiForm.provider = cfg.provider || 'ollama'
-    aiApiForm.base_url = cfg.base_url || 'http://localhost:11434'
-    aiApiForm.model_name = cfg.model_name || 'llama2'
+    const cfg = normalizeAIApiConfig(await systemApi.getAIConfig())
+    aiApiConfig.value = cfg
+    aiApiForm.provider = cfg.provider
+    aiApiForm.base_url = cfg.base_url
+    aiApiForm.model_name = cfg.model_name
     aiApiForm.api_key = ''
-    aiApiForm.enabled = cfg.enabled ?? true
+    aiApiForm.enabled = cfg.enabled
   } catch {
-    // 忽略加载失败，保留默认值
+    aiApiConfig.value = normalizeAIApiConfig()
   }
 }
 
@@ -1013,14 +1200,14 @@ const saveAIApiConfig = async () => {
       api_key: aiApiForm.api_key.trim() || undefined,
       enabled: aiApiForm.enabled,
     })
-    aiApiConfig.value = cfg
+    aiApiConfig.value = normalizeAIApiConfig(cfg)
     aiApiForm.api_key = ''
     showMsg(aiApiMsg, aiApiMsgOk, 'AI API 配置已保存', true)
   } catch (e: any) {
     if (e?.response?.status === 404) {
       showMsg(aiApiMsg, aiApiMsgOk, '后端未加载 AI API 配置接口，请重启后端服务后重试', false)
     } else {
-      showMsg(aiApiMsg, aiApiMsgOk, e?.response?.data?.detail || e?.displayMessage || '保存失败', false)
+      showMsg(aiApiMsg, aiApiMsgOk, getRequestErrorMessage(e, '保存失败'), false)
     }
   } finally {
     aiApiSaving.value = false
@@ -1029,22 +1216,15 @@ const saveAIApiConfig = async () => {
 
 const loadTTSConfig = async () => {
   try {
-    const cfg = await systemApi.getTTSConfig()
-    if (!cfg) return
-    ttsEngineConfig.value = {
-      provider: cfg.provider || 'local',
-      endpoint: cfg.endpoint ?? null,
-      model_name: cfg.model_name || 'local-tts-v1',
-      voice_model: cfg.voice_model || cfg.model_name || 'local-tts-v1',
-      enabled: cfg.enabled ?? true,
-    }
-    ttsEngineForm.provider = cfg.provider || 'local'
+    const cfg = normalizeTTSConfig(await systemApi.getTTSConfig())
+    ttsEngineConfig.value = cfg
+    ttsEngineForm.provider = cfg.provider
     ttsEngineForm.endpoint = cfg.endpoint ?? ''
-    ttsEngineForm.model_name = cfg.model_name || 'local-tts-v1'
-    ttsEngineForm.voice_model = cfg.voice_model || cfg.model_name || 'local-tts-v1'
-    ttsEngineForm.enabled = cfg.enabled ?? true
+    ttsEngineForm.model_name = cfg.model_name
+    ttsEngineForm.voice_model = cfg.voice_model
+    ttsEngineForm.enabled = cfg.enabled
   } catch {
-    // 忽略加载失败，保留默认值
+    ttsEngineConfig.value = normalizeTTSConfig()
   }
 }
 
@@ -1062,13 +1242,13 @@ const saveTTSConfig = async () => {
       voice_model: ttsEngineForm.voice_model.trim() || undefined,
       enabled: ttsEngineForm.enabled,
     })
-    ttsEngineConfig.value = cfg
+    ttsEngineConfig.value = normalizeTTSConfig(cfg)
     showMsg(ttsEngineMsg, ttsEngineMsgOk, 'TTS 配置已保存', true)
   } catch (e: any) {
     if (e?.response?.status === 404) {
       showMsg(ttsEngineMsg, ttsEngineMsgOk, '后端未加载 TTS 配置接口，请重启后端服务后重试', false)
     } else {
-      showMsg(ttsEngineMsg, ttsEngineMsgOk, e?.response?.data?.detail || e?.displayMessage || '保存失败', false)
+      showMsg(ttsEngineMsg, ttsEngineMsgOk, getRequestErrorMessage(e, '保存失败'), false)
     }
   } finally {
     ttsEngineSaving.value = false
@@ -1163,10 +1343,18 @@ const loadVulnScripts = async () => {
   }
 }
 
-const addVulnTag = () => {
-  const tag = window.prompt('请输入系统标签（如 linux / win7 / ubuntu 等）')
-  if (tag?.trim() && !vulnScriptsMap.value[tag.trim()]) {
-    vulnScriptsMap.value[tag.trim()] = []
+const addVulnTag = async () => {
+  const result = await openPromptDialog({
+    title: '添加系统标签',
+    description: '请输入系统标签，例如 linux、win7、ubuntu。',
+    confirmLabel: '添加',
+    fields: [
+      { key: 'tag', label: '系统标签', type: 'text', placeholder: 'linux' },
+    ],
+  })
+  const tag = result?.tag?.trim()
+  if (tag && !vulnScriptsMap.value[tag]) {
+    vulnScriptsMap.value[tag] = []
   }
 }
 
@@ -1176,12 +1364,20 @@ const removeVulnTag = (tag: string) => {
   vulnScriptsMap.value = map
 }
 
-const addScript = (tag: string) => {
-  const script = window.prompt('请输入 Nmap 漏洞脚本名（如 smb-vuln-ms17-010）')
-  if (script?.trim()) {
+const addScript = async (tag: string) => {
+  const result = await openPromptDialog({
+    title: '添加漏洞脚本',
+    description: `为标签 ${tag} 添加 Nmap 漏洞脚本。`,
+    confirmLabel: '添加',
+    fields: [
+      { key: 'script', label: '脚本名', type: 'text', placeholder: 'smb-vuln-ms17-010' },
+    ],
+  })
+  const script = result?.script?.trim()
+  if (script) {
     vulnScriptsMap.value = {
       ...vulnScriptsMap.value,
-      [tag]: [...(vulnScriptsMap.value[tag] || []), script.trim()],
+      [tag]: [...(vulnScriptsMap.value[tag] || []), script],
     }
   }
 }
@@ -1241,7 +1437,8 @@ const loadChannels = async () => {
   try {
     const res: any = await apiClient.get('/push/channels')
     const data = res?.data ?? res
-    channels.value = Array.isArray(data) ? data : (data?.items ?? [])
+    const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+    channels.value = list.map(normalizePushChannel).filter((item): item is PushChannel => item !== null)
   } catch {
     channels.value = []
   } finally {
@@ -1327,7 +1524,8 @@ const loadDevices = async () => {
   devicesLoading.value = true
   try {
     const data = await deviceApi.list()
-    devices.value = Array.isArray(data) ? data : []
+    const list = Array.isArray(data) ? data : (Array.isArray((data as any)?.items) ? (data as any).items : [])
+    devices.value = list.map(normalizeDevice).filter((item): item is DeviceInfo => item !== null)
   } catch {
     devices.value = []
   } finally {
@@ -1373,7 +1571,12 @@ const toggleDevice = async (dev: DeviceInfo) => {
 }
 
 const removeDevice = async (id: number) => {
-  if (!window.confirm('确定删除该设备及所有关联凭证？')) return
+  const confirmed = await openConfirmDialog({
+    title: '删除设备',
+    description: '确定删除该设备及所有关联凭证吗？',
+    confirmLabel: '删除',
+  })
+  if (!confirmed) return
   try {
     await deviceApi.remove(id)
     await loadDevices()
@@ -1381,12 +1584,20 @@ const removeDevice = async (id: number) => {
 }
 
 const promptAddCredential = async (deviceId: number) => {
-  const username = window.prompt('请输入用户名')
-  if (!username?.trim()) return
-  const password = window.prompt('请输入密码')
-  if (!password) return
+  const result = await openPromptDialog({
+    title: '添加凭证',
+    description: '输入设备登录用户名和密码。',
+    confirmLabel: '保存',
+    fields: [
+      { key: 'username', label: '用户名', type: 'text', placeholder: 'admin' },
+      { key: 'password', label: '密码', type: 'password', placeholder: '请输入密码' },
+    ],
+  })
+  const username = result?.username?.trim()
+  const password = result?.password ?? ''
+  if (!username || !password) return
   try {
-    await deviceApi.addCredential(deviceId, username.trim(), password)
+    await deviceApi.addCredential(deviceId, username, password)
     await loadDevices()
   } catch (e: any) {
     showDeviceMsg(e?.displayMessage || '添加凭证失败', false)
@@ -1394,8 +1605,18 @@ const promptAddCredential = async (deviceId: number) => {
 }
 
 const promptUpdateCredential = async (deviceId: number, cred: DeviceCredential) => {
-  const username = window.prompt('用户名（留空不修改）', cred.username)
-  const password = window.prompt('新密码（留空不修改）')
+  const result = await openPromptDialog({
+    title: '修改凭证',
+    description: '用户名留空表示不修改，密码留空表示保持原值。',
+    confirmLabel: '保存',
+    fields: [
+      { key: 'username', label: '用户名', type: 'text', value: cred.username },
+      { key: 'password', label: '新密码', type: 'password', placeholder: '留空则不修改' },
+    ],
+  })
+  if (!result) return
+  const username = result.username?.trim() || ''
+  const password = result.password ?? ''
   const payload: { username?: string; password?: string } = {}
   if (username && username !== cred.username) payload.username = username
   if (password) payload.password = password
@@ -1409,7 +1630,12 @@ const promptUpdateCredential = async (deviceId: number, cred: DeviceCredential) 
 }
 
 const removeCredential = async (deviceId: number, credId: number) => {
-  if (!window.confirm('确定删除该凭证？')) return
+  const confirmed = await openConfirmDialog({
+    title: '删除凭证',
+    description: '确定删除该凭证吗？',
+    confirmLabel: '删除',
+  })
+  if (!confirmed) return
   try {
     await deviceApi.removeCredential(deviceId, credId)
     await loadDevices()
@@ -1417,6 +1643,9 @@ const removeCredential = async (deviceId: number, credId: number) => {
 }
 
 onMounted(() => {
+  if (!hasAccessToken()) {
+    return
+  }
   loadAIApiConfig()
   loadTTSConfig()
   loadHFishConfig()

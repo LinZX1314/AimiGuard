@@ -40,50 +40,61 @@ export interface TTSConfigRequest {
   enabled: boolean
 }
 
+let aiConfigEndpointAvailable: boolean | null = null
+let ttsConfigEndpointAvailable: boolean | null = null
+
+const createDefaultAIConfig = (): AIAPIConfig => ({
+  provider: 'ollama',
+  base_url: 'http://localhost:11434',
+  model_name: 'llama2',
+  enabled: true,
+  api_key_configured: false,
+})
+
+const createDefaultTTSConfig = (): TTSConfig => ({
+  provider: 'local',
+  endpoint: null,
+  model_name: 'local-tts-v1',
+  voice_model: 'local-tts-v1',
+  enabled: true,
+})
+
 export const systemApi = {
   getProfile: (): Promise<SystemProfile> => apiClient.get('/system/profile') as any,
   getAIConfig: async (): Promise<AIAPIConfig> => {
+    if (aiConfigEndpointAvailable === false) {
+      return createDefaultAIConfig()
+    }
+
     try {
-      return await apiClient.get('/system/ai-config') as any
+      const res = await apiClient.get('/system/ai-config', { baseURL: '/api' })
+      aiConfigEndpointAvailable = true
+      return (res as AIAPIConfig) ?? createDefaultAIConfig()
     } catch (error: any) {
       if (error?.response?.status === 404) {
-        const res = await apiClient.get('/system/ai-config', { baseURL: '/api' })
-        return res as AIAPIConfig
+        aiConfigEndpointAvailable = false
+        return createDefaultAIConfig()
       }
       throw error
     }
   },
-  saveAIConfig: async (payload: AIAPIConfigRequest): Promise<AIAPIConfig> => {
-    try {
-      return await apiClient.post('/system/ai-config', payload) as any
-    } catch (error: any) {
-      if (error?.response?.status === 404) {
-        const res = await apiClient.post('/system/ai-config', payload, { baseURL: '/api' })
-        return res as AIAPIConfig
-      }
-      throw error
-    }
-  },
+  saveAIConfig: (payload: AIAPIConfigRequest): Promise<AIAPIConfig> => apiClient.post('/system/ai-config', payload, { baseURL: '/api' }) as any,
   getTTSConfig: async (): Promise<TTSConfig> => {
+    if (ttsConfigEndpointAvailable === false) {
+      return createDefaultTTSConfig()
+    }
+
     try {
-      return await apiClient.get('/system/tts-config') as any
+      const res = await apiClient.get('/system/tts-config', { baseURL: '/api' })
+      ttsConfigEndpointAvailable = true
+      return (res as TTSConfig) ?? createDefaultTTSConfig()
     } catch (error: any) {
       if (error?.response?.status === 404) {
-        const res = await apiClient.get('/system/tts-config', { baseURL: '/api' })
-        return res as TTSConfig
+        ttsConfigEndpointAvailable = false
+        return createDefaultTTSConfig()
       }
       throw error
     }
   },
-  saveTTSConfig: async (payload: TTSConfigRequest): Promise<TTSConfig> => {
-    try {
-      return await apiClient.post('/system/tts-config', payload) as any
-    } catch (error: any) {
-      if (error?.response?.status === 404) {
-        const res = await apiClient.post('/system/tts-config', payload, { baseURL: '/api' })
-        return res as TTSConfig
-      }
-      throw error
-    }
-  },
+  saveTTSConfig: (payload: TTSConfigRequest): Promise<TTSConfig> => apiClient.post('/system/tts-config', payload, { baseURL: '/api' }) as any,
 }

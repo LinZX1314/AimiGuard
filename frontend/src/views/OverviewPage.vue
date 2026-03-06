@@ -466,6 +466,10 @@ import {
   Filler,
 } from 'chart.js'
 import {
+  getRequestErrorMessage,
+  hasAccessToken,
+} from '@/api/client'
+import {
   overviewApi,
   type OverviewChainStatus,
   type OverviewMetrics,
@@ -546,13 +550,7 @@ const resetOverviewFeedback = () => {
 }
 
 const normalizeError = (error: unknown) => {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return '未知错误'
-  }
+  return getRequestErrorMessage(error, '未知错误')
 }
 
 const setOverviewFeedback = (key: OverviewModuleKey, error: unknown) => {
@@ -562,7 +560,6 @@ const setOverviewFeedback = (key: OverviewModuleKey, error: unknown) => {
     `${new Date().toLocaleString('zh-CN')} ${overviewModuleLabels[key]}同步失败`,
     message,
   ]
-  console.error(`Overview ${key} load failed:`, error)
 }
 
 const defenseMetrics = computed(() => metrics.value?.defense ?? null)
@@ -1028,6 +1025,22 @@ const topIpAssessment = (count: number, score: number | null) => {
 }
 
 const loadAll = async () => {
+  if (!hasAccessToken()) {
+    loading.value = false
+    resetOverviewFeedback()
+    metrics.value = null
+    trends.value = { range: range.value, alert_trend: [], high_alert_trend: [], task_trend: [] }
+    todos.value = {
+      pending_events: [],
+      failed_tasks: [],
+      high_findings: [],
+      counts: { pending_events: 0, manual_required: 0, high_findings_new: 0 },
+    }
+    defenseStats.value = { range: range.value, total: 0, high_total: 0, threat_level_dist: [], service_dist: [], top_ips: [] }
+    chainStatusData.value = { defense: [], probe: [], generated_at: new Date().toISOString() }
+    return
+  }
+
   loading.value = true
   resetOverviewFeedback()
   try {
@@ -1088,5 +1101,9 @@ const loadAll = async () => {
   }
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  if (hasAccessToken()) {
+    loadAll()
+  }
+})
 </script>

@@ -37,6 +37,38 @@ const extractMessage = (value: unknown): string | null => {
   return null
 }
 
+const getStatusMessage = (status: number | undefined): string | null => {
+  if (status === 401) return DEFAULT_UNAUTHORIZED_MESSAGE
+  if (status === 404) return '接口不存在'
+  return null
+}
+
+export const getRequestErrorMessage = (error: unknown, fallback = DEFAULT_REQUEST_ERROR): string => {
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+
+  const record = error as Record<string, any>
+  const responseData = record.response?.data
+  return record.displayMessage || extractMessage(responseData) || getStatusMessage(record.response?.status) || fallback
+}
+
+export const hasAccessToken = (): boolean => {
+  try {
+    return Boolean(window.localStorage.getItem('access_token'))
+  } catch {
+    return false
+  }
+}
+
 const apiClient = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,

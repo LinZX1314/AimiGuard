@@ -437,6 +437,7 @@ import {
   BarElement,
   Title,
 } from 'chart.js'
+import { getRequestErrorMessage, hasAccessToken } from '@/api/client'
 import { scanApi, type ScanTask, type ScanFinding } from '@/api/scan'
 import { overviewApi, type OverviewChainStatus } from '@/api/overview'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -507,13 +508,7 @@ const resetProbeFeedback = () => {
 }
 
 const normalizeError = (error: unknown) => {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return '未知错误'
-  }
+  return getRequestErrorMessage(error, '未知错误')
 }
 
 const setProbeFeedback = (key: ProbeModuleKey, error: unknown) => {
@@ -523,7 +518,6 @@ const setProbeFeedback = (key: ProbeModuleKey, error: unknown) => {
     `${new Date().toLocaleString('zh-CN')} ${probeModuleLabels[key]}同步失败`,
     message,
   ]
-  console.error(`Probe ${key} load failed:`, error)
 }
 
 const chainStatus = computed(() => chainStatusData.value?.probe ?? [])
@@ -916,6 +910,27 @@ const barOptions = {
 }
 
 const loadAll = async () => {
+  if (!hasAccessToken()) {
+    loading.value = false
+    resetProbeFeedback()
+    stats.value = {
+      totalAssets: 0,
+      enabledAssets: 0,
+      runningTasks: 0,
+      totalFindings: 0,
+      highFindings: 0,
+      mediumFindings: 0,
+      lowFindings: 0,
+      infoFindings: 0,
+    }
+    taskStateCounts.value = { CREATED: 0, RUNNING: 0, REPORTED: 0, FAILED: 0 }
+    recentTasks.value = []
+    trendTasks.value = []
+    highFindings.value = []
+    chainStatusData.value = { defense: [], probe: [], generated_at: new Date().toISOString() }
+    return
+  }
+
   loading.value = true
   resetProbeFeedback()
   try {
@@ -1041,5 +1056,9 @@ const findingAction = (status: string) => {
 
 const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 
-onMounted(loadAll)
+onMounted(() => {
+  if (hasAccessToken()) {
+    loadAll()
+  }
+})
 </script>
