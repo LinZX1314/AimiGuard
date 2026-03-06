@@ -6,7 +6,7 @@
 
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: opacity 0.36s ease, transform 0.36s ease;
+  transition: opacity 0.24s ease, transform 0.24s ease;
   will-change: opacity, transform;
 }
 
@@ -33,14 +33,12 @@
 /* 路由内容加载联动 */
 .content-loading {
   opacity: 0.9;
-  transform: none;
-  filter: saturate(0.92);
+  transform: translate3d(0, 4px, 0);
 }
 
 .content-ready {
   opacity: 1;
-  transform: none;
-  filter: saturate(1);
+  transform: translate3d(0, 0, 0);
 }
 
 .route-content-overlay {

@@ -25,7 +25,7 @@
                   v-for="item in currentSidebarItems"
                   :key="item.to"
                   :to="item.to"
-                  class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors duration-200 hover:bg-sidebar-accent cursor-pointer"
+                  class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 cursor-pointer"
                   active-class="bg-sidebar-accent text-sidebar-accent-foreground"
                 >
                   <component :is="item.icon" class="size-4" />
@@ -50,7 +50,7 @@
             <TabsList class="h-9 w-auto bg-muted/50 p-1 rounded-lg gap-1">
               <TabsTrigger 
                 value="defense" 
-                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-all duration-500 
+                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
                 data-[state=active]:!bg-[#3B82F6] data-[state=active]:!text-white data-[state=active]:shadow-sm
                 hover:text-[#3B82F6] data-[state=active]:hover:text-white"
               >
@@ -58,7 +58,7 @@
               </TabsTrigger>
               <TabsTrigger 
                 value="probe" 
-                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-all duration-500 
+                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
                 data-[state=active]:!bg-[#F97316] data-[state=active]:!text-white data-[state=active]:shadow-sm
                 hover:text-[#F97316] data-[state=active]:hover:text-white"
               >
@@ -220,7 +220,7 @@
           <TabsList class="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg gap-1">
             <TabsTrigger 
               value="defense" 
-              class="cursor-pointer rounded-md transition-all duration-500 
+              class="cursor-pointer rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
               data-[state=active]:!bg-[#3B82F6] data-[state=active]:!text-white data-[state=active]:shadow-sm
               hover:text-[#3B82F6] data-[state=active]:hover:text-white"
             >
@@ -228,7 +228,7 @@
             </TabsTrigger>
             <TabsTrigger 
               value="probe" 
-              class="cursor-pointer rounded-md transition-all duration-500 
+              class="cursor-pointer rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
               data-[state=active]:!bg-[#F97316] data-[state=active]:!text-white data-[state=active]:shadow-sm
               hover:text-[#F97316] data-[state=active]:hover:text-white"
             >
@@ -261,12 +261,12 @@
 
       <aside
         ref="sidebarRef"
-        class="relative hidden shrink-0 border-r border-sidebar-border bg-sidebar transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] md:flex md:flex-col"
+        class="relative hidden shrink-0 border-r border-sidebar-border bg-sidebar transition-[transform,opacity] duration-260 ease-[cubic-bezier(0.4,0,0.2,1)] md:flex md:flex-col"
         :class="sidebarCollapsed ? 'px-2 py-3' : 'p-3'"
         :style="{ width: `${sidebarCurrentWidth}px` }"
       >
         <div
-          class="mb-3 min-h-8 rounded-md border transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-sm bg-background/60 flex items-center justify-center overflow-hidden"
+          class="mb-3 min-h-8 rounded-md border transition-[transform,opacity] duration-260 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-sm bg-background/60 flex items-center justify-center overflow-hidden"
           :class="[
             sidebarCollapsed ? 'px-2 py-2 text-center' : 'px-3 py-2',
             activeMode === 'defense' 
@@ -291,7 +291,7 @@
             :to="item.to"
             data-sidebar-item="true"
             :title="sidebarCollapsed ? item.label : undefined"
-            class="flex items-center rounded-md py-2 text-sm text-sidebar-foreground transition-colors duration-200 hover:bg-sidebar-accent cursor-pointer"
+            class="flex items-center rounded-md py-2 text-sm text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 cursor-pointer"
             :class="sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'"
             active-class="bg-sidebar-accent text-sidebar-accent-foreground"
           >
@@ -308,14 +308,14 @@
         <div class="mt-2 border-t border-sidebar-border/70 pt-2">
           <button
             type="button"
-            class="flex h-11 w-full items-center rounded-md text-sidebar-foreground transition-colors duration-200 hover:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            class="flex h-11 w-full items-center rounded-md text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             :class="sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'"
             :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             @click="toggleSidebarCollapsed"
           >
             <ChevronRight
-              class="size-4 transition-transform duration-300 ease-out"
+              class="size-4 transition-transform duration-220 ease-out"
               :class="sidebarCollapsed ? 'rotate-0' : 'rotate-180'"
             />
             <span
@@ -334,7 +334,7 @@
           @mousedown="startSidebarResize"
         >
           <div
-            class="mx-auto h-full w-px bg-transparent transition-colors duration-200 hover:bg-border"
+            class="mx-auto h-full w-px bg-transparent transition-opacity duration-180 hover:opacity-80 hover:bg-border"
             :class="isSidebarResizing ? 'bg-primary/60' : ''"
           />
         </div>
@@ -345,7 +345,7 @@
         class="min-w-0 flex-1 overflow-y-auto bg-background/50"
       >
         <div
-          class="relative h-full transition-[opacity,transform,filter] duration-300 ease-out"
+          class="relative h-full transition-[opacity,transform] duration-260 ease-out"
           :class="isRouteChanging ? 'content-loading' : 'content-ready'"
         >
           <div
@@ -1086,7 +1086,7 @@ const handleLogout = async () => {
   overflow: hidden;
   white-space: nowrap;
   transform-origin: left center;
-  transition: max-width 280ms ease, opacity 220ms ease, transform 280ms ease;
+  transition: opacity 220ms ease, transform 220ms ease;
 }
 
 .sidebar-item-label-expanded {
@@ -1105,7 +1105,7 @@ const handleLogout = async () => {
   display: inline-block;
   overflow: hidden;
   white-space: nowrap;
-  transition: max-width 280ms ease, opacity 220ms ease;
+  transition: opacity 220ms ease, transform 220ms ease;
 }
 
 .sidebar-mode-label-expanded {

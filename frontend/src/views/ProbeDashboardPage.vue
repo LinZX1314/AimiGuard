@@ -35,9 +35,9 @@
 
             <ModuleFeedbackCard
               v-if="probeIssues.length"
-              title="部分探测模块同步失败"
-              description="页面已经保留成功模块，其余分区可继续单独排查，不需要整页一起报废。"
-              :error="`异常模块：${probeIssues.map(item => item.label).join('、')}`"
+              title="部分探测数据源同步失败"
+              description="页面已经保留成功数据，其余分区可继续单独排查，不需要整页一起报废。"
+              :error="`异常数据源：${probeIssues.map(item => item.label).join('、')}`"
               :logs="probeIssues.flatMap(item => item.logs)"
               @retry="loadAll"
             />
@@ -133,7 +133,7 @@
           v-if="probeFeedback.assets.error || probeFeedback.tasks.error || probeFeedback.findings.error"
           class="lg:col-span-2 2xl:col-span-4"
           title="核心探测指标暂时不可用"
-          description="资产、任务或漏洞模块没有完整同步成功，当前不展示聚合 KPI，避免误导后续判断。"
+          description="资产、任务或发现数据没有完整同步成功，当前不展示聚合 KPI，避免误导后续判断。"
           :error="[probeFeedback.assets.error, probeFeedback.tasks.error, probeFeedback.findings.error].filter(Boolean).join('；')"
           :logs="[
             ...probeFeedback.assets.logs,

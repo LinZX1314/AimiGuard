@@ -35,9 +35,9 @@
 
             <ModuleFeedbackCard
               v-if="overviewIssues.length"
-              title="部分模块同步失败"
-              description="当前页面已经保留可用模块，其余区块可单独重试或展开日志排查接口失败原因。"
-              :error="`异常模块：${overviewIssues.map(item => item.label).join('、')}`"
+              title="部分数据源同步失败"
+              description="当前页面已经保留可用数据，其余区块可单独重试并展开日志定位失败数据源。"
+              :error="`异常数据源：${overviewIssues.map(item => item.label).join('、')}`"
               :logs="overviewIssues.flatMap(item => item.logs)"
               @retry="loadAll"
             />
@@ -66,7 +66,7 @@
               <div class="ops-panel flex h-full flex-col justify-between gap-5">
                 <div class="space-y-2">
                   <p class="ops-section-title">值班建议</p>
-                  <p class="ops-section-copy">先看队列压力，再看链路可信度，最后决定是否需要跨模块联动。</p>
+                  <p class="ops-section-copy">先看队列压力，再看链路可信度，最后给事件处置排优先级。</p>
                 </div>
                 <div class="ops-note-list">
                   <div v-for="(item, index) in priorityActions" :key="item" class="ops-note-item">
@@ -186,7 +186,7 @@
             </div>
             <ModuleFeedbackCard
               v-else-if="overviewFeedback.trends.error"
-              title="趋势模块同步失败"
+              title="趋势数据同步失败"
               description="趋势数据没有返回，暂时无法判断当前压力是在抬升还是回落。"
               :error="overviewFeedback.trends.error"
               :logs="overviewFeedback.trends.logs"
@@ -194,7 +194,7 @@
             />
             <div v-else-if="!trends.alert_trend.length" class="ops-empty">
               <p class="ops-empty-title">暂无走势数据</p>
-              <p class="ops-empty-copy">等到有告警进入系统后，这里会显示整体压力变化和高危告警的同步走势。</p>
+              <p class="ops-empty-copy">等到有事件写入后，这里会显示整体压力变化和高危事件走势。</p>
             </div>
             <div v-else class="h-[19rem]">
               <Line :data="alertTrendChartData" :options="lineChartOptions" />
@@ -205,7 +205,7 @@
         <Card class="ops-section-card">
           <CardHeader class="space-y-1 pb-0">
             <CardTitle class="ops-section-title">待处置任务</CardTitle>
-            <p class="ops-section-copy">高危审批、人工介入和跨模块高危发现合并在一个工作面里看。</p>
+            <p class="ops-section-copy">高危审批、人工介入和高危发现合并在一个处置工作面里看。</p>
           </CardHeader>
           <CardContent class="space-y-5 pt-5">
             <ModuleFeedbackCard
@@ -261,7 +261,7 @@
                       </Badge>
                     </div>
                     <p class="text-xs leading-6 text-muted-foreground">{{ task.error_message || '执行链路返回失败，需要人工确认原因。' }}</p>
-                    <p class="text-xs text-foreground/85">建议先核对动作参数和目标系统状态，再决定是否重试。</p>
+                    <p class="text-xs text-foreground/85">建议先核对动作参数和目标资产状态，再决定是否重试。</p>
                   </div>
                   <span class="text-xs tabular-nums text-muted-foreground">重试 {{ task.retry_count }}</span>
                 </div>
