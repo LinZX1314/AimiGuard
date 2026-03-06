@@ -374,7 +374,11 @@ body.theme-transitioning * {
   .ops-section-copy {
     font-size: 0.82rem;
     line-height: 1.65;
-    color: var(--muted-foreground);
+    color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground) 32%);
+  }
+
+  .dark .ops-section-copy {
+    color: rgba(221, 230, 239, 0.8);
   }
 
   .ops-highlight-tile {
@@ -407,7 +411,11 @@ body.theme-transitioning * {
     margin-top: 0.45rem;
     font-size: 0.78rem;
     line-height: 1.55;
-    color: var(--muted-foreground);
+    color: color-mix(in srgb, var(--foreground) 66%, var(--muted-foreground) 34%);
+  }
+
+  .dark .ops-highlight-note {
+    color: rgba(215, 224, 234, 0.8);
   }
 
   .ops-metric-top {
@@ -457,7 +465,11 @@ body.theme-transitioning * {
     font-size: 0.74rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--muted-foreground);
+    color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground) 38%);
+  }
+
+  .dark .ops-metric-caption {
+    color: rgba(211, 221, 232, 0.78);
   }
 
   .ops-metric-copy {
@@ -568,7 +580,11 @@ body.theme-transitioning * {
     max-width: 24rem;
     font-size: 0.82rem;
     line-height: 1.6;
-    color: var(--muted-foreground);
+    color: color-mix(in srgb, var(--foreground) 70%, var(--muted-foreground) 30%);
+  }
+
+  .dark .ops-empty-copy {
+    color: rgba(216, 225, 235, 0.8);
   }
 
   .ops-feedback {
@@ -626,7 +642,13 @@ body.theme-transitioning * {
   }
 
   .ops-feedback-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: fit-content;
     cursor: pointer;
+    border-radius: 999px;
+    padding: 0.2rem 0.05rem;
     font-size: 0.78rem;
     color: color-mix(in srgb, var(--foreground) 78%, var(--primary) 22%);
     list-style: none;
@@ -634,6 +656,16 @@ body.theme-transitioning * {
 
   .ops-feedback-link::-webkit-details-marker {
     display: none;
+  }
+
+  .ops-feedback-link:focus-visible,
+  .ops-select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 28%, transparent);
+  }
+
+  .ops-feedback-link:focus-visible {
+    color: color-mix(in srgb, var(--foreground) 72%, var(--primary) 28%);
   }
 
   .ops-feedback-log-list {
@@ -659,26 +691,46 @@ body.theme-transitioning * {
 
   .ops-select {
     height: 2.25rem;
+    min-width: 7.5rem;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
     background: color-mix(in srgb, var(--card) 96%, transparent);
     padding: 0 0.95rem;
     font-size: 0.88rem;
     color: var(--foreground);
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease;
   }
 
   .dark .ops-select {
     background: rgba(15, 24, 34, 0.92);
   }
 
+  .ops-select:focus-visible {
+    border-color: color-mix(in srgb, var(--ring) 74%, transparent);
+  }
+
+  .ops-panel:focus-within,
+  .ops-highlight-tile:focus-within,
+  .ops-list-item:focus-within,
+  .ops-status-row:focus-within,
+  .ops-feedback:focus-within {
+    border-color: color-mix(in srgb, var(--ring) 48%, var(--border) 52%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ring) 16%, transparent);
+  }
+
   .ops-table {
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     border-radius: calc(var(--radius) + 4px);
   }
 
   .ops-table table {
     width: 100%;
+    min-width: 34rem;
   }
 
   .ops-table thead tr {
@@ -733,7 +785,57 @@ body.theme-transitioning * {
   }
 }
 
+@media (min-width: 1440px) {
+  .ops-shell {
+    gap: 1.75rem;
+  }
+
+  .ops-hero {
+    padding: 1.5rem;
+  }
+
+  .ops-panel {
+    padding: 1.2rem;
+  }
+
+  .ops-highlight-tile {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ops-hero::before {
+    top: -8rem;
+    right: -7rem;
+    width: 18rem;
+    height: 18rem;
+  }
+
+  .ops-hero::after {
+    left: -5rem;
+    bottom: -6rem;
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .ops-metric-top,
+  .ops-feedback-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ops-panel,
+  .ops-section-card,
+  .ops-metric-card {
+    border-radius: calc(var(--radius) + 6px);
+  }
+}
+
 @media (max-width: 768px) {
+  .ops-shell {
+    gap: 1.25rem;
+  }
+
   .ops-hero {
     padding: 1rem;
   }
@@ -742,8 +844,15 @@ body.theme-transitioning * {
     font-size: 1.9rem;
   }
 
+  .ops-hero-subtitle {
+    font-size: 0.93rem;
+    line-height: 1.7;
+  }
+
   .ops-panel,
-  .ops-highlight-tile {
+  .ops-highlight-tile,
+  .ops-empty,
+  .ops-feedback {
     padding: 0.9rem;
   }
 
@@ -752,6 +861,116 @@ body.theme-transitioning * {
   .ops-metric-stack {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  .ops-metric-value {
+    font-size: 1.75rem;
+  }
+
+  .ops-highlight-value {
+    font-size: 1.45rem;
+  }
+
+  .ops-list-item,
+  .ops-status-row,
+  .ops-feedback-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ops-feedback-actions {
+    width: 100%;
+  }
+
+  .ops-feedback-actions > * {
+    width: 100%;
+  }
+
+  .ops-select {
+    min-width: 0;
+  }
+
+  .ops-table table {
+    min-width: 30rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .ops-shell {
+    gap: 1rem;
+  }
+
+  .ops-hero {
+    padding: 0.95rem;
+    border-radius: calc(var(--radius) + 8px);
+  }
+
+  .ops-hero::before {
+    top: -6rem;
+    right: -6rem;
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .ops-hero::after {
+    left: -4rem;
+    bottom: -5rem;
+    width: 11rem;
+    height: 11rem;
+  }
+
+  .ops-hero-title {
+    font-size: 1.65rem;
+  }
+
+  .ops-hero-subtitle {
+    font-size: 0.9rem;
+    line-height: 1.65;
+  }
+
+  .ops-panel,
+  .ops-highlight-tile,
+  .ops-empty,
+  .ops-feedback {
+    padding: 0.85rem;
+  }
+
+  .ops-metric-value {
+    font-size: 1.5rem;
+  }
+
+  .ops-highlight-value {
+    font-size: 1.35rem;
+  }
+
+  .ops-note-item {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-note-index {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .ops-select {
+    width: 100%;
+  }
+
+  .ops-table table {
+    min-width: 26rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-panel,
+  .ops-highlight-tile,
+  .ops-list-item,
+  .ops-status-row,
+  .ops-feedback,
+  .ops-select,
+  .ops-kpi-fill {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
   }
 }
 

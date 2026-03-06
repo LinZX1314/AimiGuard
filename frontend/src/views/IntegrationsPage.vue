@@ -1,34 +1,34 @@
 <template>
-  <div class="p-6">
+  <div class="px-4 py-5 md:p-6">
     <div class="mx-auto max-w-[1200px]">
-      <div class="mb-6 space-y-1">
+      <div class="mb-6 flex flex-col gap-2 sm:gap-3">
         <h1 class="text-2xl font-semibold">插件与联动</h1>
         <p class="text-sm text-muted-foreground">管理 AI API、TTS、HFish、Nmap、推送通道与防火墙联动配置</p>
       </div>
 
-      <Tabs default-value="hfish">
-        <TabsList class="mb-6 w-full justify-start h-auto p-1 flex-wrap gap-1">
-          <TabsTrigger value="hfish" class="flex items-center gap-1.5 px-4 py-2">
+      <Tabs default-value="hfish" class="space-y-6">
+        <TabsList class="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl p-1.5 sm:flex-wrap sm:overflow-visible">
+          <TabsTrigger value="hfish" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <Bug class="size-3.5" />
             HFish 蜜罐
           </TabsTrigger>
-          <TabsTrigger value="nmap" class="flex items-center gap-1.5 px-4 py-2">
+          <TabsTrigger value="nmap" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <Zap class="size-3.5" />
             Nmap 扫描
           </TabsTrigger>
-          <TabsTrigger value="push" class="flex items-center gap-1.5 px-4 py-2">
+          <TabsTrigger value="push" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <BellRing class="size-3.5" />
             推送通道
           </TabsTrigger>
-          <TabsTrigger value="device" class="flex items-center gap-1.5 px-4 py-2">
+          <TabsTrigger value="device" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <Server class="size-3.5" />
             设备凭证
           </TabsTrigger>
-          <TabsTrigger value="ai" class="flex items-center gap-1.5 px-4 py-2">
+          <TabsTrigger value="ai" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <BrainCircuit class="size-3.5" />
             AI / TTS
           </TabsTrigger>
-          <TabsTrigger value="firewall" class="flex items-center gap-1.5 px-4 py-2">
+          <TabsTrigger value="firewall" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <Shield class="size-3.5" />
             防火墙联动
           </TabsTrigger>
@@ -37,7 +37,7 @@
         <!-- ── HFish 蜜罐 ── -->
         <TabsContent value="hfish">
           <Card>
-            <CardHeader class="flex-row items-center justify-between pb-3">
+            <CardHeader class="flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-0.5">
                 <CardTitle class="text-base flex items-center gap-2">
                   <Bug class="size-4 text-amber-400" />
@@ -95,8 +95,11 @@
                   <div class="flex items-center gap-3 pt-1.5">
                     <button
                       type="button"
+                      role="switch"
+                      :aria-checked="hfishForm.enabled ? 'true' : 'false'"
+                      :aria-label="hfishForm.enabled ? 'Disable HFish sync' : 'Enable HFish sync'"
                       :class="[
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         hfishForm.enabled ? 'bg-primary' : 'bg-input',
                       ]"
                       @click="hfishForm.enabled = !hfishForm.enabled"
@@ -112,7 +115,7 @@
                   </div>
                 </div>
               </div>
-              <div class="flex items-center gap-2 pt-2 border-t border-border">
+              <div class="flex flex-col items-start gap-2 border-t border-border pt-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <Button size="sm" class="cursor-pointer" :disabled="hfishSaving" @click="saveHFishConfig">
                   <span v-if="hfishSaving">保存中…</span>
                   <span v-else>保存配置</span>
@@ -138,7 +141,7 @@
         <!-- ── Nmap 扫描 ── -->
         <TabsContent value="nmap">
           <Card>
-            <CardHeader class="flex-row items-center justify-between pb-3">
+            <CardHeader class="flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-0.5">
                 <CardTitle class="text-base flex items-center gap-2">
                   <Zap class="size-4 text-blue-400" />
@@ -185,8 +188,11 @@
                   <div class="flex items-center gap-3 pt-1.5">
                     <button
                       type="button"
+                      role="switch"
+                      :aria-checked="nmapForm.enabled ? 'true' : 'false'"
+                      :aria-label="nmapForm.enabled ? 'Disable scheduled Nmap scan' : 'Enable scheduled Nmap scan'"
                       :class="[
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         nmapForm.enabled ? 'bg-primary' : 'bg-input',
                       ]"
                       @click="nmapForm.enabled = !nmapForm.enabled"
@@ -203,7 +209,7 @@
                 </div>
               </div>
 
-              <div class="flex items-center gap-2 pt-2 border-t border-border">
+              <div class="flex flex-col items-start gap-2 border-t border-border pt-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <Button size="sm" class="cursor-pointer" :disabled="nmapSaving" @click="saveNmapConfig">
                   <span v-if="nmapSaving">保存中…</span>
                   <span v-else>保存配置</span>
@@ -215,7 +221,7 @@
 
               <!-- 漏洞检测规则 -->
               <div class="pt-3 border-t border-border space-y-3">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div class="space-y-0.5">
                     <p class="text-sm font-medium flex items-center gap-1.5">
                       <Bug class="size-3.5 text-red-400" />
@@ -235,12 +241,14 @@
                     :key="tag"
                     class="rounded-lg border border-border p-3 space-y-2 bg-muted/10"
                   >
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div class="flex items-center gap-2">
                         <Badge variant="outline" class="text-xs font-mono">{{ tag }}</Badge>
                         <span class="text-xs text-muted-foreground">{{ scripts.length }} 个脚本</span>
                       </div>
                       <button
+                        type="button"
+                        :aria-label="'Remove tag ' + tag"
                         class="text-xs text-destructive/70 hover:text-destructive cursor-pointer"
                         @click="removeVulnTag(tag)"
                       >删除标签</button>
@@ -252,9 +260,15 @@
                         class="flex items-center gap-1 bg-muted/50 rounded px-2 py-0.5 text-xs font-mono"
                       >
                         <span>{{ script }}</span>
-                        <button class="text-muted-foreground hover:text-destructive cursor-pointer ml-1" @click="removeScript(tag, idx)">×</button>
+                        <button
+                          type="button"
+                          :aria-label="'Remove script ' + script"
+                          class="text-muted-foreground hover:text-destructive cursor-pointer ml-1"
+                          @click="removeScript(tag, idx)"
+                        >×</button>
                       </div>
                       <button
+                        type="button"
                         class="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer border border-dashed border-border rounded px-2 py-0.5"
                         @click="addScript(tag)"
                       >
@@ -267,7 +281,7 @@
                   </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" variant="outline" class="cursor-pointer" :disabled="nmapSaving" @click="saveVulnScripts">
                     保存漏洞规则
                   </Button>
@@ -281,7 +295,7 @@
         <!-- ── 推送通道 ── -->
         <TabsContent value="push">
           <Card>
-            <CardHeader class="flex-row items-center justify-between pb-3">
+            <CardHeader class="flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-0.5">
                 <CardTitle class="text-base flex items-center gap-2">
                   <BellRing class="size-4 text-purple-400" />
@@ -326,7 +340,7 @@
                     />
                   </div>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="channelCreating" @click="createChannel">
                     {{ channelCreating ? '创建中…' : '创建' }}
                   </Button>
@@ -345,7 +359,7 @@
                 <div
                   v-for="ch in channels"
                   :key="ch.id"
-                  class="flex items-center justify-between rounded-lg border border-border p-3"
+                  class="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div class="space-y-0.5 min-w-0">
                     <div class="flex items-center gap-2">
@@ -378,7 +392,7 @@
         <!-- ── 设备凭证 ── -->
         <TabsContent value="device">
           <Card>
-            <CardHeader class="flex-row items-center justify-between pb-3">
+            <CardHeader class="flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-0.5">
                 <CardTitle class="text-base flex items-center gap-2">
                   <Server class="size-4 text-cyan-400" />
@@ -431,7 +445,7 @@
                       class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="deviceCreating" @click="createDevice">
                     {{ deviceCreating ? '创建中…' : '创建设备' }}
                   </Button>
@@ -448,7 +462,7 @@
               </div>
               <div v-else class="space-y-3">
                 <div v-for="dev in devices" :key="dev.id" class="rounded-lg border border-border p-4 space-y-3">
-                  <div class="flex items-center justify-between">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="space-y-0.5">
                       <div class="flex items-center gap-2">
                         <span class="font-medium text-sm">{{ dev.name }}</span>
@@ -471,24 +485,24 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <span class="text-xs font-medium text-muted-foreground">登录凭证（{{ dev.credentials?.length || 0 }}）</span>
-                      <button class="text-xs text-primary hover:underline cursor-pointer" @click="promptAddCredential(dev.id)">
+                      <button type="button" class="text-xs text-primary hover:underline cursor-pointer" @click="promptAddCredential(dev.id)">
                         + 添加凭证
                       </button>
                     </div>
                     <div v-if="dev.credentials && dev.credentials.length > 0" class="space-y-1">
                       <div v-for="cred in dev.credentials" :key="cred.id"
-                        class="flex items-center justify-between rounded border border-border/50 px-3 py-1.5 bg-muted/10">
+                        class="flex flex-col gap-2 rounded border border-border/50 bg-muted/10 px-3 py-1.5 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-center gap-3 text-xs">
                           <span class="font-mono">{{ cred.username }}</span>
                           <span class="text-muted-foreground">********</span>
                         </div>
                         <div class="flex items-center gap-1">
-                          <button class="text-xs text-primary hover:underline cursor-pointer" @click="promptUpdateCredential(dev.id, cred)">
+                          <button type="button" class="text-xs text-primary hover:underline cursor-pointer" @click="promptUpdateCredential(dev.id, cred)">
                             修改
                           </button>
-                          <button class="text-xs text-destructive/70 hover:text-destructive cursor-pointer ml-2" @click="removeCredential(dev.id, cred.id)">
+                          <button type="button" class="text-xs text-destructive/70 hover:text-destructive cursor-pointer ml-2" @click="removeCredential(dev.id, cred.id)">
                             删除
                           </button>
                         </div>
@@ -555,8 +569,11 @@
                     <div class="flex items-center gap-3 pt-1">
                       <button
                         type="button"
+                        role="switch"
+                        :aria-checked="aiApiForm.enabled ? 'true' : 'false'"
+                        :aria-label="aiApiForm.enabled ? 'Disable AI API' : 'Enable AI API'"
                         :class="[
-                          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                           aiApiForm.enabled ? 'bg-primary' : 'bg-input',
                         ]"
                         @click="aiApiForm.enabled = !aiApiForm.enabled"
@@ -578,7 +595,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 pt-2 border-t border-border">
+                <div class="flex flex-col items-start gap-2 border-t border-border pt-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="aiApiSaving" @click="saveAIApiConfig">
                     <span v-if="aiApiSaving">保存中…</span>
                     <span v-else>保存 AI 配置</span>
@@ -640,8 +657,11 @@
                     <div class="flex items-center gap-3 pt-1">
                       <button
                         type="button"
+                        role="switch"
+                        :aria-checked="ttsEngineForm.enabled ? 'true' : 'false'"
+                        :aria-label="ttsEngineForm.enabled ? 'Disable TTS' : 'Enable TTS'"
                         :class="[
-                          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                           ttsEngineForm.enabled ? 'bg-primary' : 'bg-input',
                         ]"
                         @click="ttsEngineForm.enabled = !ttsEngineForm.enabled"
@@ -660,7 +680,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 pt-2 border-t border-border">
+                <div class="flex flex-col items-start gap-2 border-t border-border pt-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="ttsEngineSaving" @click="saveTTSConfig">
                     <span v-if="ttsEngineSaving">保存中…</span>
                     <span v-else>保存 TTS 配置</span>
@@ -749,8 +769,11 @@
                   <div class="flex items-center gap-3 pt-1">
                     <button
                       type="button"
+                      role="switch"
+                      :aria-checked="firewallForm.enabled ? 'true' : 'false'"
+                      :aria-label="firewallForm.enabled ? 'Disable firewall sync' : 'Enable firewall sync'"
                       :class="[
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         firewallForm.enabled ? 'bg-primary' : 'bg-input',
                       ]"
                       @click="firewallForm.enabled = !firewallForm.enabled"
@@ -772,7 +795,7 @@
                   </div>
                 </div>
               </div>
-              <div class="flex items-center gap-2 pt-2 border-t border-border">
+              <div class="flex flex-col items-start gap-2 border-t border-border pt-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <Button size="sm" class="cursor-pointer" :disabled="firewallSaving" @click="saveFirewallConfig">
                   <span v-if="firewallSaving">保存中…</span>
                   <span v-else>保存防火墙配置</span>

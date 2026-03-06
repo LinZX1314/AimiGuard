@@ -1,5 +1,5 @@
 ﻿<template>
-  <div class="px-4 py-5 md:px-6">
+  <div class="px-4 py-5 md:px-6" :aria-busy="loading ? 'true' : 'false'">
     <div class="ops-shell mx-auto max-w-[1480px] space-y-6">
       <section class="ops-hero">
         <div class="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
@@ -12,13 +12,21 @@
                   <p class="ops-hero-subtitle">{{ postureSummary.subtitle }}</p>
                 </div>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <select v-model="range" class="ops-select" @change="loadAll">
+              <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+                <label for="overview-range" class="sr-only">选择防御时间范围</label>
+                <select id="overview-range" v-model="range" class="ops-select" aria-label="选择防御时间范围" @change="loadAll">
                   <option value="24h">24 小时</option>
                   <option value="7d">7 天</option>
                   <option value="30d">30 天</option>
                 </select>
-                <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 rounded-full px-4" :disabled="loading" @click="loadAll">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="cursor-pointer gap-1.5 rounded-full px-4"
+                  aria-label="刷新防御仪表盘"
+                  :disabled="loading"
+                  @click="loadAll"
+                >
                   <RefreshCw class="size-3.5" :class="loading ? 'animate-spin' : ''" />
                   刷新
                 </Button>

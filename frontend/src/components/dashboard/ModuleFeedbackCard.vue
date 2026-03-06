@@ -18,7 +18,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="ops-feedback">
+  <div class="ops-feedback" role="status" aria-live="polite" aria-atomic="true">
     <div class="ops-feedback-header">
       <div class="space-y-1">
         <p class="ops-feedback-title">{{ title }}</p>

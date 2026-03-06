@@ -1,5 +1,5 @@
 ﻿<template>
-  <div class="px-4 py-5 md:px-6">
+  <div class="px-4 py-5 md:px-6" :aria-busy="loading ? 'true' : 'false'">
     <div class="ops-shell mx-auto max-w-[1480px] space-y-6">
       <section class="ops-hero">
         <div class="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
@@ -12,14 +12,21 @@
                   <p class="ops-hero-subtitle">{{ probePosture.subtitle }}</p>
                 </div>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
                 <router-link to="/probe/scan">
-                  <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 rounded-full px-4">
+                  <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 rounded-full px-4" aria-label="打开扫描列表">
                     <ExternalLink class="size-3.5" />
                     扫描列表
                   </Button>
                 </router-link>
-                <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 rounded-full px-4" :disabled="loading" @click="loadAll">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="cursor-pointer gap-1.5 rounded-full px-4"
+                  aria-label="刷新主动探测仪表盘"
+                  :disabled="loading"
+                  @click="loadAll"
+                >
                   <RefreshCw class="size-3.5" :class="loading ? 'animate-spin' : ''" />
                   刷新
                 </Button>
