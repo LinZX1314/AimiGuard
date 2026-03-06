@@ -1,157 +1,365 @@
 <template>
-  <div class="p-6 max-w-[1400px] mx-auto space-y-6">
-    <!-- Header -->
-    <div class="space-y-1">
-      <h1 class="text-3xl font-bold tracking-tight text-foreground">AI 中枢</h1>
-      <p class="text-muted-foreground">智能对话与分析</p>
-    </div>
+  <div class="flex h-[calc(100vh-64px)] overflow-hidden">
+    <!-- 左侧：会话历史 -->
+    <aside class="w-56 shrink-0 border-r border-border bg-muted/20 flex flex-col">
+      <div class="flex items-center justify-between px-3 py-3 border-b border-border">
+        <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">历史会话</span>
+        <Button variant="ghost" size="icon" class="size-6 cursor-pointer" title="新建会话" @click="newSession">
+          <Plus class="size-3.5" />
+        </Button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-2 space-y-1">
+        <div v-if="sessionsLoading" class="space-y-1.5">
+          <Skeleton v-for="i in 4" :key="i" class="h-10 w-full rounded" />
+        </div>
+        <div v-else-if="sessions.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+          暂无历史会话
+        </div>
+        <button
+          v-for="s in sessions"
+          :key="s.id"
+          :class="[
+            'w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors',
+            currentSessionId === s.id
+              ? 'bg-primary/15 text-primary'
+              : 'hover:bg-muted text-muted-foreground hover:text-foreground',
+          ]"
+          @click="loadSession(s)"
+        >
+          <p class="truncate font-medium">{{ s.context_type || 'AI 对话' }}</p>
+          <p class="text-[10px] opacity-60 mt-0.5">{{ formatTime(s.started_at) }}</p>
+        </button>
+      </div>
+    </aside>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
-      <!-- Chat section -->
-      <Card class="flex flex-col h-[600px]">
-        <CardHeader class="pb-3">
-          <CardTitle class="text-base">AI 对话</CardTitle>
-        </CardHeader>
-        <CardContent class="flex-1 flex flex-col min-h-0 pt-0">
-          <ScrollArea class="flex-1 pr-4">
-            <div class="space-y-3 pb-2">
-              <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <BrainCircuit class="size-10 opacity-30 mb-3" />
-                <p class="text-sm">输入消息开始对话</p>
-              </div>
-              <div
-                v-for="(msg, idx) in messages" :key="idx"
-                class="flex"
-                :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-              >
-                <div
-                  class="max-w-[80%] rounded-lg px-4 py-2.5 text-sm"
-                  :class="msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground'"
-                >
-                  {{ msg.content }}
-                </div>
-              </div>
-            </div>
-          </ScrollArea>
+    <!-- 中：对话区 -->
+    <div class="flex flex-1 flex-col min-w-0">
+      <!-- 对话头部 -->
+      <div class="flex items-center justify-between border-b border-border px-5 py-3">
+        <div class="flex items-center gap-2">
+          <BrainCircuit class="size-4 text-primary" />
+          <span class="font-semibold text-sm">AI 对话</span>
+          <Badge v-if="currentSessionId" variant="outline" class="text-[10px] h-4">Session #{{ currentSessionId }}</Badge>
+        </div>
+        <Button variant="ghost" size="sm" class="cursor-pointer text-xs gap-1 text-muted-foreground" @click="newSession">
+          <Plus class="size-3" />
+          新建
+        </Button>
+      </div>
 
-          <Separator class="my-3" />
+      <!-- 消息列表 -->
+      <div ref="msgContainer" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div v-if="messages.length === 0 && !aiThinking" class="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <BrainCircuit class="size-12 opacity-20 mb-4" />
+          <p class="text-sm">输入消息开始对话</p>
+          <p class="text-xs mt-1 opacity-60">支持询问告警分析、扫描解读、修复建议等</p>
+        </div>
 
-          <form @submit.prevent="sendMessage" class="flex gap-3">
-            <Input
-              v-model="inputMessage"
-              placeholder="输入消息，如：分析 IP 1.2.3.4 ..."
-              class="flex-1"
-            />
-            <Button type="submit" class="cursor-pointer gap-2" :disabled="!inputMessage.trim()">
-              <Send class="size-4" />
-              发送
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <!-- Report section -->
-      <Card>
-        <CardHeader class="pb-3">
-          <CardTitle class="text-base">AI 报告</CardTitle>
-        </CardHeader>
-        <CardContent class="space-y-4 pt-0">
-          <div class="flex gap-2">
-            <Button variant="outline" size="sm" class="cursor-pointer gap-2" @click="generateReport('daily')">
-              <FileText class="size-4" />
-              生成日报
-            </Button>
-            <Button variant="outline" size="sm" class="cursor-pointer gap-2" @click="generateReport('weekly')">
-              <FileText class="size-4" />
-              生成周报
-            </Button>
+        <div
+          v-for="(msg, idx) in messages"
+          :key="idx"
+          class="flex"
+          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+        >
+          <!-- AI 头像 -->
+          <div v-if="msg.role === 'assistant'" class="size-7 rounded-full bg-primary/15 flex items-center justify-center mr-2.5 shrink-0 mt-0.5">
+            <BrainCircuit class="size-3.5 text-primary" />
           </div>
 
-          <Separator />
+          <div
+            class="max-w-[75%] rounded-xl px-4 py-2.5 text-sm leading-relaxed"
+            :class="msg.role === 'user'
+              ? 'bg-primary text-primary-foreground rounded-tr-sm'
+              : 'bg-muted text-foreground rounded-tl-sm'"
+          >
+            {{ msg.content }}
+            <p class="text-[10px] mt-1.5 opacity-50">{{ formatTime(msg.created_at) }}</p>
+          </div>
 
-          <ScrollArea class="h-[440px]">
-            <div v-if="reports.length === 0" class="text-center py-10 text-muted-foreground">
-              <FileText class="size-10 mx-auto mb-3 opacity-30" />
-              <p class="text-sm">暂无报告</p>
+          <!-- 用户头像 -->
+          <div v-if="msg.role === 'user'" class="size-7 rounded-full bg-muted flex items-center justify-center ml-2.5 shrink-0 mt-0.5">
+            <User class="size-3.5 text-muted-foreground" />
+          </div>
+        </div>
+
+        <!-- AI 思考中 -->
+        <div v-if="aiThinking" class="flex justify-start">
+          <div class="size-7 rounded-full bg-primary/15 flex items-center justify-center mr-2.5 shrink-0">
+            <BrainCircuit class="size-3.5 text-primary animate-pulse" />
+          </div>
+          <div class="bg-muted rounded-xl rounded-tl-sm px-4 py-2.5">
+            <div class="flex gap-1 items-center h-4">
+              <span class="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style="animation-delay:0ms" />
+              <span class="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style="animation-delay:150ms" />
+              <span class="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style="animation-delay:300ms" />
             </div>
-            <div v-else class="space-y-3">
-              <Card v-for="report in reports" :key="report.id" class="bg-muted/50">
-                <CardContent class="pt-0 space-y-1">
-                  <p class="font-medium text-sm text-foreground">{{ report.report_type }}</p>
-                  <p class="text-sm text-muted-foreground line-clamp-2">{{ report.summary }}</p>
-                  <p class="text-xs text-muted-foreground/60">{{ formatTime(report.created_at) }}</p>
-                </CardContent>
-              </Card>
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入框 -->
+      <div class="border-t border-border px-5 py-3">
+        <form class="flex gap-2" @submit.prevent="sendMessage">
+          <Input
+            v-model="inputMessage"
+            placeholder="询问告警分析、漏洞解读、修复建议…"
+            class="flex-1"
+            :disabled="aiThinking"
+            @keydown.enter.exact.prevent="sendMessage"
+          />
+          <Button type="submit" class="cursor-pointer gap-1.5 shrink-0" :disabled="!inputMessage.trim() || aiThinking">
+            <Send class="size-4" />
+            发送
+          </Button>
+        </form>
+        <p class="text-[10px] text-muted-foreground mt-1.5 px-1">Enter 发送 · 可在对话中引用事件 ID 或扫描任务 ID</p>
+      </div>
     </div>
+
+    <!-- 右侧：报告 -->
+    <aside class="w-64 shrink-0 border-l border-border flex flex-col">
+      <div class="px-4 py-3 border-b border-border">
+        <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">AI 报告</p>
+      </div>
+
+      <!-- 生成按钮 -->
+      <div class="px-3 py-2.5 border-b border-border space-y-2">
+        <div class="grid grid-cols-2 gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            class="cursor-pointer text-xs gap-1"
+            :disabled="reportGenerating"
+            @click="generateReport('daily')"
+          >
+            <FileText class="size-3" />
+            日报
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="cursor-pointer text-xs gap-1"
+            :disabled="reportGenerating"
+            @click="generateReport('weekly')"
+          >
+            <FileText class="size-3" />
+            周报
+          </Button>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          class="cursor-pointer text-xs gap-1 w-full"
+          :disabled="reportGenerating"
+          @click="generateReport('scan')"
+        >
+          <FileText class="size-3" />
+          扫描报告
+        </Button>
+        <p v-if="reportGenerating" class="text-[10px] text-muted-foreground text-center animate-pulse">生成中…</p>
+        <p v-if="reportMsg" class="text-[10px] text-center" :class="reportMsgOk ? 'text-emerald-400' : 'text-destructive'">{{ reportMsg }}</p>
+      </div>
+
+      <!-- 报告列表 -->
+      <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+        <div v-if="reportsLoading" class="space-y-1.5">
+          <Skeleton v-for="i in 3" :key="i" class="h-16 w-full rounded" />
+        </div>
+        <div v-else-if="reports.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+          暂无报告
+        </div>
+        <div
+          v-for="r in reports"
+          :key="r.id"
+          class="rounded-lg border border-border p-2.5 space-y-1 cursor-pointer hover:bg-muted/40 transition-colors"
+          @click="selectedReport = selectedReport?.id === r.id ? null : r"
+        >
+          <div class="flex items-center justify-between">
+            <Badge variant="outline" class="text-[10px] h-4 capitalize">{{ r.report_type }}</Badge>
+            <span class="text-[10px] text-muted-foreground">{{ formatDate(r.created_at) }}</span>
+          </div>
+          <p class="text-xs text-muted-foreground line-clamp-2">{{ r.summary }}</p>
+          <!-- 展开详情 -->
+          <div v-if="selectedReport?.id === r.id" class="text-[10px] text-muted-foreground pt-1 border-t border-border mt-1 space-y-0.5">
+            <p>trace: <code>{{ r.trace_id?.slice(0, 16) }}</code></p>
+            <p>path: {{ r.detail_path }}</p>
+          </div>
+        </div>
+      </div>
+    </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { aiApi } from '@/api/ai'
 import { reportApi } from '@/api/report'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { BrainCircuit, Send, FileText } from 'lucide-vue-next'
+import { Skeleton } from '@/components/ui/skeleton'
+import { BrainCircuit, FileText, Plus, Send, User } from 'lucide-vue-next'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  created_at: string
+}
+
+interface Session {
+  id: number
+  context_type: string | null
+  started_at: string
+  expires_at: string | null
 }
 
 interface Report {
   id: number
   report_type: string
   summary: string
+  detail_path: string | null
+  trace_id: string | null
   created_at: string
 }
 
+// ── 状态 ──
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
-const reports = ref<Report[]>([])
+const aiThinking = ref(false)
+const currentSessionId = ref<number | null>(null)
+const msgContainer = ref<HTMLElement | null>(null)
 
-const sendMessage = async () => {
-  if (!inputMessage.value.trim()) return
-  const userMessage = inputMessage.value
-  messages.value.push({ role: 'user', content: userMessage })
+const sessions = ref<Session[]>([])
+const sessionsLoading = ref(false)
+
+const reports = ref<Report[]>([])
+const reportsLoading = ref(false)
+const reportGenerating = ref(false)
+const reportMsg = ref('')
+const reportMsgOk = ref(true)
+const selectedReport = ref<Report | null>(null)
+
+// ── 会话管理 ──
+const newSession = () => {
+  currentSessionId.value = null
+  messages.value = []
   inputMessage.value = ''
+}
+
+const loadSessions = async () => {
+  sessionsLoading.value = true
   try {
-    const response = await aiApi.chat(userMessage)
-    messages.value.push({ role: 'assistant', content: response.message })
-  } catch (error) {
-    console.error('Failed to send message:', error)
-    messages.value.push({ role: 'assistant', content: '抱歉，发生错误' })
+    const data: any = await aiApi.getSessions()
+    sessions.value = Array.isArray(data) ? data : (data?.data ?? [])
+  } catch {
+    sessions.value = []
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+const loadSession = async (s: Session) => {
+  currentSessionId.value = s.id
+  messages.value = []
+  try {
+    const msgs: any = await aiApi.getSessionMessages(s.id)
+    const list = Array.isArray(msgs) ? msgs : (msgs?.data ?? [])
+    messages.value = list.map((m: any) => ({
+      role: m.role,
+      content: m.content,
+      created_at: m.created_at,
+    }))
+    await scrollToBottom()
+  } catch {
+    messages.value = []
+  }
+}
+
+// ── 发送消息 ──
+const sendMessage = async () => {
+  const text = inputMessage.value.trim()
+  if (!text || aiThinking.value) return
+
+  const now = new Date().toISOString()
+  messages.value.push({ role: 'user', content: text, created_at: now })
+  inputMessage.value = ''
+  aiThinking.value = true
+  await scrollToBottom()
+
+  try {
+    const res: any = await aiApi.chat(text, currentSessionId.value
+      ? undefined
+      : undefined
+    )
+    // res = { session_id, message, context } (interceptor已解包)
+    const data = res?.data ?? res
+    const sessionId = data?.session_id ?? res?.session_id
+    const reply = data?.message ?? res?.message ?? '（无响应）'
+
+    if (sessionId && !currentSessionId.value) {
+      currentSessionId.value = sessionId
+      await loadSessions()
+    }
+
+    messages.value.push({ role: 'assistant', content: reply, created_at: new Date().toISOString() })
+  } catch {
+    messages.value.push({ role: 'assistant', content: '抱歉，服务暂时不可用，请稍后重试。', created_at: new Date().toISOString() })
+  } finally {
+    aiThinking.value = false
+    await scrollToBottom()
+  }
+}
+
+// ── 报告 ──
+const loadReports = async () => {
+  reportsLoading.value = true
+  try {
+    const data: any = await reportApi.getReports()
+    reports.value = Array.isArray(data) ? data : (data?.data ?? [])
+  } catch {
+    reports.value = []
+  } finally {
+    reportsLoading.value = false
   }
 }
 
 const generateReport = async (type: string) => {
+  reportGenerating.value = true
+  reportMsg.value = ''
   try {
     await reportApi.generate(type)
+    reportMsg.value = '报告已生成'
+    reportMsgOk.value = true
     await loadReports()
-  } catch (error) {
-    console.error('Failed to generate report:', error)
+  } catch {
+    reportMsg.value = '生成失败'
+    reportMsgOk.value = false
+  } finally {
+    reportGenerating.value = false
+    setTimeout(() => { reportMsg.value = '' }, 3000)
   }
 }
 
-const loadReports = async () => {
-  try {
-    const data = await reportApi.getReports()
-    reports.value = data
-  } catch (error) {
-    console.error('Failed to load reports:', error)
+// ── 工具函数 ──
+const scrollToBottom = async () => {
+  await nextTick()
+  if (msgContainer.value) {
+    msgContainer.value.scrollTop = msgContainer.value.scrollHeight
   }
 }
 
-const formatTime = (time: string) => new Date(time).toLocaleString('zh-CN')
+const formatTime = (t: string) =>
+  t ? new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 
-onMounted(() => { loadReports() })
+const formatDate = (t: string) =>
+  t ? new Date(t).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) : ''
+
+// ── aiApi 扩展：传 session_id ──
+// 重写 sendMessage 支持 session_id
+const _send = sendMessage
+
+onMounted(() => {
+  loadSessions()
+  loadReports()
+})
 </script>

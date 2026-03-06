@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 import os
 
-from core.database import get_db, User
+from core.database import get_db, AuditLog, User
 from api.auth import get_current_user, get_user_role, get_user_permissions, require_permissions
 from services.audit_service import AuditService
 from services.mode_service import get_current_mode, set_mode
@@ -286,4 +286,73 @@ async def rollback_system(
         "rolled_back_to": payload.target_version,
         "actions_taken": ["config_reverted", "schema_checked", "health_verified"],
         "trace_id": trace_id,
+    }
+
+
+# ── 审计日志查询 ──
+
+@router.get("/audit/logs")
+@compat_router.get("/audit/logs")
+async def get_audit_logs(
+    actor: Optional[str] = None,
+    action: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    result: Optional[str] = None,
+    target_type: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current_user: User = Depends(require_permissions("view_audit")),
+    db: Session = Depends(get_db),
+):
+    """审计日志查询（支持 actor/action/trace_id/result 筛选与分页）"""
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 200:
+        page_size = 50
+
+    query = db.query(AuditLog)
+
+    if actor:
+        query = query.filter(AuditLog.actor.contains(actor))
+    if action:
+        query = query.filter(AuditLog.action.contains(action))
+    if trace_id:
+        query = query.filter(AuditLog.trace_id.contains(trace_id))
+    if result:
+        query = query.filter(AuditLog.result == result)
+    if target_type:
+        query = query.filter(AuditLog.target_type == target_type)
+
+    total = query.count()
+    records = (
+        query.order_by(AuditLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "code": 0,
+        "data": {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+            "items": [
+                {
+                    "id": r.id,
+                    "actor": r.actor,
+                    "action": r.action,
+                    "target": r.target,
+                    "target_type": r.target_type,
+                    "target_ip": r.target_ip,
+                    "result": r.result,
+                    "reason": r.reason,
+                    "error_message": r.error_message,
+                    "trace_id": r.trace_id,
+                    "created_at": r.created_at.isoformat().replace("+00:00", "Z") if r.created_at else None,
+                }
+                for r in records
+            ],
+        },
     }

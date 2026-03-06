@@ -1,35 +1,49 @@
 import { apiClient } from './client'
 
-interface ChatContext {
-  type?: string
-  id?: string
-}
-
-interface ChatResponse {
+export interface ChatResponse {
+  session_id: number
   message: string
-  context?: ChatContext
+  context?: { type: string | null; id: string | null }
 }
 
-interface SessionMessage {
+export interface SessionMessage {
   role: string
   content: string
   created_at: string
 }
 
+export interface ChatSession {
+  id: number
+  context_type: string | null
+  context_id: number | null
+  operator: string
+  started_at: string
+  expires_at: string | null
+}
+
 export const aiApi = {
-  async chat(message: string, context?: { type: string; id: string }): Promise<ChatResponse> {
-    return apiClient.post('/ai/chat', {
+  async chat(
+    message: string,
+    sessionId?: number | null,
+    context?: { type: string; id: string },
+  ): Promise<ChatResponse> {
+    const res = await apiClient.post('/ai/chat', {
       message,
+      session_id: sessionId ?? undefined,
       context_type: context?.type,
-      context_id: context?.id
+      context_id: context?.id,
     })
+    // interceptor 解包后 res = data 字段内容
+    return res as unknown as ChatResponse
   },
 
-  async getSessions() {
-    return apiClient.get('/ai/sessions')
+  async getSessions(): Promise<ChatSession[]> {
+    const res = await apiClient.get('/ai/sessions')
+    return (Array.isArray(res) ? res : (res as any)?.data ?? []) as ChatSession[]
   },
 
   async getSessionMessages(sessionId: number): Promise<SessionMessage[]> {
-    return apiClient.get(`/ai/sessions/${sessionId}/messages`)
-  }
+    const res = await apiClient.get(`/ai/sessions/${sessionId}/messages`)
+    return (Array.isArray(res) ? res : (res as any) ?? []) as SessionMessage[]
+  },
 }
