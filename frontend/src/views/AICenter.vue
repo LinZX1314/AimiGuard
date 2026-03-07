@@ -194,15 +194,66 @@
             <span class="text-[10px] text-muted-foreground/50 select-none">
               Enter 发送 · Shift+Enter 换行 · 可引用事件 ID
             </span>
-            <PromptInputSubmit
-              :status="aiThinking ? 'submitted' : undefined"
-              :disabled="aiThinking"
-              class="cursor-pointer"
-            />
+            <div class="flex items-center gap-1.5">
+              <!-- TTS 麦克风按钮 -->
+              <button
+                class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+                :class="[
+                  ttsRecording
+                    ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25'
+                    : 'bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary',
+                ]"
+                :title="ttsRecording ? '停止录音' : '语音输入'"
+                @click="toggleTTSRecording"
+              >
+                <!-- 麦克风图标 -->
+                <Mic v-if="!ttsRecording" class="size-3.5" />
+                <!-- 录音中：声音波浪动画 -->
+                <div v-else class="flex items-center gap-[2px]">
+                  <span class="tts-wave" style="animation-delay: 0ms" />
+                  <span class="tts-wave" style="animation-delay: 150ms" />
+                  <span class="tts-wave" style="animation-delay: 300ms" />
+                  <span class="tts-wave" style="animation-delay: 450ms" />
+                </div>
+                <!-- 录音脉冲光圈 -->
+                <span
+                  v-if="ttsRecording"
+                  class="absolute inset-0 rounded-full border-2 border-red-400/40 animate-ping pointer-events-none"
+                />
+              </button>
+              <PromptInputSubmit
+                :status="aiThinking ? 'submitted' : undefined"
+                :disabled="aiThinking"
+                class="cursor-pointer"
+              />
+            </div>
           </PromptInputFooter>
         </PromptInput>
       </div>
     </div>
+
+    <!-- 麦克风权限弹窗 -->
+    <Dialog :open="showMicPermissionDialog" @update:open="showMicPermissionDialog = $event">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2">
+            <Mic class="size-4 text-primary" />
+            需要麦克风权限
+          </DialogTitle>
+          <DialogDescription>
+            语音输入功能需要访问您的麦克风。请在浏览器弹出的权限请求中点击「允许」，或在浏览器设置中手动开启麦克风权限。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" size="sm" class="cursor-pointer" @click="showMicPermissionDialog = false">
+            我知道了
+          </Button>
+          <Button size="sm" class="cursor-pointer" @click="retryMicPermission">
+            重新授权
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- ── 右侧：报告 + TTS ── -->
     <aside class="w-64 shrink-0 border-l border-border/60 flex flex-col bg-sidebar">
@@ -387,6 +438,14 @@ import { reportApi } from '@/api/report'
 import { ttsApi, type TTSTask } from '@/api/tts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Conversation, ConversationEmptyState } from '@/components/ai-elements/conversation'
 import { Message, MessageContent, MessageAvatar } from '@/components/ai-elements/message'
@@ -402,6 +461,7 @@ import {
   FileText,
   MessageCircle,
   MessagesSquare,
+  Mic,
   Play,
   ScanLine,
   SquarePen,
@@ -464,6 +524,8 @@ const ttsMsg = ref('')
 const ttsMsgOk = ref(true)
 const ttsTasks = ref<TTSTask[]>([])
 const ttsLoading = ref(false)
+const ttsRecording = ref(false)
+const showMicPermissionDialog = ref(false)
 
 // ── 快捷提示 ──
 const fillHint = (hint: string) => {
@@ -613,6 +675,40 @@ const processTTS = async (taskId: number) => {
   } catch { /* ignore */ }
 }
 
+// ── TTS 录音按钮 ──
+const toggleTTSRecording = async () => {
+  if (ttsRecording.value) {
+    ttsRecording.value = false
+    return
+  }
+  // 检查麦克风权限
+  try {
+    const permStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+    if (permStatus.state === 'denied') {
+      showMicPermissionDialog.value = true
+      return
+    }
+  } catch {
+    // permissions API 不支持时直接尝试获取
+  }
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+    ttsRecording.value = true
+  } catch {
+    showMicPermissionDialog.value = true
+  }
+}
+
+const retryMicPermission = async () => {
+  showMicPermissionDialog.value = false
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+    ttsRecording.value = true
+  } catch {
+    showMicPermissionDialog.value = true
+  }
+}
+
 const ttsStateColor = (s: string) => {
   const m: Record<string, string> = {
     PENDING: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -688,5 +784,23 @@ onMounted(() => {
 .expand-leave-from {
   opacity: 1;
   max-height: 4rem;
+}
+
+/* TTS 声音波浪动画 */
+.tts-wave {
+  display: inline-block;
+  width: 2.5px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: tts-wave-bounce 0.8s ease-in-out infinite alternate;
+}
+.tts-wave:nth-child(1) { height: 8px; }
+.tts-wave:nth-child(2) { height: 14px; }
+.tts-wave:nth-child(3) { height: 10px; }
+.tts-wave:nth-child(4) { height: 6px; }
+
+@keyframes tts-wave-bounce {
+  0% { transform: scaleY(0.4); opacity: 0.6; }
+  100% { transform: scaleY(1); opacity: 1; }
 }
 </style>
