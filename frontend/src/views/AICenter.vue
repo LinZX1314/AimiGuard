@@ -195,34 +195,54 @@
               Enter 发送 · Shift+Enter 换行 · 可引用事件 ID
             </span>
             <div class="flex items-center gap-1.5">
-              <!-- TTS 麦克风按钮 -->
-              <button
-                class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
-                :class="[
-                  ttsRecording
-                    ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary',
-                ]"
-                :title="ttsRecording ? '停止录音' : '语音输入'"
-                @click="toggleTTSRecording"
-              >
-                <!-- 麦克风图标 -->
-                <Mic v-if="!ttsRecording" class="size-3.5" />
-                <!-- 录音中：实时声音波浪 -->
-                <div v-else class="flex items-center gap-[2px] h-4">
+              <!-- TTS 麦克风按钮 + 录音气泡 -->
+              <div class="relative">
+                <button
+                  class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+                  :class="[
+                    ttsRecording
+                      ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary',
+                  ]"
+                  :title="ttsRecording ? '停止录音' : '语音输入'"
+                  @click="toggleTTSRecording"
+                >
+                  <Mic v-if="!ttsRecording" class="size-3.5" />
+                  <div v-else class="flex items-center gap-[2px] h-4">
+                    <span
+                      v-for="(v, i) in waveBars"
+                      :key="i"
+                      class="tts-wave-bar"
+                      :style="{ height: Math.max(3, v * 16) + 'px' }"
+                    />
+                  </div>
                   <span
-                    v-for="(v, i) in waveBars"
-                    :key="i"
-                    class="tts-wave-bar"
-                    :style="{ height: Math.max(3, v * 16) + 'px' }"
+                    v-if="ttsRecording"
+                    class="absolute inset-0 rounded-full border-2 border-red-400/40 animate-ping pointer-events-none"
                   />
-                </div>
-                <!-- 录音脉冲光圈 -->
-                <span
-                  v-if="ttsRecording"
-                  class="absolute inset-0 rounded-full border-2 border-red-400/40 animate-ping pointer-events-none"
-                />
-              </button>
+                </button>
+                <!-- 录音中小气泡提示 -->
+                <Transition name="tts-bubble">
+                  <div
+                    v-if="ttsRecording"
+                    class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-36 rounded-xl bg-popover border border-border/60 shadow-lg px-3 py-2.5 flex flex-col items-center gap-2 z-50"
+                  >
+                    <!-- 实时波形 -->
+                    <div class="flex items-center gap-[3px] h-6">
+                      <span
+                        v-for="(v, i) in waveBars"
+                        :key="i"
+                        class="tts-wave-bar-pop"
+                        :style="{ height: Math.max(4, v * 24) + 'px' }"
+                      />
+                    </div>
+                    <p class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
+                    <p class="text-[9px] text-muted-foreground/40 leading-none">点击麦克风停止</p>
+                    <!-- 小三角箭头 -->
+                    <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 size-2 rotate-45 bg-popover border-r border-b border-border/60" />
+                  </div>
+                </Transition>
+              </div>
               <PromptInputSubmit
                 :status="aiThinking ? 'submitted' : undefined"
                 :disabled="aiThinking"
@@ -254,41 +274,6 @@
             重新授权
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- 语音录音弹窗 -->
-    <Dialog :open="ttsRecording" @update:open="(v: boolean) => { if (!v) { toggleTTSRecording() } }">
-      <DialogContent class="sm:max-w-xs" @pointer-down-outside.prevent @escape-key-down.prevent>
-        <div class="flex flex-col items-center gap-5 py-4">
-          <!-- 录音波形动画容器 -->
-          <div class="relative size-28 rounded-full bg-red-500/8 flex items-center justify-center">
-            <!-- 脉冲光圈 -->
-            <span class="absolute inset-0 rounded-full border-2 border-red-400/30 animate-ping pointer-events-none" />
-            <span class="absolute inset-2 rounded-full border border-red-400/15 animate-pulse pointer-events-none" />
-            <!-- 实时波形条 -->
-            <div class="flex items-center gap-[3px] h-12">
-              <span
-                v-for="(v, i) in waveBars"
-                :key="i"
-                class="tts-wave-bar-lg"
-                :style="{ height: Math.max(6, v * 48) + 'px' }"
-              />
-            </div>
-          </div>
-          <div class="text-center space-y-1">
-            <p class="text-sm font-medium text-foreground">正在聆听…</p>
-            <p class="text-[11px] text-muted-foreground">请对着麦克风说话</p>
-          </div>
-          <!-- 停止按钮 -->
-          <button
-            class="size-12 rounded-full bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25 flex items-center justify-center transition-all cursor-pointer"
-            @click="toggleTTSRecording"
-          >
-            <MicOff class="size-5" />
-          </button>
-          <p class="text-[10px] text-muted-foreground/50">点击停止录音</p>
-        </div>
       </DialogContent>
     </Dialog>
 
@@ -415,7 +400,6 @@ import {
   MessageCircle,
   MessagesSquare,
   Mic,
-  MicOff,
   ScanLine,
   SquarePen,
 } from 'lucide-vue-next'
@@ -724,7 +708,7 @@ onMounted(() => {
   max-height: 4rem;
 }
 
-/* TTS 输入框内小波形条 */
+/* TTS 按钮内小波形条 */
 .tts-wave-bar {
   display: inline-block;
   width: 2.5px;
@@ -734,13 +718,29 @@ onMounted(() => {
   transition: height 0.08s ease-out;
 }
 
-/* TTS 弹窗大波形条 */
-.tts-wave-bar-lg {
+/* TTS 气泡中波形条 */
+.tts-wave-bar-pop {
   display: inline-block;
-  width: 4px;
-  min-height: 6px;
+  width: 3px;
+  min-height: 4px;
   border-radius: 9999px;
   background: #f87171;
   transition: height 0.08s ease-out;
+}
+
+/* 气泡弹出动画 */
+.tts-bubble-enter-active {
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tts-bubble-leave-active {
+  transition: all 0.15s ease-in;
+}
+.tts-bubble-enter-from {
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(0.9);
+}
+.tts-bubble-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(0.9);
 }
 </style>
