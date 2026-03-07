@@ -2408,6 +2408,9 @@ requirements.txt
 - `M2-04 RBAC 与审批门禁（后端+前端）`
   - 代码：`backend/core/database.py`、`backend/api/auth.py`、`backend/api/workflow.py`、`tests/conftest.py`、`tests/test_workflow_m2_04_rbac.py`、`frontend/src/router/index.ts`、`frontend/src/components/Layout.vue`、`frontend/src/views/WorkflowCatalogPage.vue`、`frontend/src/views/WorkflowEditorPage.vue`、`frontend/src/api/auth.ts`、`frontend/src/api/workflow.ts`、`frontend/src/composables/useAuthz.ts`
   - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py -q`、`cd frontend && npx vite build`
+- `M3-01 运行时编排器核心（后端）`
+  - 代码：`backend/services/workflow_runtime.py`、`tests/test_workflow_m3_01_runtime.py`
+  - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py -q`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2543,11 +2546,11 @@ requirements.txt
 
 ##### M3：运行时编排器接入 defense 链路（第 3 周）
 
-- [ ] `M3-01` 运行时编排器核心（后端）
-  - [ ] DSL 解析器：把节点图编译为可执行计划。
-  - [ ] 执行引擎：队列调度、节点超时、重试策略、分支跳转。
-  - [ ] 幂等层：同一请求键防重执行。
-  - [ ] 状态推进：`QUEUED->RUNNING->RETRYING->SUCCESS/FAILED/MANUAL_REQUIRED`。
+- [x] `M3-01` 运行时编排器核心（后端）
+  - [x] DSL 解析器：把节点图编译为可执行计划。
+  - [x] 执行引擎：队列调度、节点超时、重试策略、分支跳转。
+  - [x] 幂等层：同一请求键防重执行。
+  - [x] 状态推进：`QUEUED->RUNNING->RETRYING->SUCCESS/FAILED/MANUAL_REQUIRED`。
   - 验收证据：运行状态机测试 + 幂等测试。
 
 - [ ] `M3-02` defense 适配器（后端）
