@@ -21,6 +21,10 @@ NODE_TYPE_CATEGORY = {
     "notification": "notification",
     "ai": "ai",
     "ai_assess": "ai",
+    "scan_asset_select": "scan",
+    "scan_task_create": "scan",
+    "scan_result_parse": "scan",
+    "scan_report": "report",
     "audit": "audit",
 }
 
@@ -33,6 +37,8 @@ SERVICE_ADAPTERS = {
         "TTSService.synthesize",
     },
     "ai": {"ai_engine.assess_threat", "ai_engine.analyze_scan_result"},
+    "scan": {"scan.select_asset", "scan.create_task", "scan.run_task"},
+    "report": {"scan.generate_report", "ai_engine.generate_report"},
     "audit": {"audit_service.log", "AuditService.log"},
 }
 

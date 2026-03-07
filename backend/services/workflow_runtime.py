@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+from pathlib import Path
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -11,10 +12,11 @@ from typing import Any, Awaitable, Callable, Mapping, Optional
 
 from sqlalchemy.orm import Session
 
-from core.database import WorkflowDefinition, WorkflowRun, WorkflowStepRun, WorkflowVersion
+from core.database import AIReport, Asset, ScanFinding, ScanTask, WorkflowDefinition, WorkflowRun, WorkflowStepRun, WorkflowVersion
 from services.ai_engine import ai_engine
 from services.audit_service import AuditService
 from services.mcp_client import mcp_client
+from services.scanner import scanner
 from services.workflow_dsl import WorkflowDSL, WorkflowNode, WorkflowRunState, validate_workflow_dsl
 
 WorkflowAdapter = Callable[["WorkflowAdapterInput"], Awaitable["NodeExecutionResult"]]
@@ -269,6 +271,259 @@ def _build_initial_context(
     return context
 
 
+def _normalize_scan_target_type(value: Any) -> str:
+    mapping = {
+        "ip": "host",
+        "host": "host",
+        "cidr": "network",
+        "network": "network",
+        "domain": "domain",
+    }
+    normalized = str(value or "host").strip().lower()
+    return mapping.get(normalized, "host")
+
+
+def _extract_report_summary(markdown: str, fallback: str) -> str:
+    for line in str(markdown or "").splitlines():
+        content = line.strip().lstrip("#").strip()
+        if content:
+            return content[:500]
+    return fallback[:500]
+
+
+def _write_generated_report(report_type: str, content: str, now: datetime) -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    report_dir = repo_root / "backend" / "generated_reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{now.strftime('%Y%m%d_%H%M%S')}_{report_type}_{uuid.uuid4().hex[:6]}.md"
+    full_path = report_dir / filename
+    full_path.write_text(content, encoding="utf-8")
+    return f"/generated_reports/{filename}"
+
+
+async def _scan_asset_select_adapter(payload: WorkflowAdapterInput) -> NodeExecutionResult:
+    asset_id_raw = payload.node.config.get("asset_id", _extract_context_value(payload.context, "asset_id"))
+    asset_tag = str(payload.node.config.get("asset_tag") or _extract_context_value(payload.context, "asset_tag", "") or "").strip()
+    target = str(payload.node.config.get("target") or _extract_context_value(payload.context, "target", "") or "").strip()
+    target_type = _normalize_scan_target_type(
+        payload.node.config.get("target_type") or _extract_context_value(payload.context, "target_type", "host")
+    )
+
+    selected_asset: Asset | None = None
+    if asset_id_raw not in (None, ""):
+        try:
+            asset_id = int(asset_id_raw)
+        except (TypeError, ValueError) as exc:
+            raise WorkflowRuntimeError("scan asset selection requires a valid asset_id") from exc
+        selected_asset = payload.db.query(Asset).filter(Asset.id == asset_id, Asset.enabled == 1).first()
+        if selected_asset is None:
+            raise WorkflowRuntimeError(f"asset not found or disabled: {asset_id}")
+    elif asset_tag:
+        selected_asset = (
+            payload.db.query(Asset)
+            .filter(Asset.enabled == 1, Asset.tags.contains(asset_tag))
+            .order_by(Asset.priority.asc(), Asset.id.asc())
+            .first()
+        )
+        if selected_asset is None:
+            raise WorkflowRuntimeError(f"no enabled asset matched tag: {asset_tag}")
+
+    if selected_asset is not None:
+        target = str(selected_asset.target or "")
+        target_type = _normalize_scan_target_type(selected_asset.target_type)
+
+    if not target:
+        raise WorkflowRuntimeError("scan asset selection requires target or asset_id")
+
+    return NodeExecutionResult(
+        state=WorkflowRunState.SUCCESS.value,
+        output={
+            "selected_asset_id": getattr(selected_asset, "id", None),
+            "selected_target": target,
+            "selected_target_type": target_type,
+            "selected_asset_tags": getattr(selected_asset, "tags", None),
+        },
+    )
+
+
+async def _scan_task_create_adapter(payload: WorkflowAdapterInput) -> NodeExecutionResult:
+    target = str(_extract_context_value(payload.context, "selected_target", _extract_context_value(payload.context, "target", "")) or "").strip()
+    if not target:
+        raise WorkflowRuntimeError("scan task creation requires target")
+
+    target_type = _normalize_scan_target_type(
+        _extract_context_value(payload.context, "selected_target_type", _extract_context_value(payload.context, "target_type", payload.node.config.get("target_type")))
+    )
+    asset_id_raw = _extract_context_value(payload.context, "selected_asset_id", _extract_context_value(payload.context, "asset_id"))
+    profile = str(payload.node.config.get("profile") or _extract_context_value(payload.context, "profile", "default") or "default")
+    tool_name = str(payload.node.config.get("tool_name") or _extract_context_value(payload.context, "tool_name", "nmap") or "nmap")
+    script_set_raw = payload.node.config.get("script_set")
+    if script_set_raw is None:
+        script_set_raw = _extract_context_value(payload.context, "script_set")
+    timeout_seconds = int(payload.node.config.get("timeout_seconds") or _extract_context_value(payload.context, "timeout_seconds", 3600) or 3600)
+    asset_id = 0
+    if asset_id_raw not in (None, ""):
+        try:
+            asset_id = int(asset_id_raw)
+        except (TypeError, ValueError) as exc:
+            raise WorkflowRuntimeError("scan task creation received invalid asset_id") from exc
+
+    scan_task = ScanTask(
+        asset_id=asset_id,
+        target=target,
+        target_type=target_type,
+        tool_name=tool_name,
+        profile=profile,
+        script_set=str(script_set_raw) if script_set_raw is not None else None,
+        state="CREATED",
+        timeout_seconds=timeout_seconds,
+        trace_id=payload.trace_id,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    payload.db.add(scan_task)
+    payload.db.commit()
+    payload.db.refresh(scan_task)
+    return NodeExecutionResult(
+        state=WorkflowRunState.SUCCESS.value,
+        output={
+            "scan_task_id": scan_task.id,
+            "scan_task_trace_id": scan_task.trace_id,
+            "scan_target": scan_task.target,
+            "scan_target_type": scan_task.target_type,
+            "scan_profile": scan_task.profile,
+            "scan_tool_name": scan_task.tool_name,
+        },
+    )
+
+
+async def _scan_result_parse_adapter(payload: WorkflowAdapterInput) -> NodeExecutionResult:
+    scan_task_id_raw = _extract_context_value(payload.context, "scan_task_id")
+    try:
+        scan_task_id = int(scan_task_id_raw)
+    except (TypeError, ValueError) as exc:
+        raise WorkflowRuntimeError("scan execution requires scan_task_id") from exc
+
+    scan_task = payload.db.query(ScanTask).filter(ScanTask.id == scan_task_id).first()
+    if scan_task is None:
+        raise WorkflowRuntimeError(f"scan task not found: {scan_task_id}")
+
+    try:
+        result = await scanner._run_scan_workflow(
+            scan_task.id,
+            scan_task.target,
+            scan_task.tool_name,
+            scan_task.profile,
+            scan_task.script_set,
+            payload.actor,
+            scan_task.timeout_seconds,
+        )
+    except Exception as exc:
+        raise WorkflowRuntimeError(str(exc)) from exc
+
+    payload.db.expire_all()
+    refreshed_task = payload.db.query(ScanTask).filter(ScanTask.id == scan_task_id).first()
+    findings_count = (
+        payload.db.query(ScanFinding)
+        .filter(ScanFinding.scan_task_id == scan_task_id)
+        .count()
+    )
+    if refreshed_task is None:
+        raise WorkflowRuntimeError(f"scan task not found after execution: {scan_task_id}")
+    if refreshed_task.state != "REPORTED":
+        status = str(result.get("status") or "failed").lower()
+        retryable = status == "timeout"
+        raise WorkflowRuntimeError(
+            str(refreshed_task.error_message or result.get("error") or status or "scan task failed"),
+            retryable=retryable,
+            output={"scan_task_id": scan_task_id, "result": result},
+        )
+
+    return NodeExecutionResult(
+        state=WorkflowRunState.SUCCESS.value,
+        output={
+            "scan_task_id": scan_task_id,
+            "scan_task_state": refreshed_task.state,
+            "scan_findings_count": findings_count,
+            "scan_raw_output_path": refreshed_task.raw_output_path,
+        },
+    )
+
+
+async def _scan_report_adapter(payload: WorkflowAdapterInput) -> NodeExecutionResult:
+    scan_task_id_raw = _extract_context_value(payload.context, "scan_task_id")
+    try:
+        scan_task_id = int(scan_task_id_raw)
+    except (TypeError, ValueError) as exc:
+        raise WorkflowRuntimeError("scan report generation requires scan_task_id") from exc
+
+    scan_task = payload.db.query(ScanTask).filter(ScanTask.id == scan_task_id).first()
+    if scan_task is None:
+        raise WorkflowRuntimeError(f"scan task not found for report: {scan_task_id}")
+
+    findings = (
+        payload.db.query(ScanFinding)
+        .filter(ScanFinding.scan_task_id == scan_task_id)
+        .order_by(ScanFinding.id.asc())
+        .all()
+    )
+    high_count = sum(1 for item in findings if str(getattr(item, "severity", "") or "").upper() == "HIGH")
+    summary_fallback = f"扫描任务 {scan_task_id} 目标 {scan_task.target} 共 {len(findings)} 条发现（高危 {high_count}）"
+    report_payload = {
+        "scan_task": {
+            "id": scan_task.id,
+            "target": scan_task.target,
+            "target_type": scan_task.target_type,
+            "tool_name": scan_task.tool_name,
+            "profile": scan_task.profile,
+            "state": scan_task.state,
+        },
+        "findings_count": len(findings),
+        "high_findings": high_count,
+        "findings": [
+            {
+                "asset": item.asset,
+                "port": item.port,
+                "service": item.service,
+                "severity": item.severity,
+                "status": item.status,
+                "evidence": item.evidence,
+            }
+            for item in findings[:50]
+        ],
+    }
+    ai_result = await ai_engine.generate_report(
+        str(payload.node.config.get("report_type") or "scan"),
+        report_payload,
+        trace_id=payload.trace_id,
+        with_meta=True,
+    )
+    report_content = str(ai_result.get("text") or "").strip() or summary_fallback
+    summary = _extract_report_summary(report_content, summary_fallback)
+    detail_path = _write_generated_report("scan", report_content, _utc_now())
+    report = AIReport(
+        report_type="scan",
+        scope=str(payload.node.config.get("scope") or f"scan_task:{scan_task_id}"),
+        summary=summary,
+        detail_path=detail_path,
+        trace_id=payload.trace_id,
+        created_at=_utc_now(),
+    )
+    payload.db.add(report)
+    payload.db.commit()
+    payload.db.refresh(report)
+    return NodeExecutionResult(
+        state=WorkflowRunState.SUCCESS.value,
+        output={
+            "report_id": report.id,
+            "report_summary": summary,
+            "report_path": detail_path,
+            "report_degraded": bool(ai_result.get("degraded")),
+            "scan_task_id": scan_task_id,
+        },
+    )
+
+
 async def _trigger_adapter(payload: WorkflowAdapterInput) -> NodeExecutionResult:
     return NodeExecutionResult(
         state=WorkflowRunState.SUCCESS.value,
@@ -378,6 +633,10 @@ _NODE_TYPE_ADAPTERS: dict[str, WorkflowAdapter] = {
     "approval": _manual_approval_adapter,
     "ai_assess": _ai_assess_adapter,
     "mcp_action": _mcp_action_adapter,
+    "scan_asset_select": _scan_asset_select_adapter,
+    "scan_task_create": _scan_task_create_adapter,
+    "scan_result_parse": _scan_result_parse_adapter,
+    "scan_report": _scan_report_adapter,
     "audit": _audit_adapter,
 }
 
@@ -385,6 +644,10 @@ _SERVICE_ADAPTERS: dict[str, WorkflowAdapter] = {
     "ai_engine.assess_threat": _ai_assess_adapter,
     "mcp_client.block_ip": _mcp_action_adapter,
     "mcp_client.unblock_ip": _mcp_action_adapter,
+    "scan.select_asset": _scan_asset_select_adapter,
+    "scan.create_task": _scan_task_create_adapter,
+    "scan.run_task": _scan_result_parse_adapter,
+    "scan.generate_report": _scan_report_adapter,
     "audit_service.log": _audit_adapter,
     "AuditService.log": _audit_adapter,
 }

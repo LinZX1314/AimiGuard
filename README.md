@@ -2417,6 +2417,9 @@ requirements.txt
 - `M3-03 灰度接管（后端）`
   - 代码：`backend/services/workflow_rollout.py`、`backend/api/defense.py`、`tests/test_workflow_m3_03_rollout.py`
   - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py -q`
+- `M4-01 scan 节点模型与适配器（后端）`
+  - 代码：`backend/services/workflow_runtime.py`、`backend/services/workflow_validator.py`、`tests/test_workflow_m4_01_scan_runtime.py`
+  - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py tests/test_workflow_m4_01_scan_runtime.py -q`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2575,10 +2578,10 @@ requirements.txt
 
 ##### M4：scan 链路接入 + 运行监控 + 回放调试（第 4 周）
 
-- [ ] `M4-01` scan 节点模型与适配器（后端）
-  - [ ] 资产选择节点、任务创建节点、结果解析节点。
-  - [ ] 复用 Step 4 资产/任务/结果接口与状态机。
-  - [ ] 漏洞聚合与报告节点对接。
+- [x] `M4-01` scan 节点模型与适配器（后端）
+  - [x] 资产选择节点、任务创建节点、结果解析节点。
+  - [x] 复用 Step 4 资产/任务/结果接口与状态机。
+  - [x] 漏洞聚合与报告节点对接。
   - 验收证据：扫描任务从创建到报告完成端到端测试。
 
 - [ ] `M4-02` 运行监控看板（前端）
