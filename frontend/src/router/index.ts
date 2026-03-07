@@ -14,6 +14,8 @@ import IntegrationsPage from '../views/IntegrationsPage.vue'
 import AuditPage from '../views/AuditPage.vue'
 import ObservabilityPage from '../views/ObservabilityPage.vue'
 import ForbiddenPage from '../views/ForbiddenPage.vue'
+import WorkflowCatalogPage from '../views/WorkflowCatalogPage.vue'
+import WorkflowReadonlyGraphPage from '../views/WorkflowReadonlyGraphPage.vue'
 
 type UserRole = 'admin' | 'operator' | 'viewer'
 
@@ -132,6 +134,18 @@ const router = createRouter({
           meta: { requiredRoles: ['operator', 'admin'] }
         },
         {
+          path: '/workflow/catalog',
+          name: 'workflow-catalog',
+          component: WorkflowCatalogPage,
+          meta: { requiredRoles: ['operator', 'admin'] }
+        },
+        {
+          path: '/workflow/:id/graph',
+          name: 'workflow-readonly-graph',
+          component: WorkflowReadonlyGraphPage,
+          meta: { requiredRoles: ['operator', 'admin'] }
+        },
+        {
           path: '/observability',
           name: 'observability',
           component: ObservabilityPage,
@@ -157,6 +171,10 @@ const router = createRouter({
         {
           path: '/ai-center',
           redirect: '/defense/ai'
+        },
+        {
+          path: '/workflow',
+          redirect: '/workflow/catalog'
         }
       ]
     }

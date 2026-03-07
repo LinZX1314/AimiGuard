@@ -2393,6 +2393,9 @@ requirements.txt
 - `M1-03 工作流基础 API`
   - 代码：`backend/api/workflow.py`、`backend/main.py`
   - 验证：`pytest -q tests/test_workflow_m1_03_api.py`
+- `M1-04 只读可视化页面（前端）`
+  - 代码：`frontend/src/api/workflow.ts`、`frontend/src/views/WorkflowCatalogPage.vue`、`frontend/src/views/WorkflowReadonlyGraphPage.vue`、`frontend/src/router/index.ts`、`frontend/src/components/Layout.vue`、`frontend/src/views/AuditPage.vue`
+  - 验证：`cd frontend && npx vite build`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2489,11 +2492,11 @@ requirements.txt
   - [x] `PUT /api/v1/workflows/{id}` 更新草稿（乐观锁 version_tag）。
   - [x] `POST /api/v1/workflows/{id}/validate` 校验草稿。
   - 验收证据：API 单测 + 契约测试 + 鉴权测试通过。
-- [ ] `M1-04` 只读可视化页面（前端）
-  - [ ] 新增 `WorkflowCatalogPage`（流程列表）。
-  - [ ] 新增 `WorkflowReadonlyGraphPage`（只读画布）。
-  - [ ] 显示节点状态、边条件、版本信息、发布时间。
-  - [ ] 对接详情 API，支持 trace_id 跳转入口。
+- [x] `M1-04` 只读可视化页面（前端）
+  - [x] 新增 `WorkflowCatalogPage`（流程列表）。
+  - [x] 新增 `WorkflowReadonlyGraphPage`（只读画布）。
+  - [x] 显示节点状态、边条件、版本信息、发布时间。
+  - [x] 对接详情 API，支持 trace_id 跳转入口。
   - 验收证据：页面截图 + 端到端冒烟测试。
 
 ##### M2：可视化编辑 + 校验器 + 版本发布/回滚 + 审计闭环（第 2 周）

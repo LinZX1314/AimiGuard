@@ -42,32 +42,49 @@ export interface TTSConfigRequest {
 
 let aiConfigEndpointAvailable: boolean | null = null
 let ttsConfigEndpointAvailable: boolean | null = null
+type SystemPrefix = '/api/system' | '/api/v1/system'
+const systemPrefixes: SystemPrefix[] = ['/api/system', '/api/v1/system']
+let preferredSystemPrefix: SystemPrefix | null = null
 
-const systemGet = async <T>(path: string): Promise<T> => {
-  try {
-    const res = await apiClient.get(`/api/system${path}`, { baseURL: '' })
-    return res as T
-  } catch (error: any) {
-    if (error?.response?.status === 404) {
-      const res = await apiClient.get(`/api/v1/system${path}`, { baseURL: '' })
+const requestSystem = async <T>(method: 'get' | 'post', path: string, payload?: unknown): Promise<T> => {
+  const execute = async (prefix: SystemPrefix): Promise<T> => {
+    if (method === 'get') {
+      const res = await apiClient.get(`${prefix}${path}`, { baseURL: '' })
       return res as T
     }
-    throw error
+
+    const res = await apiClient.post(`${prefix}${path}`, payload, { baseURL: '' })
+    return res as T
   }
+
+  if (preferredSystemPrefix) {
+    try {
+      return await execute(preferredSystemPrefix)
+    } catch (error: any) {
+      if (error?.response?.status !== 404) throw error
+      preferredSystemPrefix = null
+    }
+  }
+
+  let lastError: unknown = null
+  for (const prefix of systemPrefixes) {
+    try {
+      const response = await execute(prefix)
+      preferredSystemPrefix = prefix
+      return response
+    } catch (error: any) {
+      lastError = error
+      if (error?.response?.status !== 404) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError
 }
 
-const systemPost = async <T>(path: string, payload: unknown): Promise<T> => {
-  try {
-    const res = await apiClient.post(`/api/system${path}`, payload, { baseURL: '' })
-    return res as T
-  } catch (error: any) {
-    if (error?.response?.status === 404) {
-      const res = await apiClient.post(`/api/v1/system${path}`, payload, { baseURL: '' })
-      return res as T
-    }
-    throw error
-  }
-}
+const systemGet = async <T>(path: string): Promise<T> => requestSystem<T>('get', path)
+const systemPost = async <T>(path: string, payload: unknown): Promise<T> => requestSystem<T>('post', path, payload)
 
 const createDefaultAIConfig = (): AIAPIConfig => ({
   provider: 'ollama',

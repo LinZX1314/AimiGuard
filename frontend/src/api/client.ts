@@ -83,7 +83,13 @@ export const hasAccessToken = (): boolean => {
     if (!token) return false
 
     const expiryMs = parseJwtExpiryMs(token)
-    if (expiryMs && Date.now() >= expiryMs) {
+    if (!expiryMs) {
+      window.localStorage.removeItem('access_token')
+      window.localStorage.removeItem('user_info')
+      return false
+    }
+
+    if (Date.now() >= expiryMs) {
       window.localStorage.removeItem('access_token')
       window.localStorage.removeItem('user_info')
       return false

@@ -1,19 +1,17 @@
 <template>
   <div class="p-6">
     <div class="mx-auto max-w-[1400px] space-y-6">
-      <!-- Header -->
       <div class="flex items-center justify-between">
         <div class="space-y-1">
-          <h1 class="text-2xl font-semibold">审计中心</h1>
-          <p class="text-sm text-muted-foreground">查询关键操作记录，按 trace_id 追溯全链路行为</p>
+          <h1 class="text-2xl font-semibold">Audit Center</h1>
+          <p class="text-sm text-muted-foreground">Query key operations and trace by trace_id.</p>
         </div>
         <Button variant="outline" size="sm" class="cursor-pointer gap-1.5" :disabled="loading" @click="loadLogs">
           <RefreshCw class="size-3.5" :class="loading ? 'animate-spin' : ''" />
-          刷新
+          Refresh
         </Button>
       </div>
 
-      <!-- 筛选区 -->
       <Card>
         <CardContent class="pt-4 pb-3">
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -24,54 +22,50 @@
             />
             <input
               v-model="query.actor"
-              placeholder="操作者"
+              placeholder="actor"
               class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <input
               v-model="query.action"
-              placeholder="动作关键字"
+              placeholder="action"
               class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <select
               v-model="query.result"
               class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             >
-              <option value="">全部结果</option>
-              <option value="success">成功</option>
-              <option value="failed">失败</option>
+              <option value="">all results</option>
+              <option value="success">success</option>
+              <option value="failed">failed</option>
             </select>
-            <Button size="sm" class="cursor-pointer h-8" @click="search">查询</Button>
+            <Button size="sm" class="cursor-pointer h-8" @click="search">Search</Button>
           </div>
         </CardContent>
       </Card>
 
-      <!-- 数据表 -->
       <Card>
         <CardHeader class="pb-2 flex-row items-center justify-between">
-          <CardTitle class="text-base">审计日志</CardTitle>
-          <span class="text-xs text-muted-foreground">共 {{ total }} 条</span>
+          <CardTitle class="text-base">Audit Logs</CardTitle>
+          <span class="text-xs text-muted-foreground">total {{ total }}</span>
         </CardHeader>
         <CardContent class="p-0">
-          <!-- 加载 -->
           <div v-if="loading" class="p-4 space-y-2">
             <Skeleton v-for="i in 6" :key="i" class="h-10 w-full rounded" />
           </div>
 
-          <!-- 空 -->
           <div v-else-if="logs.length === 0" class="py-12 text-center text-sm text-muted-foreground">
-            暂无审计记录
+            No audit logs.
           </div>
 
-          <!-- 表格 -->
           <div v-else class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-border bg-muted/30">
-                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-36">时间</th>
-                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-24">操作者</th>
-                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">动作</th>
-                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-32">目标</th>
-                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-16">结果</th>
+                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-36">time</th>
+                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-24">actor</th>
+                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">action</th>
+                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-32">target</th>
+                  <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-16">result</th>
                   <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground w-36">trace_id</th>
                 </tr>
               </thead>
@@ -104,24 +98,22 @@
             </table>
           </div>
 
-          <!-- 展开详情 -->
           <div v-if="selectedRow" class="border-t border-border bg-muted/10 p-4 space-y-2">
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">详情</p>
+            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">details</p>
             <div class="grid gap-2 sm:grid-cols-2 text-xs">
-              <div><span class="text-muted-foreground">trace_id：</span><code>{{ selectedRow.trace_id }}</code></div>
-              <div><span class="text-muted-foreground">目标类型：</span>{{ selectedRow.target_type || '—' }}</div>
-              <div><span class="text-muted-foreground">目标 IP：</span>{{ selectedRow.target_ip || '—' }}</div>
-              <div><span class="text-muted-foreground">错误信息：</span>{{ selectedRow.error_message || '—' }}</div>
-              <div class="sm:col-span-2"><span class="text-muted-foreground">原因/备注：</span>{{ selectedRow.reason || '—' }}</div>
+              <div><span class="text-muted-foreground">trace_id: </span><code>{{ selectedRow.trace_id }}</code></div>
+              <div><span class="text-muted-foreground">target_type: </span>{{ selectedRow.target_type || '-' }}</div>
+              <div><span class="text-muted-foreground">target_ip: </span>{{ selectedRow.target_ip || '-' }}</div>
+              <div><span class="text-muted-foreground">error: </span>{{ selectedRow.error_message || '-' }}</div>
+              <div class="sm:col-span-2"><span class="text-muted-foreground">reason: </span>{{ selectedRow.reason || '-' }}</div>
             </div>
           </div>
 
-          <!-- 分页 -->
           <div v-if="totalPages > 1" class="flex items-center justify-between px-4 py-3 border-t border-border">
-            <span class="text-xs text-muted-foreground">第 {{ page }} / {{ totalPages }} 页</span>
+            <span class="text-xs text-muted-foreground">page {{ page }} / {{ totalPages }}</span>
             <div class="flex gap-1">
-              <Button variant="outline" size="sm" class="h-7 text-xs cursor-pointer" :disabled="page <= 1" @click="changePage(page - 1)">上一页</Button>
-              <Button variant="outline" size="sm" class="h-7 text-xs cursor-pointer" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</Button>
+              <Button variant="outline" size="sm" class="h-7 text-xs cursor-pointer" :disabled="page <= 1" @click="changePage(page - 1)">Prev</Button>
+              <Button variant="outline" size="sm" class="h-7 text-xs cursor-pointer" :disabled="page >= totalPages" @click="changePage(page + 1)">Next</Button>
             </div>
           </div>
         </CardContent>
@@ -131,7 +123,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { apiClient } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -153,6 +146,7 @@ interface AuditLog {
   created_at: string
 }
 
+const route = useRoute()
 const logs = ref<AuditLog[]>([])
 const loading = ref(false)
 const total = ref(0)
@@ -167,6 +161,11 @@ const query = reactive({
   action: '',
   result: '',
 })
+
+const syncQueryFromRoute = () => {
+  const traceFromRoute = route.query.trace_id
+  query.trace_id = typeof traceFromRoute === 'string' ? traceFromRoute : ''
+}
 
 const loadLogs = async () => {
   loading.value = true
@@ -201,10 +200,19 @@ const changePage = (p: number) => {
 }
 
 const formatTime = (t: string) =>
-  t ? new Date(t).toLocaleString('zh-CN', {
-    month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }) : '—'
+  t
+    ? new Date(t).toLocaleString('zh-CN', {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+    : '-'
 
-onMounted(loadLogs)
+watch(() => route.query.trace_id, () => {
+  syncQueryFromRoute()
+})
+
+onMounted(() => {
+  syncQueryFromRoute()
+  loadLogs()
+})
 </script>
