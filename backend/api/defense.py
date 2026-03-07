@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import asyncio
 import hashlib
 import json
+import os
 import uuid
 from typing import Any, Callable, Dict, List, Optional, cast
 
@@ -9,17 +10,23 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, sessionmaker
 
-from core.database import ExecutionTask, SessionLocal, ScanFinding, ThreatEvent, User, get_db
+from core.database import ExecutionTask, SessionLocal, ScanFinding, ThreatEvent, User, WorkflowRun, WorkflowStepRun, get_db
 from api.auth import require_permissions
 from services.ai_engine import ai_engine
 from services.audit_service import AuditService
 from services.mcp_client import mcp_client
+from services.workflow_runtime import run_published_workflow
 
 router = APIRouter(prefix="/api/v1/defense", tags=["defense"])
 compat_router = APIRouter(tags=["defense"])
 
 MAX_BLOCK_RETRIES = 3
 BASE_RETRY_DELAY_SECONDS = 1.0
+
+
+def _get_defense_runtime_workflow_key() -> str:
+    value = os.getenv("DEFENSE_RUNTIME_WORKFLOW_KEY", "defense_default").strip()
+    return value or "defense_default"
 
 
 class HFishHTTPInfo(BaseModel):
@@ -289,6 +296,149 @@ def _extract_mcp_error(result: Dict[str, Any]) -> str:
     return "mcp_call_failed"
 
 
+def _runtime_retry_count(db: Session, workflow_run_id: int) -> int:
+    return (
+        db.query(WorkflowStepRun)
+        .filter(
+            WorkflowStepRun.workflow_run_id == workflow_run_id,
+            WorkflowStepRun.step_state == "RETRYING",
+        )
+        .count()
+    )
+
+
+def _latest_runtime_step(db: Session, workflow_run_id: int) -> WorkflowStepRun | None:
+    return (
+        db.query(WorkflowStepRun)
+        .filter(WorkflowStepRun.workflow_run_id == workflow_run_id)
+        .order_by(WorkflowStepRun.id.desc())
+        .first()
+    )
+
+
+def _sync_task_from_runtime(
+    db: Session,
+    *,
+    event_id: int,
+    task_id: int,
+    workflow_run_id: int,
+    trace_id: str,
+) -> None:
+    workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+    latest_step = _latest_runtime_step(db, workflow_run_id)
+    retry_count = _runtime_retry_count(db, workflow_run_id)
+    now = _utc_now()
+    task_state = "FAILED"
+    event_state = "FAILED"
+    error_message = None
+    audit_result = "failed"
+    audit_reason: Dict[str, Any] = {
+        "workflow_run_id": workflow_run_id,
+        "workflow_state": getattr(workflow_run, "run_state", None),
+        "node_id": getattr(latest_step, "node_id", None),
+        "error": getattr(latest_step, "error_message", None),
+    }
+
+    if workflow_run is not None and workflow_run.run_state == "SUCCESS":
+        task_state = "SUCCESS"
+        event_state = "DONE"
+        audit_result = "success"
+        audit_reason["context"] = json.loads(workflow_run.context_json or "{}") if workflow_run.context_json else {}
+    elif workflow_run is not None and workflow_run.run_state == "MANUAL_REQUIRED":
+        task_state = "MANUAL_REQUIRED"
+        error_message = getattr(latest_step, "error_message", None) or "manual_approval_required"
+    elif latest_step is not None and latest_step.node_type in {"mcp_action", "manual_approval"}:
+        task_state = "MANUAL_REQUIRED"
+        error_message = latest_step.error_message
+    elif latest_step is not None:
+        error_message = latest_step.error_message
+
+    db.query(ExecutionTask).filter(ExecutionTask.id == task_id).update(
+        {
+            "state": task_state,
+            "retry_count": retry_count,
+            "error_message": error_message,
+            "started_at": getattr(workflow_run, "started_at", None) or now,
+            "ended_at": getattr(workflow_run, "ended_at", None) or now,
+            "updated_at": now,
+        }
+    )
+    db.query(ThreatEvent).filter(ThreatEvent.id == event_id).update(
+        {"status": event_state, "updated_at": now}
+    )
+    db.commit()
+    AuditService.log(
+        db=db,
+        actor="defense_executor",
+        action="block_ip_execute",
+        target=f"execution_task:{task_id}",
+        target_type="execution_task",
+        target_ip=None,
+        reason=_json_dumps(audit_reason),
+        result=audit_result,
+        trace_id=trace_id,
+    )
+
+
+async def _execute_block_task_via_workflow_runtime(
+    db: Session,
+    event: ThreatEvent,
+    task: ExecutionTask,
+    trace_id: str,
+    approval_reason: Optional[str],
+) -> bool:
+    task_id = _safe_int(getattr(task, "id", 0), 0)
+    event_id = _safe_int(getattr(event, "id", 0), 0)
+    if task_id <= 0 or event_id <= 0:
+        return False
+
+    now = _utc_now()
+    db.query(ExecutionTask).filter(ExecutionTask.id == task_id).update(
+        {"state": "RUNNING", "started_at": now, "updated_at": now}
+    )
+    db.query(ThreatEvent).filter(ThreatEvent.id == event_id).update(
+        {"status": "EXECUTING", "updated_at": now}
+    )
+    db.commit()
+
+    event_payload = {
+        "id": event_id,
+        "ip": str(getattr(event, "ip", "") or ""),
+        "attack_count": _safe_int(getattr(event, "attack_count", 1), 1),
+        "threat_label": str(getattr(event, "threat_label", "") or ""),
+        "device_id": getattr(task, "device_id", None),
+        "history": str(getattr(event, "ai_reason", "") or "") or None,
+    }
+    input_payload = {
+        "event": event_payload,
+        "approval_decisions": {
+            "approval": {"approved": True, "reason": approval_reason or "approved"}
+        },
+    }
+
+    try:
+        runtime_result = await run_published_workflow(
+            db,
+            workflow_key=_get_defense_runtime_workflow_key(),
+            input_payload=input_payload,
+            trigger_source="defense_approve",
+            trigger_ref=f"execution_task:{task_id}",
+            actor="defense_executor",
+            trace_id=trace_id,
+        )
+    except ValueError:
+        return False
+
+    _sync_task_from_runtime(
+        db,
+        event_id=event_id,
+        task_id=task_id,
+        workflow_run_id=runtime_result.run_id,
+        trace_id=trace_id,
+    )
+    return True
+
+
 async def _execute_block_task(
     db: Session,
     event: ThreatEvent,
@@ -415,6 +565,7 @@ async def _execute_block_task(
 async def _run_execution_task_background(
     task_id: int,
     trace_id: str,
+    approval_reason: Optional[str],
     session_factory: Callable[[], Session] = SessionLocal,
 ) -> None:
     db = session_factory()
@@ -435,6 +586,16 @@ async def _run_execution_task_background(
                 }
             )
             db.commit()
+            return
+
+        handled_by_runtime = await _execute_block_task_via_workflow_runtime(
+            db=db,
+            event=event,
+            task=task,
+            trace_id=trace_id,
+            approval_reason=approval_reason,
+        )
+        if handled_by_runtime:
             return
 
         await _execute_block_task(db=db, event=event, task=task, trace_id=trace_id)
@@ -961,6 +1122,7 @@ async def approve_event(
         _run_execution_task_background,
         task_id,
         trace_id,
+        req.reason,
         request_session_factory,
     )
 

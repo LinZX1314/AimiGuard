@@ -2411,6 +2411,9 @@ requirements.txt
 - `M3-01 运行时编排器核心（后端）`
   - 代码：`backend/services/workflow_runtime.py`、`tests/test_workflow_m3_01_runtime.py`
   - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py -q`
+- `M3-02 defense 适配器（后端）`
+  - 代码：`backend/api/defense.py`、`backend/services/workflow_runtime.py`、`tests/test_workflow_m3_02_defense_runtime.py`
+  - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py -q`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2553,11 +2556,11 @@ requirements.txt
   - [x] 状态推进：`QUEUED->RUNNING->RETRYING->SUCCESS/FAILED/MANUAL_REQUIRED`。
   - 验收证据：运行状态机测试 + 幂等测试。
 
-- [ ] `M3-02` defense 适配器（后端）
-  - [ ] 适配 AI 节点：复用 `ai_engine.assess_threat`。
-  - [ ] 适配动作节点：复用 `mcp_client.block_ip`。
-  - [ ] 适配审计节点：复用 `audit_service`。
-  - [ ] 失败分类：可重试/不可重试/人工介入。
+- [x] `M3-02` defense 适配器（后端）
+  - [x] 适配 AI 节点：复用 `ai_engine.assess_threat`。
+  - [x] 适配动作节点：复用 `mcp_client.block_ip`。
+  - [x] 适配审计节点：复用 `audit_service`。
+  - [x] 失败分类：可重试/不可重试/人工介入。
   - 验收证据：从 HFish 入站到执行完成全链路集成测试。
 
 - [ ] `M3-03` 灰度接管（后端）
