@@ -372,6 +372,7 @@ import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, ref, watch 
 import type { ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveMode } from '@/composables/useActiveMode'
+import { hasAnyPermission, parseStoredUserInfo } from '@/composables/useAuthz'
 import { authApi } from '../api/auth'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -689,6 +690,7 @@ interface SidebarItem {
   label: string
   icon: unknown
   roles?: SidebarRole[]
+  permissions?: string[]
 }
 
 const sidebarMap: Record<ModeKey, SidebarItem[]> = {
@@ -697,7 +699,7 @@ const sidebarMap: Record<ModeKey, SidebarItem[]> = {
     { to: '/defense/realtime', label: 'Realtime', icon: Activity },
     { to: '/defense/events', label: 'Threat Ops', icon: ShieldAlert },
     { to: '/defense/ai', label: 'AI Insight', icon: BrainCircuit },
-    { to: '/workflow/catalog', label: 'Workflow', icon: Blocks, roles: ['admin', 'operator'] },
+    { to: '/workflow/catalog', label: 'Workflow', icon: Blocks, permissions: ['workflow_view'] },
   ],
   probe: [
     { to: '/probe/dashboard', label: 'Dashboard', icon: Activity },
@@ -720,7 +722,11 @@ const currentSidebarItems = computed(() => {
   const roleValue = role.value === 'admin' || role.value === 'operator' || role.value === 'viewer'
     ? role.value
     : 'viewer'
-  return sidebarMap[activeMode.value].filter((item) => !item.roles || item.roles.includes(roleValue))
+  return sidebarMap[activeMode.value].filter((item) => {
+    if (item.roles && !item.roles.includes(roleValue)) return false
+    if (item.permissions && !hasAnyPermission(item.permissions)) return false
+    return true
+  })
 })
 
 const roleText = computed(() => {
@@ -1059,9 +1065,8 @@ onMounted(() => {
   loadSidebarPreference()
   sidebarAnimatedWidth.value = getSidebarTargetWidth()
 
-  const userInfo = localStorage.getItem('user_info')
-  if (userInfo) {
-    const user = JSON.parse(userInfo)
+  const user = parseStoredUserInfo()
+  if (user) {
     username.value = user.username || 'user'
     role.value = user.role || 'viewer'
   }

@@ -185,6 +185,7 @@ const loadProfile = async () => {
       ...existing,
       username: data?.username,
       role: data?.role,
+      permissions: data?.permissions ?? [],
     }))
   } catch {
     // fallback to localStorage

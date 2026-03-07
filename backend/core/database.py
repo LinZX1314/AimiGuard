@@ -57,6 +57,10 @@ _RBAC_PERMISSION_DEFS = (
     ("view_audit", "audit", "view", "View audit logs"),
     ("view_system_mode", "system", "view_mode", "View system mode"),
     ("set_system_mode", "system", "set_mode", "Set system mode"),
+    ("workflow_view", "workflow", "view", "View workflow definitions"),
+    ("workflow_edit", "workflow", "edit", "Edit workflow drafts"),
+    ("workflow_publish", "workflow", "publish", "Publish workflow versions"),
+    ("workflow_rollback", "workflow", "rollback", "Rollback workflow versions"),
     ("system_rollback", "system", "rollback", "Rollback system snapshot"),
     ("generate_report", "report", "generate", "Generate security reports"),
 )
@@ -88,6 +92,7 @@ _RBAC_ROLE_PERMISSION_NAMES = {
         "view_plugins",
         "create_tts_task",
         "view_tts_tasks",
+        "workflow_view",
         "view_audit",
         "view_system_mode",
         "system:config",

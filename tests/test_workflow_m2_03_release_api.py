@@ -30,6 +30,7 @@ def _create_payload() -> dict:
 def test_workflow_publish_and_rollback_flow(client, admin_token, test_db):
     headers = _auth(admin_token)
     payload = _create_payload()
+    confirmation_text = payload["workflow_key"]
 
     create_resp = client.post("/api/v1/workflows", json=payload, headers=headers)
     assert create_resp.status_code == 200
@@ -42,6 +43,8 @@ def test_workflow_publish_and_rollback_flow(client, admin_token, test_db):
             "canary_percent": 10,
             "effective_at": "2026-03-07T12:00:00Z",
             "approval_reason": "首次灰度发布",
+            "approval_passed": True,
+            "confirmation_text": confirmation_text,
             "trace_id": "trace-m2-03-publish-v1",
         },
         headers=headers,
@@ -84,6 +87,8 @@ def test_workflow_publish_and_rollback_flow(client, admin_token, test_db):
             "version_tag": 2,
             "canary_percent": 50,
             "approval_reason": "扩大灰度",
+            "approval_passed": True,
+            "confirmation_text": confirmation_text,
             "trace_id": "trace-m2-03-publish-v2",
         },
         headers=headers,
@@ -97,6 +102,7 @@ def test_workflow_publish_and_rollback_flow(client, admin_token, test_db):
         json={
             "target_version": 1,
             "reason": "回滚演练",
+            "confirmation_text": confirmation_text,
             "trace_id": "trace-m2-03-rollback-v1",
         },
         headers=headers,
@@ -149,6 +155,7 @@ def test_workflow_publish_and_rollback_flow(client, admin_token, test_db):
 def test_workflow_publish_conflict_returns_409(client, admin_token):
     headers = _auth(admin_token)
     payload = _create_payload()
+    confirmation_text = payload["workflow_key"]
 
     create_resp = client.post("/api/v1/workflows", json=payload, headers=headers)
     assert create_resp.status_code == 200
@@ -164,6 +171,8 @@ def test_workflow_publish_conflict_returns_409(client, admin_token):
                 "version_tag": 1,
                 "canary_percent": 10,
                 "approval_reason": "模拟并发冲突",
+                "approval_passed": True,
+                "confirmation_text": confirmation_text,
             },
             headers=headers,
         )

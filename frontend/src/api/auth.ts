@@ -11,12 +11,14 @@ export interface TokenResponse {
   user: {
     username: string
     role: string
+    permissions: string[]
   }
 }
 
 export interface UserInfo {
   username: string
   role: string
+  permissions: string[]
 }
 
 export const authApi = {

@@ -132,6 +132,16 @@ def _set_published_version(
     return previous_published_version
 
 
+def _ensure_confirmation(required_text: str, confirmation_text: str, *, error_code: int, action: str) -> None:
+    if confirmation_text.strip() == required_text:
+        return
+    raise HTTPException(status_code=400, detail={
+        "code": error_code,
+        "message": f"{action} confirmation mismatch",
+        "data": {"required_confirmation": required_text},
+    })
+
+
 def _normalize_and_validate_dsl(workflow_key: str, dsl: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(dsl)
     if not payload.get("workflow_id"):
@@ -163,12 +173,15 @@ class WorkflowPublishRequest(BaseModel):
     canary_percent: int = Field(default=100, ge=1, le=100)
     effective_at: Optional[datetime] = None
     approval_reason: str = Field(min_length=1, max_length=500)
+    approval_passed: bool = False
+    confirmation_text: str = Field(min_length=1, max_length=120)
     trace_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class WorkflowRollbackRequest(BaseModel):
     target_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=500)
+    confirmation_text: str = Field(min_length=1, max_length=120)
     trace_id: Optional[str] = Field(default=None, max_length=128)
 
 
@@ -179,7 +192,7 @@ async def list_workflows(
     keyword: Optional[str] = Query(default=None),
     definition_state: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_view")),
 ):
     query = db.query(WorkflowDefinition)
     if keyword:
@@ -216,7 +229,7 @@ async def list_workflows(
 async def create_workflow(
     payload: WorkflowCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_edit")),
 ):
     existing = (
         db.query(WorkflowDefinition)
@@ -269,7 +282,7 @@ async def create_workflow(
 async def get_workflow(
     workflow_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_view")),
 ):
     definition = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == workflow_id).first()
     if definition is None:
@@ -304,7 +317,7 @@ async def update_workflow(
     workflow_id: int,
     payload: WorkflowUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_edit")),
 ):
     definition = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == workflow_id).first()
     if definition is None:
@@ -356,7 +369,7 @@ async def update_workflow(
 async def validate_workflow(
     workflow_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_edit")),
 ):
     definition = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == workflow_id).first()
     if definition is None:
@@ -413,7 +426,7 @@ async def publish_workflow(
     payload: WorkflowPublishRequest,
     req: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_publish")),
 ):
     definition = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == workflow_id).first()
     if definition is None:
@@ -428,6 +441,18 @@ async def publish_workflow(
 
     trace_id = payload.trace_id or getattr(req.state, "trace_id", None)
     actor = str(current_user.username)
+    if not payload.approval_passed:
+        raise HTTPException(status_code=400, detail={
+            "code": 40042,
+            "message": "workflow publish requires approval",
+            "data": {"workflow_id": definition.id},
+        })
+    _ensure_confirmation(
+        definition.workflow_key,
+        payload.confirmation_text,
+        error_code=40043,
+        action="workflow publish",
+    )
     publish_lock = get_publish_lock(definition.id)
     if not publish_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail={
@@ -517,7 +542,7 @@ async def rollback_workflow(
     payload: WorkflowRollbackRequest,
     req: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("system:config")),
+    current_user: User = Depends(require_permissions("workflow_rollback")),
 ):
     definition = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == workflow_id).first()
     if definition is None:
@@ -525,6 +550,12 @@ async def rollback_workflow(
 
     trace_id = payload.trace_id or getattr(req.state, "trace_id", None)
     actor = str(current_user.username)
+    _ensure_confirmation(
+        definition.workflow_key,
+        payload.confirmation_text,
+        error_code=40044,
+        action="workflow rollback",
+    )
     publish_lock = get_publish_lock(definition.id)
     if not publish_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail={

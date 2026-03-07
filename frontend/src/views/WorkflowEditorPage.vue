@@ -16,6 +16,8 @@
               placeholder="流程名称"
               @input="markDirty"
             />
+            <Badge class="border-sky-500/30 bg-sky-500/12 text-sky-300 text-[10px]">{{ definitionState }}</Badge>
+            <Badge v-if="publishedVersion" class="border-cyan-500/30 bg-cyan-500/12 text-cyan-300 text-[10px]">发布 v{{ publishedVersion }}</Badge>
             <Badge v-if="isDirty" class="border-amber-500/30 bg-amber-500/12 text-amber-300 text-[10px]">未保存</Badge>
             <Badge v-if="autoSaveStatus" class="border-emerald-500/30 bg-emerald-500/12 text-emerald-300 text-[10px]">{{ autoSaveStatus }}</Badge>
           </div>
@@ -42,6 +44,12 @@
           </Button>
           <Button variant="default" size="sm" class="cursor-pointer" :disabled="saving" @click="validateDraft">
             <CheckCircle class="mr-1 h-3.5 w-3.5" /> 校验
+          </Button>
+          <Button v-if="canPublishWorkflow" variant="default" size="sm" class="cursor-pointer" :disabled="saving || publishing" @click="openPublishDialog">
+            <ShieldCheck class="mr-1 h-3.5 w-3.5" /> {{ publishing ? '发布中...' : '发布' }}
+          </Button>
+          <Button v-if="canRollbackWorkflow" variant="outline" size="sm" class="cursor-pointer" :disabled="saving || rollingBack" @click="openRollbackDialog">
+            <ArrowLeft class="mr-1 h-3.5 w-3.5" /> {{ rollingBack ? '回滚中...' : '回滚' }}
           </Button>
         </div>
       </div>
@@ -351,6 +359,72 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog v-model:open="showPublishDialog">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>审批通过后发布</DialogTitle>
+          <DialogDescription>输入审批理由，并键入 workflow_key `{{ workflowKey }}` 完成二次确认；若拒绝，则保留当前草稿。</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div class="space-y-1.5">
+            <p class="text-xs text-muted-foreground">审批理由</p>
+            <textarea v-model="publishReason" class="min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"></textarea>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="space-y-1.5">
+              <p class="text-xs text-muted-foreground">灰度比例</p>
+              <input v-model.number="publishCanaryPercent" type="number" min="1" max="100" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+            </div>
+            <div class="space-y-1.5">
+              <p class="text-xs text-muted-foreground">生效时间</p>
+              <input v-model="publishEffectiveAt" type="datetime-local" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <p class="text-xs text-muted-foreground">二次确认</p>
+            <input v-model="publishConfirmationText" type="text" :placeholder="workflowKey" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+        </div>
+        <DialogFooter class="gap-2">
+          <Button variant="outline" class="cursor-pointer" @click="rejectPublishApproval">拒绝并保留草稿</Button>
+          <Button class="cursor-pointer" :disabled="publishing" @click="submitPublish">确认发布</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="showRollbackDialog">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>按版本回滚</DialogTitle>
+          <DialogDescription>输入回滚原因，并键入 workflow_key `{{ workflowKey }}` 完成二次确认。</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="space-y-1.5">
+              <p class="text-xs text-muted-foreground">目标版本</p>
+              <input v-model.number="rollbackTargetVersion" type="number" min="1" :max="versionTag" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+            </div>
+            <div class="space-y-1.5">
+              <p class="text-xs text-muted-foreground">当前已发布</p>
+              <div class="flex h-9 items-center rounded-md border border-input bg-muted/20 px-3 text-sm text-muted-foreground">{{ publishedVersion ? `v${publishedVersion}` : '--' }}</div>
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <p class="text-xs text-muted-foreground">回滚原因</p>
+            <textarea v-model="rollbackReason" class="min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"></textarea>
+          </div>
+          <div class="space-y-1.5">
+            <p class="text-xs text-muted-foreground">二次确认</p>
+            <input v-model="rollbackConfirmationText" type="text" :placeholder="workflowKey" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+        </div>
+        <DialogFooter class="gap-2">
+          <Button variant="outline" class="cursor-pointer" @click="showRollbackDialog = false">取消</Button>
+          <Button variant="destructive" class="cursor-pointer" :disabled="rollingBack" @click="submitRollback">确认回滚</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -389,14 +463,18 @@ import {
 import {
   workflowApi,
   type WorkflowCreatePayload,
+  type WorkflowDefinitionState,
   type WorkflowDsl,
   type WorkflowEdge,
   type WorkflowNode,
+  type WorkflowPublishPayload,
+  type WorkflowRollbackPayload,
   type WorkflowUpdatePayload,
 } from '@/api/workflow'
 import { getRequestErrorMessage } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { hasPermission } from '@/composables/useAuthz'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -443,6 +521,8 @@ const workflowName = ref('新建流程')
 const workflowKey = ref('')
 const workflowDescription = ref('')
 const versionTag = ref(1)
+const definitionState = ref<WorkflowDefinitionState>('DRAFT')
+const publishedVersion = ref<number | null>(null)
 
 const selectedNodeId = ref<string>('')
 const selectedEdgeId = ref<string>('')
@@ -466,10 +546,25 @@ const newConfigKey = ref('')
 const newConfigValue = ref('')
 
 const showLeaveDialog = ref(false)
+const showPublishDialog = ref(false)
+const showRollbackDialog = ref(false)
 let pendingLeaveRoute: (() => void) | null = null
+
+const publishReason = ref('')
+const publishCanaryPercent = ref(100)
+const publishEffectiveAt = ref('')
+const publishConfirmationText = ref('')
+const rollbackReason = ref('')
+const rollbackTargetVersion = ref(1)
+const rollbackConfirmationText = ref('')
+const publishing = ref(false)
+const rollingBack = ref(false)
 
 const AUTO_SAVE_DELAY = 30_000
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+const canPublishWorkflow = computed(() => !isNewMode.value && hasPermission('workflow_publish'))
+const canRollbackWorkflow = computed(() => !isNewMode.value && hasPermission('workflow_rollback') && publishedVersion.value !== null)
 
 const nodeTypeIcon = (type: string) => {
   const map: Record<string, unknown> = {
@@ -769,6 +864,8 @@ const saveDraft = async (silent = false) => {
       const result = await workflowApi.createWorkflow(payload)
       isDirty.value = false
       versionTag.value = result.version_tag
+      definitionState.value = result.definition_state
+      publishedVersion.value = result.published_version
       if (!silent) successText.value = `流程创建成功 (id=${result.id})`
       router.replace({ path: `/workflow/${result.id}/edit` })
     } else {
@@ -782,6 +879,8 @@ const saveDraft = async (silent = false) => {
       const result = await workflowApi.updateWorkflow(workflowId.value!, payload)
       isDirty.value = false
       versionTag.value = result.version_tag
+      definitionState.value = result.definition_state
+      publishedVersion.value = result.published_version
       if (!silent) successText.value = '草稿已保存'
     }
   } catch (err) {
@@ -808,6 +907,121 @@ const validateDraft = async () => {
     }
   } catch (err) {
     errorText.value = getRequestErrorMessage(err, '校验请求失败')
+  }
+}
+
+const resetPublishDialog = () => {
+  publishReason.value = ''
+  publishCanaryPercent.value = 100
+  publishEffectiveAt.value = ''
+  publishConfirmationText.value = ''
+}
+
+const resetRollbackDialog = () => {
+  rollbackReason.value = ''
+  rollbackTargetVersion.value = publishedVersion.value && publishedVersion.value > 1 ? publishedVersion.value - 1 : 1
+  rollbackConfirmationText.value = ''
+}
+
+const openPublishDialog = () => {
+  resetPublishDialog()
+  showPublishDialog.value = true
+}
+
+const rejectPublishApproval = () => {
+  showPublishDialog.value = false
+  successText.value = '已拒绝发布，草稿已保留'
+}
+
+const openRollbackDialog = () => {
+  resetRollbackDialog()
+  showRollbackDialog.value = true
+}
+
+const submitPublish = async () => {
+  if (!workflowId.value) {
+    errorText.value = '请先保存流程后再发布'
+    return
+  }
+  if (!publishReason.value.trim()) {
+    errorText.value = '请输入审批理由'
+    return
+  }
+  if (publishConfirmationText.value.trim() !== workflowKey.value) {
+    errorText.value = '二次确认内容不正确'
+    return
+  }
+  if (publishCanaryPercent.value < 1 || publishCanaryPercent.value > 100) {
+    errorText.value = '灰度比例必须在 1 到 100 之间'
+    return
+  }
+  if (isDirty.value) {
+    await saveDraft(true)
+    if (isDirty.value) return
+  }
+  publishing.value = true
+  errorText.value = ''
+  try {
+    const payload: WorkflowPublishPayload = {
+      version_tag: versionTag.value,
+      canary_percent: publishCanaryPercent.value,
+      effective_at: publishEffectiveAt.value ? new Date(publishEffectiveAt.value).toISOString() : undefined,
+      approval_reason: publishReason.value.trim(),
+      approval_passed: true,
+      confirmation_text: publishConfirmationText.value.trim(),
+    }
+    const result = await workflowApi.publishWorkflow(workflowId.value, payload)
+    showPublishDialog.value = false
+    definitionState.value = result.definition_state
+    publishedVersion.value = result.published_version
+    successText.value = `发布成功：v${result.published_version ?? result.version}`
+    await loadExistingWorkflow()
+  } catch (err) {
+    errorText.value = getRequestErrorMessage(err, '发布失败')
+  } finally {
+    publishing.value = false
+  }
+}
+
+const submitRollback = async () => {
+  if (!workflowId.value) {
+    errorText.value = '请先保存流程后再回滚'
+    return
+  }
+  if (!rollbackReason.value.trim()) {
+    errorText.value = '请输入回滚原因'
+    return
+  }
+  if (rollbackConfirmationText.value.trim() !== workflowKey.value) {
+    errorText.value = '二次确认内容不正确'
+    return
+  }
+  if (rollbackTargetVersion.value < 1 || rollbackTargetVersion.value > versionTag.value) {
+    errorText.value = '目标版本超出范围'
+    return
+  }
+  if (isDirty.value) {
+    await saveDraft(true)
+    if (isDirty.value) return
+  }
+  rollingBack.value = true
+  errorText.value = ''
+  try {
+    const payload: WorkflowRollbackPayload = {
+      target_version: rollbackTargetVersion.value,
+      reason: rollbackReason.value.trim(),
+      confirmation_text: rollbackConfirmationText.value.trim(),
+    }
+    const result = await workflowApi.rollbackWorkflow(workflowId.value, payload)
+    showRollbackDialog.value = false
+    definitionState.value = result.definition_state
+    publishedVersion.value = result.published_version
+    successText.value = `已回滚到 v${result.rolled_back_to_version}`
+    await loadExistingWorkflow()
+  } catch (err) {
+    errorText.value = getRequestErrorMessage(err, '回滚失败')
+  } finally {
+    rollingBack.value = false
   }
 }
 
@@ -894,6 +1108,9 @@ const loadExistingWorkflow = async () => {
     workflowKey.value = detail.workflow.workflow_key
     workflowDescription.value = detail.workflow.description || ''
     versionTag.value = detail.workflow.version_tag
+    definitionState.value = detail.workflow.definition_state
+    publishedVersion.value = detail.workflow.published_version
+    rollbackTargetVersion.value = detail.workflow.published_version && detail.workflow.published_version > 1 ? detail.workflow.published_version - 1 : 1
     loadDslToCanvas(detail.dsl as unknown as Record<string, unknown>)
     isDirty.value = false
     syncJsonFromCanvas()

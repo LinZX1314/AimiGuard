@@ -108,6 +108,47 @@ export interface WorkflowUpdatePayload {
   change_note?: string
 }
 
+export interface WorkflowPublishPayload {
+  version_tag?: number
+  canary_percent: number
+  effective_at?: string
+  approval_reason: string
+  approval_passed: boolean
+  confirmation_text: string
+  trace_id?: string
+}
+
+export interface WorkflowPublishResult {
+  workflow_id: number
+  workflow_key: string
+  version: number
+  published_version: number | null
+  previous_published_version: number | null
+  definition_state: WorkflowDefinitionState
+  canary_percent: number
+  effective_at: string | null
+  approval_reason: string
+  trace_id: string | null
+}
+
+export interface WorkflowRollbackPayload {
+  target_version: number
+  reason: string
+  confirmation_text: string
+  trace_id?: string
+}
+
+export interface WorkflowRollbackResult {
+  workflow_id: number
+  workflow_key: string
+  rolled_back_to_version: number
+  previous_published_version: number | null
+  published_version: number | null
+  definition_state: WorkflowDefinitionState
+  reason: string
+  trace_id: string | null
+}
+
 export interface WorkflowValidateIssue {
   code: string
   category: string
@@ -156,6 +197,36 @@ const normalizeValidationIssue = (value: unknown): WorkflowValidateIssue => {
     node_id: typeof record.node_id === 'string' ? record.node_id : undefined,
     value: record.value,
     allowed_values: Array.isArray(record.allowed_values) ? record.allowed_values.map((item) => String(item)) : undefined,
+  }
+}
+
+const normalizePublishResult = (value: unknown, workflowId: number): WorkflowPublishResult => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    workflow_id: toNumber(record.workflow_id, workflowId),
+    workflow_key: typeof record.workflow_key === 'string' ? record.workflow_key : '',
+    version: toNumber(record.version, 0),
+    published_version: record.published_version == null ? null : toNumber(record.published_version, 0),
+    previous_published_version: record.previous_published_version == null ? null : toNumber(record.previous_published_version, 0),
+    definition_state: typeof record.definition_state === 'string' ? record.definition_state : 'PUBLISHED',
+    canary_percent: toNumber(record.canary_percent, 100),
+    effective_at: toStringOrNull(record.effective_at),
+    approval_reason: typeof record.approval_reason === 'string' ? record.approval_reason : '',
+    trace_id: toStringOrNull(record.trace_id),
+  }
+}
+
+const normalizeRollbackResult = (value: unknown, workflowId: number): WorkflowRollbackResult => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    workflow_id: toNumber(record.workflow_id, workflowId),
+    workflow_key: typeof record.workflow_key === 'string' ? record.workflow_key : '',
+    rolled_back_to_version: toNumber(record.rolled_back_to_version, 0),
+    previous_published_version: record.previous_published_version == null ? null : toNumber(record.previous_published_version, 0),
+    published_version: record.published_version == null ? null : toNumber(record.published_version, 0),
+    definition_state: typeof record.definition_state === 'string' ? record.definition_state : 'PUBLISHED',
+    reason: typeof record.reason === 'string' ? record.reason : '',
+    trace_id: toStringOrNull(record.trace_id),
   }
 }
 
@@ -308,5 +379,15 @@ export const workflowApi = {
           : {},
       },
     }
+  },
+
+  async publishWorkflow(workflowId: number, payload: WorkflowPublishPayload): Promise<WorkflowPublishResult> {
+    const data = await apiClient.post(`/workflows/${workflowId}/publish`, payload) as unknown
+    return normalizePublishResult(data, workflowId)
+  },
+
+  async rollbackWorkflow(workflowId: number, payload: WorkflowRollbackPayload): Promise<WorkflowRollbackResult> {
+    const data = await apiClient.post(`/workflows/${workflowId}/rollback`, payload) as unknown
+    return normalizeRollbackResult(data, workflowId)
   },
 }

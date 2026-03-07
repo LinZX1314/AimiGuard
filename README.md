@@ -2405,6 +2405,9 @@ requirements.txt
 - `M2-03 发布、灰度、回滚 API（后端）`
   - 代码：`backend/api/workflow.py`、`backend/services/workflow_release.py`、`tests/test_workflow_m2_03_release_api.py`
   - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py -q`
+- `M2-04 RBAC 与审批门禁（后端+前端）`
+  - 代码：`backend/core/database.py`、`backend/api/auth.py`、`backend/api/workflow.py`、`tests/conftest.py`、`tests/test_workflow_m2_04_rbac.py`、`frontend/src/router/index.ts`、`frontend/src/components/Layout.vue`、`frontend/src/views/WorkflowCatalogPage.vue`、`frontend/src/views/WorkflowEditorPage.vue`、`frontend/src/api/auth.ts`、`frontend/src/api/workflow.ts`、`frontend/src/composables/useAuthz.ts`
+  - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py -q`、`cd frontend && npx vite build`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2531,11 +2534,11 @@ requirements.txt
   - [x] 落审计：`actor/action/reason/result/trace_id`。
   - 验收证据：并发发布冲突测试 + 回滚回放测试。
 
-- [ ] `M2-04` RBAC 与审批门禁（后端+前端）
-  - [ ] 新增权限点：`workflow_view/edit/publish/rollback`。
-  - [ ] 高风险操作二次确认（理由 + 二次口令/确认弹窗）。
-  - [ ] 审批通过后才能发布，拒绝时保留草稿。
-  - [ ] 前端按钮按权限自动显隐。
+- [x] `M2-04` RBAC 与审批门禁（后端+前端）
+  - [x] 新增权限点：`workflow_view/edit/publish/rollback`。
+  - [x] 高风险操作二次确认（理由 + 二次口令/确认弹窗）。
+  - [x] 审批通过后才能发布，拒绝时保留草稿。
+  - [x] 前端按钮按权限自动显隐。
   - 验收证据：权限矩阵测试（viewer/operator/admin）。
 
 ##### M3：运行时编排器接入 defense 链路（第 3 周）

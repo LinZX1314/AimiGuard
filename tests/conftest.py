@@ -114,6 +114,10 @@ def setup_test_database():
             ("view_audit", "audit", "view", "查看审计日志"),
             ("view_system_mode", "system", "view_mode", "查看系统模式"),
             ("set_system_mode", "system", "set_mode", "设置系统模式"),
+            ("workflow_view", "workflow", "view", "查看工作流"),
+            ("workflow_edit", "workflow", "edit", "编辑工作流"),
+            ("workflow_publish", "workflow", "publish", "发布工作流"),
+            ("workflow_rollback", "workflow", "rollback", "回滚工作流"),
         ]
         for name, resource, action, desc in permissions:
             db.execute(
@@ -175,7 +179,7 @@ def setup_test_database():
             text(
                 """
                 INSERT OR IGNORE INTO role_permission (role_id, permission_id, created_at)
-                SELECT 2, id, :now FROM permission WHERE name IN ('scan:execute', 'scan:view')
+                SELECT 2, id, :now FROM permission WHERE name IN ('scan:execute', 'scan:view', 'workflow_view')
                 """
             ),
             {"now": now}

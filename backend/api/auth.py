@@ -115,6 +115,7 @@ class TokenResponse(BaseModel):
 class UserInfo(BaseModel):
     username: str
     role: str
+    permissions: list[str]
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -130,6 +131,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     role = get_user_role(user, db)
+    permissions = get_user_permissions(user, db)
     token_data = {
         "sub": user.username,
         "role": role,
@@ -139,7 +141,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     access_token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
 
     return TokenResponse(
-        access_token=access_token, user={"username": user.username, "role": role}
+        access_token=access_token,
+        user={"username": user.username, "role": role, "permissions": permissions},
     )
 
 
@@ -169,6 +172,7 @@ async def refresh_token(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     role = get_user_role(current_user, db)
+    permissions = get_user_permissions(current_user, db)
     token_data = {
         "sub": current_user.username,
         "role": role,
@@ -178,7 +182,7 @@ async def refresh_token(
     access_token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
     return TokenResponse(
         access_token=access_token,
-        user={"username": current_user.username, "role": role},
+        user={"username": current_user.username, "role": role, "permissions": permissions},
     )
 
 
@@ -196,4 +200,5 @@ async def get_profile(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     role = get_user_role(current_user, db)
-    return UserInfo(username=str(current_user.username), role=role)
+    permissions = get_user_permissions(current_user, db)
+    return UserInfo(username=str(current_user.username), role=role, permissions=permissions)

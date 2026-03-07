@@ -62,7 +62,7 @@
             <Button variant="outline" size="sm" class="h-8 cursor-pointer" :disabled="loading" @click="loadWorkflows">
               刷新
             </Button>
-            <Button v-if="isAdmin" size="sm" class="h-8 cursor-pointer" @click="router.push('/workflow/new')">
+            <Button v-if="canEditWorkflow" size="sm" class="h-8 cursor-pointer" @click="router.push('/workflow/new')">
               新建流程
             </Button>
           </div>
@@ -125,7 +125,7 @@
                         查看图谱
                       </Button>
                       <Button
-                        v-if="isAdmin"
+                        v-if="canEditWorkflow"
                         variant="outline"
                         size="sm"
                         class="h-8 cursor-pointer"
@@ -166,17 +166,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getRequestErrorMessage } from '@/api/client'
+import { hasPermission } from '@/composables/useAuthz'
 
 const router = useRouter()
 
-const isAdmin = computed(() => {
-  try {
-    const raw = localStorage.getItem('user_info')
-    if (!raw) return false
-    const info = JSON.parse(raw)
-    return info?.role === 'admin'
-  } catch { return false }
-})
+const canEditWorkflow = computed(() => hasPermission('workflow_edit'))
 
 const stateOptions = ['DRAFT', 'VALIDATED', 'PUBLISHED', 'ARCHIVED']
 const pageSize = 10

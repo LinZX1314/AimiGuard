@@ -17,13 +17,9 @@ import ForbiddenPage from '../views/ForbiddenPage.vue'
 import WorkflowCatalogPage from '../views/WorkflowCatalogPage.vue'
 import WorkflowReadonlyGraphPage from '../views/WorkflowReadonlyGraphPage.vue'
 import WorkflowEditorPage from '../views/WorkflowEditorPage.vue'
+import { hasAnyPermission, parseStoredUserInfo } from '../composables/useAuthz'
 
 type UserRole = 'admin' | 'operator' | 'viewer'
-
-interface UserInfo {
-  username?: string
-  role?: string
-}
 
 const allowedRolesMap: Record<UserRole, UserRole[]> = {
   admin: ['admin', 'operator', 'viewer'],
@@ -31,22 +27,17 @@ const allowedRolesMap: Record<UserRole, UserRole[]> = {
   viewer: ['viewer'],
 }
 
-const parseUserInfo = (): UserInfo | null => {
-  const raw = localStorage.getItem('user_info')
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as UserInfo
-  } catch {
-    return null
-  }
-}
-
 const hasRoleAccess = (requiredRoles?: UserRole[]): boolean => {
   if (!requiredRoles || requiredRoles.length === 0) return true
-  const user = parseUserInfo()
+  const user = parseStoredUserInfo()
   const role = (user?.role || 'viewer') as UserRole
   const granted = allowedRolesMap[role] || ['viewer']
   return requiredRoles.some((required) => granted.includes(required))
+}
+
+const hasPermissionAccess = (requiredPermissions?: string[]): boolean => {
+  if (!requiredPermissions || requiredPermissions.length === 0) return true
+  return hasAnyPermission(requiredPermissions)
 }
 
 const router = createRouter({
@@ -138,25 +129,25 @@ const router = createRouter({
           path: '/workflow/catalog',
           name: 'workflow-catalog',
           component: WorkflowCatalogPage,
-          meta: { requiredRoles: ['operator', 'admin'] }
+          meta: { requiredPermissions: ['workflow_view'] }
         },
         {
           path: '/workflow/:id/graph',
           name: 'workflow-readonly-graph',
           component: WorkflowReadonlyGraphPage,
-          meta: { requiredRoles: ['operator', 'admin'] }
+          meta: { requiredPermissions: ['workflow_view'] }
         },
         {
           path: '/workflow/new',
           name: 'workflow-editor-new',
           component: WorkflowEditorPage,
-          meta: { requiredRoles: ['admin'] }
+          meta: { requiredPermissions: ['workflow_edit'] }
         },
         {
           path: '/workflow/:id/edit',
           name: 'workflow-editor',
           component: WorkflowEditorPage,
-          meta: { requiredRoles: ['admin'] }
+          meta: { requiredPermissions: ['workflow_edit'] }
         },
         {
           path: '/observability',
@@ -207,7 +198,8 @@ router.beforeEach((to, _from, next) => {
   }
 
   const requiredRoles = to.meta.requiredRoles as UserRole[] | undefined
-  if (to.meta.requiresAuth !== false && !hasRoleAccess(requiredRoles)) {
+  const requiredPermissions = to.meta.requiredPermissions as string[] | undefined
+  if (to.meta.requiresAuth !== false && (!hasRoleAccess(requiredRoles) || !hasPermissionAccess(requiredPermissions))) {
     next('/forbidden')
     return
   }
