@@ -208,12 +208,14 @@
               >
                 <!-- 麦克风图标 -->
                 <Mic v-if="!ttsRecording" class="size-3.5" />
-                <!-- 录音中：声音波浪动画 -->
-                <div v-else class="flex items-center gap-[2px]">
-                  <span class="tts-wave" style="animation-delay: 0ms" />
-                  <span class="tts-wave" style="animation-delay: 150ms" />
-                  <span class="tts-wave" style="animation-delay: 300ms" />
-                  <span class="tts-wave" style="animation-delay: 450ms" />
+                <!-- 录音中：实时声音波浪 -->
+                <div v-else class="flex items-center gap-[2px] h-4">
+                  <span
+                    v-for="(v, i) in waveBars"
+                    :key="i"
+                    class="tts-wave-bar"
+                    :style="{ height: Math.max(3, v * 16) + 'px' }"
+                  />
                 </div>
                 <!-- 录音脉冲光圈 -->
                 <span
@@ -432,7 +434,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, reactive } from 'vue'
 import { aiApi } from '@/api/ai'
 import { reportApi } from '@/api/report'
 import { ttsApi, type TTSTask } from '@/api/tts'
@@ -526,6 +528,48 @@ const ttsTasks = ref<TTSTask[]>([])
 const ttsLoading = ref(false)
 const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
+
+// 实时音频波形状态
+const waveBars = reactive([0, 0, 0, 0, 0])
+let audioCtx: AudioContext | null = null
+let analyser: AnalyserNode | null = null
+let micStream: MediaStream | null = null
+let animFrameId: number | null = null
+
+const startAudioVisualizer = (stream: MediaStream) => {
+  audioCtx = new AudioContext()
+  analyser = audioCtx.createAnalyser()
+  analyser.fftSize = 64
+  const source = audioCtx.createMediaStreamSource(stream)
+  source.connect(analyser)
+  const dataArr = new Uint8Array(analyser.frequencyBinCount)
+
+  const tick = () => {
+    if (!analyser || !ttsRecording.value) return
+    analyser.getByteFrequencyData(dataArr)
+    // 从频谱中取 5 个采样点映射到波形条高度 (0~1)
+    const len = dataArr.length
+    const step = Math.max(1, Math.floor(len / 5))
+    for (let i = 0; i < 5; i++) {
+      const val = dataArr[Math.min(i * step, len - 1)] / 255
+      // 平滑过渡，避免跳动
+      waveBars[i] = waveBars[i] * 0.4 + val * 0.6
+    }
+    animFrameId = requestAnimationFrame(tick)
+  }
+  tick()
+}
+
+const stopAudioVisualizer = () => {
+  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; analyser = null }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null }
+  for (let i = 0; i < 5; i++) waveBars[i] = 0
+}
+
+onUnmounted(() => {
+  stopAudioVisualizer()
+})
 
 // ── 快捷提示 ──
 const fillHint = (hint: string) => {
@@ -676,9 +720,16 @@ const processTTS = async (taskId: number) => {
 }
 
 // ── TTS 录音按钮 ──
+const startRecording = (stream: MediaStream) => {
+  micStream = stream
+  ttsRecording.value = true
+  startAudioVisualizer(stream)
+}
+
 const toggleTTSRecording = async () => {
   if (ttsRecording.value) {
     ttsRecording.value = false
+    stopAudioVisualizer()
     return
   }
   // 检查麦克风权限
@@ -692,8 +743,8 @@ const toggleTTSRecording = async () => {
     // permissions API 不支持时直接尝试获取
   }
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true })
-    ttsRecording.value = true
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    startRecording(stream)
   } catch {
     showMicPermissionDialog.value = true
   }
@@ -702,8 +753,8 @@ const toggleTTSRecording = async () => {
 const retryMicPermission = async () => {
   showMicPermissionDialog.value = false
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true })
-    ttsRecording.value = true
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    startRecording(stream)
   } catch {
     showMicPermissionDialog.value = true
   }
@@ -786,21 +837,13 @@ onMounted(() => {
   max-height: 4rem;
 }
 
-/* TTS 声音波浪动画 */
-.tts-wave {
+/* TTS 实时声音波形条 */
+.tts-wave-bar {
   display: inline-block;
   width: 2.5px;
+  min-height: 3px;
   border-radius: 9999px;
   background: currentColor;
-  animation: tts-wave-bounce 0.8s ease-in-out infinite alternate;
-}
-.tts-wave:nth-child(1) { height: 8px; }
-.tts-wave:nth-child(2) { height: 14px; }
-.tts-wave:nth-child(3) { height: 10px; }
-.tts-wave:nth-child(4) { height: 6px; }
-
-@keyframes tts-wave-bounce {
-  0% { transform: scaleY(0.4); opacity: 0.6; }
-  100% { transform: scaleY(1); opacity: 1; }
+  transition: height 0.08s ease-out;
 }
 </style>
