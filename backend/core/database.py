@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Float,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime, timezone
@@ -354,6 +355,80 @@ class ModelProfile(Base):
     enabled = Column(Integer, default=1)
     config_json = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowDefinition(Base):
+    __tablename__ = "workflow_definition"
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_key = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    definition_state = Column(String, nullable=False, default="DRAFT", index=True)
+    latest_version = Column(Integer, nullable=False, default=1)
+    published_version = Column(Integer)
+    created_by = Column(String)
+    updated_by = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowVersion(Base):
+    __tablename__ = "workflow_version"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "version", name="uq_workflow_version_workflow_version"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflow_definition.id"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    definition_state = Column(String, nullable=False, default="DRAFT", index=True)
+    dsl_json = Column(Text, nullable=False)
+    change_note = Column(Text)
+    created_by = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_run"
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflow_definition.id"), nullable=False, index=True)
+    workflow_version_id = Column(Integer, ForeignKey("workflow_version.id"), nullable=False, index=True)
+    run_state = Column(String, nullable=False, default="QUEUED", index=True)
+    trigger_source = Column(String)
+    trigger_ref = Column(String)
+    input_payload = Column(Text)
+    output_payload = Column(Text)
+    context_json = Column(Text)
+    trace_id = Column(String, nullable=False, index=True)
+    started_at = Column(DateTime)
+    ended_at = Column(DateTime)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowStepRun(Base):
+    __tablename__ = "workflow_step_run"
+    __table_args__ = (
+        UniqueConstraint("workflow_run_id", "node_id", "attempt", name="uq_workflow_step_run_node_attempt"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_run.id"), nullable=False, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflow_definition.id"), nullable=False, index=True)
+    workflow_version_id = Column(Integer, ForeignKey("workflow_version.id"), nullable=False, index=True)
+    node_id = Column(String, nullable=False)
+    node_type = Column(String, nullable=False)
+    step_state = Column(String, nullable=False, default="QUEUED", index=True)
+    attempt = Column(Integer, nullable=False, default=1)
+    input_payload = Column(Text)
+    output_payload = Column(Text)
+    error_message = Column(Text)
+    trace_id = Column(String, nullable=False, index=True)
+    started_at = Column(DateTime)
+    ended_at = Column(DateTime)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 

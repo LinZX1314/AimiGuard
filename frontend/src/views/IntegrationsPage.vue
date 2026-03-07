@@ -352,12 +352,12 @@
               <div v-if="channelsLoading" class="space-y-2">
                 <Skeleton v-for="i in 2" :key="i" class="h-14 w-full rounded" />
               </div>
-              <div v-else-if="channels.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+              <div v-else-if="safeChannels.length === 0" class="py-6 text-center text-sm text-muted-foreground">
                 暂无推送通道
               </div>
               <div v-else class="space-y-2">
                 <div
-                  v-for="ch in channels"
+                  v-for="ch in safeChannels"
                   :key="ch.id"
                   class="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
@@ -457,11 +457,11 @@
               <div v-if="devicesLoading" class="space-y-2">
                 <Skeleton v-for="i in 2" :key="i" class="h-20 w-full rounded" />
               </div>
-              <div v-else-if="devices.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+              <div v-else-if="safeDevices.length === 0" class="py-6 text-center text-sm text-muted-foreground">
                 暂无已配置设备
               </div>
               <div v-else class="space-y-3">
-                <div v-for="dev in devices" :key="dev.id" class="rounded-lg border border-border p-4 space-y-3">
+                <div v-for="dev in safeDevices" :key="dev.id" class="rounded-lg border border-border p-4 space-y-3">
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="space-y-0.5">
                       <div class="flex items-center gap-2">
@@ -850,7 +850,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { BellRing, BrainCircuit, Bug, Plus, RefreshCw, Server, Shield, Volume2, Zap } from 'lucide-vue-next'
 import { apiClient, getRequestErrorMessage, hasAccessToken } from '@/api/client'
 import { defenseApi, type HFishConfig } from '@/api/defense'
@@ -1455,13 +1455,29 @@ const channelForm = reactive({
   target: '',
 })
 
+const isRenderablePushChannel = (value: unknown): value is PushChannel => {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return (
+    Number.isFinite(Number(record.id)) &&
+    typeof record.channel_type === 'string' &&
+    typeof record.channel_name === 'string' &&
+    typeof record.target === 'string' &&
+    (Number(record.enabled) === 0 || Number(record.enabled) === 1)
+  )
+}
+
+const safeChannels = computed(() => channels.value.filter(isRenderablePushChannel))
+
 const loadChannels = async () => {
   channelsLoading.value = true
   try {
     const res: any = await apiClient.get('/push/channels')
     const data = res?.data ?? res
     const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
-    channels.value = list.map(normalizePushChannel).filter((item): item is PushChannel => item !== null)
+    channels.value = list
+      .map(normalizePushChannel)
+      .filter((item): item is PushChannel => isRenderablePushChannel(item))
   } catch {
     channels.value = []
   } finally {
@@ -1537,6 +1553,21 @@ const deviceForm = reactive({
   description: '',
 })
 
+const isRenderableDevice = (value: unknown): value is DeviceInfo => {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return (
+    Number.isFinite(Number(record.id)) &&
+    typeof record.name === 'string' &&
+    typeof record.ip === 'string' &&
+    Number.isFinite(Number(record.port)) &&
+    typeof record.vendor === 'string' &&
+    typeof record.enabled === 'boolean'
+  )
+}
+
+const safeDevices = computed(() => devices.value.filter(isRenderableDevice))
+
 const showDeviceMsg = (msg: string, ok: boolean) => {
   deviceMsg.value = msg
   deviceMsgOk.value = ok
@@ -1548,7 +1579,9 @@ const loadDevices = async () => {
   try {
     const data = await deviceApi.list()
     const list = Array.isArray(data) ? data : (Array.isArray((data as any)?.items) ? (data as any).items : [])
-    devices.value = list.map(normalizeDevice).filter((item): item is DeviceInfo => item !== null)
+    devices.value = list
+      .map(normalizeDevice)
+      .filter((item): item is DeviceInfo => isRenderableDevice(item))
   } catch {
     devices.value = []
   } finally {

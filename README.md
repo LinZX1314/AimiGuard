@@ -2367,7 +2367,29 @@ requirements.txt
 - [x] D-2 链路状态真实性：去除前端硬编码健康状态（如固定 `ok: true`），改为后端实时指标驱动。
 - [x] F-1 AI 能力去占位：将 `ai_chat/report/analyze_scan_result` 从模板或占位返回替换为真实模型调用，并记录降级原因与 trace_id。
 - [x] F-2 联动能力去模拟：将推送测试与 TTS 处理从模拟执行替换为真实通道调用（保留沙箱开关与审计）。
-- [ ] R-1 README 一致性治理：修正“已完成/进行中”冲突项，新增“状态判定口径（代码+测试+验收证据）”，确保文档与实现一致。
+- [x] R-1 README 一致性治理：修正“已完成/进行中”冲突项，新增“状态判定口径（代码+测试+验收证据）”，确保文档与实现一致。
+
+#### 状态判定口径（代码 + 测试 + 验收证据）
+- `完成（[x]）` 必须同时满足以下 3 条：
+  1. 代码已实现且可在仓库中定位到关键改动文件。
+  2. 至少一类自动化测试通过（单元/集成/E2E 任一，关键链路优先集成测试）。
+  3. 提供可复现的验证命令与结果（通过/失败信息可追溯）。
+- `进行中（[ ]）`：以上任一条件未满足，或仅完成设计/草稿而未验证。
+- 状态变更规则：勾选状态变化时，必须同步更新 README 与对应测试或验证记录。
+
+#### 已完成项验收证据（2026-03-07）
+- `F-1 AI 能力去占位`
+  - 代码：`backend/services/ai_engine.py`、`backend/api/ai_chat.py`、`backend/api/report.py`
+  - 验证：`pytest -q tests/test_f12_ai_push_tts.py`（含 `test_ai_chat_returns_meta`、`test_report_generate_returns_meta`）
+- `F-2 联动能力去模拟`
+  - 代码：`backend/services/push_service.py`、`backend/api/push.py`、`backend/services/tts_service.py`、`backend/api/tts.py`
+  - 验证：`pytest -q tests/test_td05_push.py`、`pytest -q tests/test_step8_9_full.py -k "TTS or AI"`、`pytest -q tests/test_f12_ai_push_tts.py`
+- `M1-01 流程 DSL v1`
+  - 代码：`backend/workflow/dsl.schema.json`、`backend/workflow/defense_default_v1.json`、`backend/services/workflow_dsl.py`
+  - 验证：`pytest -q tests/test_workflow_dsl.py`
+- `M1-02 工作流数据表`
+  - 代码：`backend/core/database.py`、`sql/mvp_schema.sql`、`backend/migrations/add_workflow_tables_v1.py`、`backend/migrations/rollback_workflow_tables_v1.py`
+  - 验证：`pytest -q tests/test_workflow_m1_02.py`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2441,20 +2463,20 @@ requirements.txt
 
 ##### M1：流程 DSL + 数据模型 + 基础 CRUD + 只读可视化（第 1 周）
 
-- [ ] `M1-01` 定义流程 DSL v1（后端主责，前端参与）
-  - [ ] 定义 `node` 结构：`id/type/name/config/timeout/retry_policy`。
-  - [ ] 定义 `edge` 结构：`from/to/condition/priority`。
-  - [ ] 定义全局变量与上下文：`context/inputs/outputs/trace_id`。
-  - [ ] 定义状态机枚举：`DRAFT/VALIDATED/PUBLISHED/ARCHIVED` 与运行态。
-  - [ ] 输出 `dsl.schema.json` + 示例 `defense_default_v1.json`。
+- [x] `M1-01` 定义流程 DSL v1（后端主责，前端参与）
+  - [x] 定义 `node` 结构：`id/type/name/config/timeout/retry_policy`。
+  - [x] 定义 `edge` 结构：`from/to/condition/priority`。
+  - [x] 定义全局变量与上下文：`context/inputs/outputs/trace_id`。
+  - [x] 定义状态机枚举：`DRAFT/VALIDATED/PUBLISHED/ARCHIVED` 与运行态。
+  - [x] 输出 `dsl.schema.json` + 示例 `defense_default_v1.json`。
   - 验收证据：Schema 校验测试 + 示例可通过校验。
 
-- [ ] `M1-02` 新增工作流数据表（后端）
-  - [ ] 建表：`workflow_definition`（逻辑流主表）。
-  - [ ] 建表：`workflow_version`（版本快照 + 发布状态）。
-  - [ ] 建表：`workflow_run`、`workflow_step_run`（运行与节点轨迹）。
-  - [ ] 索引：`workflow_id/version/status/created_at/trace_id`。
-  - [ ] 提供迁移脚本与回滚脚本。
+- [x] `M1-02` 新增工作流数据表（后端）
+  - [x] 建表：`workflow_definition`（逻辑流主表）。
+  - [x] 建表：`workflow_version`（版本快照 + 发布状态）。
+  - [x] 建表：`workflow_run`、`workflow_step_run`（运行与节点轨迹）。
+  - [x] 索引：`workflow_id/version/status/created_at/trace_id`。
+  - [x] 提供迁移脚本与回滚脚本。
   - 验收证据：迁移脚本可重复执行，回滚可恢复。
 
 - [ ] `M1-03` 提供基础 API（后端）

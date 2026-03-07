@@ -61,9 +61,35 @@ export const getRequestErrorMessage = (error: unknown, fallback = DEFAULT_REQUES
   return record.displayMessage || extractMessage(responseData) || getStatusMessage(record.response?.status) || fallback
 }
 
+const parseJwtExpiryMs = (token: string): number | null => {
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+
+  try {
+    const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const normalized = payloadBase64.padEnd(payloadBase64.length + ((4 - payloadBase64.length % 4) % 4), '=')
+    const payloadText = window.atob(normalized)
+    const payload = JSON.parse(payloadText) as { exp?: unknown }
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) return null
+    return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
 export const hasAccessToken = (): boolean => {
   try {
-    return Boolean(window.localStorage.getItem('access_token'))
+    const token = window.localStorage.getItem('access_token')
+    if (!token) return false
+
+    const expiryMs = parseJwtExpiryMs(token)
+    if (expiryMs && Date.now() >= expiryMs) {
+      window.localStorage.removeItem('access_token')
+      window.localStorage.removeItem('user_info')
+      return false
+    }
+
+    return true
   } catch {
     return false
   }

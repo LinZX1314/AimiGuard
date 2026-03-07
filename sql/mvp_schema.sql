@@ -305,6 +305,101 @@ CREATE TABLE IF NOT EXISTS model_profile (
 CREATE INDEX IF NOT EXISTS idx_model_profile_enabled ON model_profile(enabled);
 CREATE INDEX IF NOT EXISTS idx_model_profile_priority ON model_profile(priority);
 
+-- 工作流定义（M1-02）
+CREATE TABLE IF NOT EXISTS workflow_definition (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  definition_state TEXT NOT NULL CHECK(definition_state IN ('DRAFT','VALIDATED','PUBLISHED','ARCHIVED')) DEFAULT 'DRAFT',
+  latest_version INTEGER NOT NULL DEFAULT 1,
+  published_version INTEGER,
+  created_by TEXT,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_definition_state ON workflow_definition(definition_state);
+CREATE INDEX IF NOT EXISTS idx_workflow_definition_created_at ON workflow_definition(created_at);
+
+-- 工作流版本快照（M1-02）
+CREATE TABLE IF NOT EXISTS workflow_version (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER NOT NULL,
+  version INTEGER NOT NULL,
+  definition_state TEXT NOT NULL CHECK(definition_state IN ('DRAFT','VALIDATED','PUBLISHED','ARCHIVED')) DEFAULT 'DRAFT',
+  dsl_json TEXT NOT NULL,
+  change_note TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (workflow_id) REFERENCES workflow_definition(id) ON DELETE CASCADE,
+  UNIQUE(workflow_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_version_workflow_id ON workflow_version(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_version_version ON workflow_version(version);
+CREATE INDEX IF NOT EXISTS idx_workflow_version_state ON workflow_version(definition_state);
+CREATE INDEX IF NOT EXISTS idx_workflow_version_created_at ON workflow_version(created_at);
+
+-- 工作流运行记录（M1-02）
+CREATE TABLE IF NOT EXISTS workflow_run (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER NOT NULL,
+  workflow_version_id INTEGER NOT NULL,
+  run_state TEXT NOT NULL CHECK(run_state IN ('QUEUED','RUNNING','RETRYING','SUCCESS','FAILED','MANUAL_REQUIRED','CANCELLED')) DEFAULT 'QUEUED',
+  trigger_source TEXT,
+  trigger_ref TEXT,
+  input_payload TEXT,
+  output_payload TEXT,
+  context_json TEXT,
+  trace_id TEXT NOT NULL,
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (workflow_id) REFERENCES workflow_definition(id) ON DELETE CASCADE,
+  FOREIGN KEY (workflow_version_id) REFERENCES workflow_version(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_run_workflow_id ON workflow_run(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_run_workflow_version_id ON workflow_run(workflow_version_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_run_state ON workflow_run(run_state);
+CREATE INDEX IF NOT EXISTS idx_workflow_run_created_at ON workflow_run(created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_run_trace_id ON workflow_run(trace_id);
+
+-- 工作流节点运行轨迹（M1-02）
+CREATE TABLE IF NOT EXISTS workflow_step_run (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_run_id INTEGER NOT NULL,
+  workflow_id INTEGER NOT NULL,
+  workflow_version_id INTEGER NOT NULL,
+  node_id TEXT NOT NULL,
+  node_type TEXT NOT NULL,
+  step_state TEXT NOT NULL CHECK(step_state IN ('QUEUED','RUNNING','RETRYING','SUCCESS','FAILED','MANUAL_REQUIRED','CANCELLED')) DEFAULT 'QUEUED',
+  attempt INTEGER NOT NULL DEFAULT 1,
+  input_payload TEXT,
+  output_payload TEXT,
+  error_message TEXT,
+  trace_id TEXT NOT NULL,
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (workflow_run_id) REFERENCES workflow_run(id) ON DELETE CASCADE,
+  FOREIGN KEY (workflow_id) REFERENCES workflow_definition(id) ON DELETE CASCADE,
+  FOREIGN KEY (workflow_version_id) REFERENCES workflow_version(id) ON DELETE RESTRICT,
+  UNIQUE(workflow_run_id, node_id, attempt)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_run_id ON workflow_step_run(workflow_run_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_workflow_id ON workflow_step_run(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_workflow_version_id ON workflow_step_run(workflow_version_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_state ON workflow_step_run(step_state);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_created_at ON workflow_step_run(created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_run_trace_id ON workflow_step_run(trace_id);
+
 -- ============================================================
 -- P0 系统管理表
 -- ============================================================
