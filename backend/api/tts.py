@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional, List
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Optional
 import uuid
 
-from core.database import get_db, AITTSTask, User
-from core.response import APIResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from api.auth import require_permissions
+from core.database import AITTSTask, User, get_db
+from core.response import APIResponse
 from services.audit_service import AuditService
+from services.tts_service import TTSService
 
 router = APIRouter(prefix="/api/v1/tts", tags=["tts"])
 
@@ -24,12 +28,6 @@ class TTSRequest(BaseModel):
     source_id: Optional[int] = None
 
 
-class TTSStatusUpdate(BaseModel):
-    state: str  # PROCESSING, SUCCESS, FAILED
-    audio_path: Optional[str] = None
-    error_message: Optional[str] = None
-
-
 @router.post("/tasks")
 async def create_tts_task(
     req: TTSRequest,
@@ -37,9 +35,7 @@ async def create_tts_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("create_tts_task")),
 ):
-    """创建 TTS 语音合成任务"""
     trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
-
     task = AITTSTask(
         source_type=req.source_type or "manual",
         source_id=req.source_id,
@@ -82,7 +78,6 @@ async def list_tts_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("view_tts_tasks")),
 ):
-    """TTS 任务列表（支持状态筛选 + 分页）"""
     if page < 1:
         page = 1
     if page_size < 1 or page_size > 100:
@@ -100,27 +95,29 @@ async def list_tts_tasks(
         .all()
     )
 
-    return APIResponse.success({
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "items": [
-            {
-                "id": t.id,
-                "source_type": t.source_type,
-                "source_id": t.source_id,
-                "text_preview": (t.text_content or "")[:80],
-                "voice_model": t.voice_model,
-                "audio_path": t.audio_path,
-                "state": t.state,
-                "error_message": t.error_message,
-                "trace_id": t.trace_id,
-                "created_at": t.created_at.isoformat().replace("+00:00", "Z") if t.created_at else None,
-                "updated_at": t.updated_at.isoformat().replace("+00:00", "Z") if t.updated_at else None,
-            }
-            for t in tasks
-        ],
-    })
+    return APIResponse.success(
+        {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": [
+                {
+                    "id": t.id,
+                    "source_type": t.source_type,
+                    "source_id": t.source_id,
+                    "text_preview": (t.text_content or "")[:80],
+                    "voice_model": t.voice_model,
+                    "audio_path": t.audio_path,
+                    "state": t.state,
+                    "error_message": t.error_message,
+                    "trace_id": t.trace_id,
+                    "created_at": t.created_at.isoformat().replace("+00:00", "Z") if t.created_at else None,
+                    "updated_at": t.updated_at.isoformat().replace("+00:00", "Z") if t.updated_at else None,
+                }
+                for t in tasks
+            ],
+        }
+    )
 
 
 @router.get("/tasks/{task_id}")
@@ -129,24 +126,25 @@ async def get_tts_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("view_tts_tasks")),
 ):
-    """获取 TTS 任务详情"""
     task = db.query(AITTSTask).filter(AITTSTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="TTS 任务不存在")
 
-    return APIResponse.success({
-        "id": task.id,
-        "source_type": task.source_type,
-        "source_id": task.source_id,
-        "text_content": task.text_content,
-        "voice_model": task.voice_model,
-        "audio_path": task.audio_path,
-        "state": task.state,
-        "error_message": task.error_message,
-        "trace_id": task.trace_id,
-        "created_at": task.created_at.isoformat().replace("+00:00", "Z") if task.created_at else None,
-        "updated_at": task.updated_at.isoformat().replace("+00:00", "Z") if task.updated_at else None,
-    })
+    return APIResponse.success(
+        {
+            "id": task.id,
+            "source_type": task.source_type,
+            "source_id": task.source_id,
+            "text_content": task.text_content,
+            "voice_model": task.voice_model,
+            "audio_path": task.audio_path,
+            "state": task.state,
+            "error_message": task.error_message,
+            "trace_id": task.trace_id,
+            "created_at": task.created_at.isoformat().replace("+00:00", "Z") if task.created_at else None,
+            "updated_at": task.updated_at.isoformat().replace("+00:00", "Z") if task.updated_at else None,
+        }
+    )
 
 
 @router.post("/tasks/{task_id}/process")
@@ -156,23 +154,30 @@ async def process_tts_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions("create_tts_task")),
 ):
-    """
-    模拟执行 TTS 任务（将状态推进到 SUCCESS）。
-    实际部署时替换为真实 TTS 引擎调用。
-    """
     task = db.query(AITTSTask).filter(AITTSTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="TTS 任务不存在")
-
     if task.state not in ("PENDING", "FAILED"):
         raise HTTPException(status_code=400, detail=f"当前状态 {task.state} 不允许重新处理")
 
-    trace_id = getattr(request.state, "trace_id", None) or task.trace_id
-    now = _utc_now()
+    trace_id = getattr(request.state, "trace_id", None) or task.trace_id or str(uuid.uuid4())
+    task.state = "PROCESSING"
+    task.error_message = None
+    task.updated_at = _utc_now()
+    db.commit()
 
-    task.state = "SUCCESS"
-    task.audio_path = f"/audio/tts_{task.id}_{now.strftime('%Y%m%d%H%M%S')}.mp3"
-    task.updated_at = now
+    result = await TTSService.synthesize(
+        text=task.text_content or "",
+        voice_model=task.voice_model or "local-tts-v1",
+        trace_id=trace_id,
+        task_id=task.id,
+    )
+
+    success = bool(result.get("success"))
+    task.state = "SUCCESS" if success else "FAILED"
+    task.audio_path = str(result.get("audio_path") or "") if success else None
+    task.error_message = None if success else str(result.get("detail") or "tts_processing_failed")[:500]
+    task.updated_at = _utc_now()
     db.commit()
 
     AuditService.log(
@@ -181,15 +186,25 @@ async def process_tts_task(
         action="process_tts_task",
         target=str(task.id),
         target_type="tts_task",
+        result="success" if success else "FAILED",
+        reason=str(result.get("detail") or ""),
+        error_message=None if success else str(result.get("detail") or ""),
         trace_id=trace_id,
     )
+
+    if not success:
+        raise HTTPException(status_code=502, detail=f"TTS 处理失败: {result.get('detail')}")
 
     return APIResponse.success(
         {
             "task_id": task.id,
             "state": task.state,
             "audio_path": task.audio_path,
+            "simulated": bool(result.get("simulated")),
+            "provider": result.get("provider"),
+            "fallback_reason": result.get("detail") if result.get("simulated") else None,
         },
         message="TTS 任务处理完成",
         trace_id=trace_id,
     )
+

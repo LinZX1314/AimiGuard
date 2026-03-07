@@ -587,7 +587,7 @@
                       </button>
                       <span class="text-xs text-muted-foreground">{{ aiApiForm.enabled ? 'AI API 已启用' : 'AI API 已禁用' }}</span>
                       <Badge
-                        v-if="aiApiConfig.api_key_configured"
+                        v-if="aiApiConfig?.api_key_configured"
                         class="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]"
                       >
                         已配置 API Key
@@ -675,7 +675,7 @@
                       </button>
                       <span class="text-xs text-muted-foreground">{{ ttsEngineForm.enabled ? 'TTS 已启用' : 'TTS 已禁用' }}</span>
                       <Badge class="bg-muted text-muted-foreground text-[10px]">
-                        当前模型: {{ ttsEngineConfig.model_name }}
+                        当前模型: {{ ttsEngineConfig?.model_name || 'local-tts-v1' }}
                       </Badge>
                     </div>
                   </div>

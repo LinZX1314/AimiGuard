@@ -364,6 +364,7 @@ async def save_ai_api_config(
         ai_engine.llm_client.provider = provider
         ai_engine.llm_client.base_url = base_url
         ai_engine.llm_client.model = model_name
+        ai_engine.llm_client.api_key = final_api_key
     except Exception:
         pass
 
