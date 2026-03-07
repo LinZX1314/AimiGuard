@@ -62,6 +62,9 @@
             <Button variant="outline" size="sm" class="h-8 cursor-pointer" :disabled="loading" @click="loadWorkflows">
               刷新
             </Button>
+            <Button v-if="isAdmin" size="sm" class="h-8 cursor-pointer" @click="router.push('/workflow/new')">
+              新建流程
+            </Button>
           </div>
         </CardHeader>
         <CardContent class="p-0">
@@ -112,14 +115,25 @@
                     {{ formatDateTime(item.updated_at) }}
                   </td>
                   <td class="px-4 py-3 align-top text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      class="h-8 cursor-pointer"
-                      @click="goReadonlyGraph(item.id)"
-                    >
-                      查看图谱
-                    </Button>
+                    <div class="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 cursor-pointer"
+                        @click="goReadonlyGraph(item.id)"
+                      >
+                        查看图谱
+                      </Button>
+                      <Button
+                        v-if="isAdmin"
+                        variant="outline"
+                        size="sm"
+                        class="h-8 cursor-pointer"
+                        @click="router.push(`/workflow/${item.id}/edit`)"
+                      >
+                        编辑
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -154,6 +168,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getRequestErrorMessage } from '@/api/client'
 
 const router = useRouter()
+
+const isAdmin = computed(() => {
+  try {
+    const raw = localStorage.getItem('user_info')
+    if (!raw) return false
+    const info = JSON.parse(raw)
+    return info?.role === 'admin'
+  } catch { return false }
+})
 
 const stateOptions = ['DRAFT', 'VALIDATED', 'PUBLISHED', 'ARCHIVED']
 const pageSize = 10

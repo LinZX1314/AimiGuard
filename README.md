@@ -2396,6 +2396,12 @@ requirements.txt
 - `M1-04 只读可视化页面（前端）`
   - 代码：`frontend/src/api/workflow.ts`、`frontend/src/views/WorkflowCatalogPage.vue`、`frontend/src/views/WorkflowReadonlyGraphPage.vue`、`frontend/src/router/index.ts`、`frontend/src/components/Layout.vue`、`frontend/src/views/AuditPage.vue`
   - 验证：`cd frontend && npx vite build`
+- `M2-01 可视化编辑器基础能力（前端）`
+  - 代码：`frontend/src/views/WorkflowEditorPage.vue`、`frontend/src/api/workflow.ts`（新增 create/update/validate）、`frontend/src/router/index.ts`（新增 /workflow/new + /workflow/:id/edit）、`frontend/src/views/WorkflowCatalogPage.vue`（新增新建/编辑按钮）
+  - 验证：`cd frontend && npx vite build`（通过，仅 chunk size 警告）
+- `M2-02 发布前校验器（后端）`
+  - 代码：`backend/services/workflow_validator.py`、`backend/api/workflow.py`、`tests/test_workflow_m2_02_validator.py`、`frontend/src/api/workflow.ts`、`frontend/src/views/WorkflowEditorPage.vue`
+  - 验证：`python -m pytest tests/test_workflow_dsl.py tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py -q`、`cd frontend && npx vite build`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2501,18 +2507,18 @@ requirements.txt
 
 ##### M2：可视化编辑 + 校验器 + 版本发布/回滚 + 审计闭环（第 2 周）
 
-- [ ] `M2-01` 可视化编辑器基础能力（前端）
-  - [ ] 节点拖拽、连线、删除、复制、分组。
-  - [ ] 条件分支编辑器（布尔表达式 + 优先级）。
-  - [ ] 节点参数表单（schema 驱动）与 JSON 高级模式。
-  - [ ] 未保存状态提示、离开确认、自动草稿保存。
+- [x] `M2-01` 可视化编辑器基础能力（前端）
+  - [x] 节点拖拽、连线、删除、复制、分组。
+  - [x] 条件分支编辑器（布尔表达式 + 优先级）。
+  - [x] 节点参数表单（schema 驱动）与 JSON 高级模式。
+  - [x] 未保存状态提示、离开确认、自动草稿保存。
   - 验收证据：编辑器交互测试 + 数据回填测试。
 
-- [ ] `M2-02` 发布前校验器（后端）
-  - [ ] 结构校验：缺节点、孤立边、循环依赖。
-  - [ ] 规则校验：不可达节点、无终止节点、条件冲突。
-  - [ ] 安全校验：危险参数、超时上限、重试上限。
-  - [ ] 兼容校验：关键动作节点必须可映射现有服务适配器。
+- [x] `M2-02` 发布前校验器（后端）
+  - [x] 结构校验：缺节点、孤立边、循环依赖。
+  - [x] 规则校验：不可达节点、无终止节点、条件冲突。
+  - [x] 安全校验：危险参数、超时上限、重试上限。
+  - [x] 兼容校验：关键动作节点必须可映射现有服务适配器。
   - 验收证据：错误码矩阵 + 负例测试集。
 
 - [ ] `M2-03` 发布、灰度、回滚 API（后端）

@@ -16,6 +16,7 @@ import ObservabilityPage from '../views/ObservabilityPage.vue'
 import ForbiddenPage from '../views/ForbiddenPage.vue'
 import WorkflowCatalogPage from '../views/WorkflowCatalogPage.vue'
 import WorkflowReadonlyGraphPage from '../views/WorkflowReadonlyGraphPage.vue'
+import WorkflowEditorPage from '../views/WorkflowEditorPage.vue'
 
 type UserRole = 'admin' | 'operator' | 'viewer'
 
@@ -144,6 +145,18 @@ const router = createRouter({
           name: 'workflow-readonly-graph',
           component: WorkflowReadonlyGraphPage,
           meta: { requiredRoles: ['operator', 'admin'] }
+        },
+        {
+          path: '/workflow/new',
+          name: 'workflow-editor-new',
+          component: WorkflowEditorPage,
+          meta: { requiredRoles: ['admin'] }
+        },
+        {
+          path: '/workflow/:id/edit',
+          name: 'workflow-editor',
+          component: WorkflowEditorPage,
+          meta: { requiredRoles: ['admin'] }
         },
         {
           path: '/observability',

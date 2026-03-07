@@ -92,6 +92,49 @@ export interface WorkflowListParams {
   definition_state?: string
 }
 
+export interface WorkflowCreatePayload {
+  workflow_key: string
+  name: string
+  description?: string
+  dsl: Record<string, unknown>
+  change_note?: string
+}
+
+export interface WorkflowUpdatePayload {
+  version_tag: number
+  name?: string
+  description?: string
+  dsl: Record<string, unknown>
+  change_note?: string
+}
+
+export interface WorkflowValidateIssue {
+  code: string
+  category: string
+  level: string
+  message: string
+  path: string
+  node_id?: string
+  value?: unknown
+  allowed_values?: string[]
+}
+
+export interface WorkflowValidateSummary {
+  error_count: number
+  warning_count: number
+  categories: Record<string, number>
+}
+
+export interface WorkflowValidateResult {
+  workflow_id: number
+  workflow_key: string
+  version: number
+  valid: boolean
+  errors: WorkflowValidateIssue[]
+  warnings: WorkflowValidateIssue[]
+  summary: WorkflowValidateSummary
+}
+
 const toNumber = (value: unknown, fallback: number): number => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
@@ -100,6 +143,20 @@ const toNumber = (value: unknown, fallback: number): number => {
 const toStringOrNull = (value: unknown): string | null => {
   if (typeof value === 'string') return value
   return null
+}
+
+const normalizeValidationIssue = (value: unknown): WorkflowValidateIssue => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    code: typeof record.code === 'string' ? record.code : 'WF_UNKNOWN',
+    category: typeof record.category === 'string' ? record.category : 'unknown',
+    level: typeof record.level === 'string' ? record.level : 'error',
+    message: typeof record.message === 'string' ? record.message : String(value ?? '未知校验错误'),
+    path: typeof record.path === 'string' ? record.path : 'dsl',
+    node_id: typeof record.node_id === 'string' ? record.node_id : undefined,
+    value: record.value,
+    allowed_values: Array.isArray(record.allowed_values) ? record.allowed_values.map((item) => String(item)) : undefined,
+  }
 }
 
 const normalizeDefinition = (value: unknown): WorkflowDefinitionItem => {
@@ -215,6 +272,41 @@ export const workflowApi = {
       workflow: normalizeDefinition(record.workflow),
       version: normalizeVersion(record.version),
       dsl: normalizeDsl(record.dsl),
+    }
+  },
+
+  async createWorkflow(payload: WorkflowCreatePayload): Promise<WorkflowDefinitionItem> {
+    const data = await apiClient.post('/workflows', payload) as unknown
+    const record = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    return normalizeDefinition(record)
+  },
+
+  async updateWorkflow(workflowId: number, payload: WorkflowUpdatePayload): Promise<WorkflowDefinitionItem> {
+    const data = await apiClient.put(`/workflows/${workflowId}`, payload) as unknown
+    const record = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    return normalizeDefinition(record)
+  },
+
+  async validateWorkflow(workflowId: number): Promise<WorkflowValidateResult> {
+    const data = await apiClient.post(`/workflows/${workflowId}/validate`) as unknown
+    const record = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    const errors = Array.isArray(record.errors) ? record.errors.map((e: unknown) => normalizeValidationIssue(e)) : []
+    const warnings = Array.isArray(record.warnings) ? record.warnings.map((e: unknown) => normalizeValidationIssue(e)) : []
+    const summaryRecord = (record.summary && typeof record.summary === 'object' ? record.summary : {}) as Record<string, unknown>
+    return {
+      workflow_id: toNumber(record.workflow_id, workflowId),
+      workflow_key: typeof record.workflow_key === 'string' ? record.workflow_key : '',
+      version: toNumber(record.version, 0),
+      valid: record.valid === true,
+      errors,
+      warnings,
+      summary: {
+        error_count: toNumber(summaryRecord.error_count, errors.length),
+        warning_count: toNumber(summaryRecord.warning_count, warnings.length),
+        categories: summaryRecord.categories && typeof summaryRecord.categories === 'object'
+          ? Object.fromEntries(Object.entries(summaryRecord.categories).map(([key, value]) => [key, toNumber(value, 0)]))
+          : {},
+      },
     }
   },
 }

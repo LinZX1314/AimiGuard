@@ -19,6 +19,7 @@ from core.database import (
     get_db,
 )
 from services.workflow_dsl import validate_workflow_dsl
+from services.workflow_validator import validate_workflow_publish
 
 router = APIRouter(prefix="/api/v1/workflows", tags=["workflow"])
 
@@ -33,13 +34,18 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _state_value(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    return str(raw)
+
+
 def _to_definition_item(model: WorkflowDefinition) -> Dict[str, Any]:
     return {
         "id": model.id,
         "workflow_key": model.workflow_key,
         "name": model.name,
         "description": model.description,
-        "definition_state": model.definition_state,
+        "definition_state": _state_value(model.definition_state),
         "latest_version": model.latest_version,
         "published_version": model.published_version,
         "version_tag": model.latest_version,
@@ -79,7 +85,7 @@ def _normalize_and_validate_dsl(workflow_key: str, dsl: Dict[str, Any]) -> Dict[
     if str(payload.get("workflow_id")) != workflow_key:
         raise HTTPException(status_code=400, detail="dsl.workflow_id must match workflow_key")
     validated = validate_workflow_dsl(payload)
-    return validated.model_dump(by_alias=True)
+    return validated.model_dump(by_alias=True, mode="json")
 
 
 class WorkflowCreateRequest(BaseModel):
@@ -294,10 +300,21 @@ async def validate_workflow(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"invalid workflow dsl snapshot: {exc}")
 
-    try:
-        validate_workflow_dsl(dsl_payload)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"dsl validation failed: {exc}")
+    result = validate_workflow_publish(dsl_payload)
+    if not result["valid"]:
+        return {
+            "code": 0,
+            "data": {
+                "workflow_id": definition.id,
+                "workflow_key": definition.workflow_key,
+                "version": latest.version,
+                "valid": False,
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+                "summary": result["summary"],
+            },
+            "message": "workflow validation failed",
+        }
 
     now = _utc_now()
     latest.definition_state = "VALIDATED"
@@ -315,6 +332,8 @@ async def validate_workflow(
             "version": latest.version,
             "valid": True,
             "errors": [],
+            "warnings": result["warnings"],
+            "summary": result["summary"],
         },
         "message": "workflow validated",
     }
