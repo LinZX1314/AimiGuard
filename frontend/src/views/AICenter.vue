@@ -257,31 +257,52 @@
       </DialogContent>
     </Dialog>
 
-    <!-- ── 右侧：报告 + TTS ── -->
+    <!-- 语音录音弹窗 -->
+    <Dialog :open="ttsRecording" @update:open="(v: boolean) => { if (!v) { toggleTTSRecording() } }">
+      <DialogContent class="sm:max-w-xs" @pointer-down-outside.prevent @escape-key-down.prevent>
+        <div class="flex flex-col items-center gap-5 py-4">
+          <!-- 录音波形动画容器 -->
+          <div class="relative size-28 rounded-full bg-red-500/8 flex items-center justify-center">
+            <!-- 脉冲光圈 -->
+            <span class="absolute inset-0 rounded-full border-2 border-red-400/30 animate-ping pointer-events-none" />
+            <span class="absolute inset-2 rounded-full border border-red-400/15 animate-pulse pointer-events-none" />
+            <!-- 实时波形条 -->
+            <div class="flex items-center gap-[3px] h-12">
+              <span
+                v-for="(v, i) in waveBars"
+                :key="i"
+                class="tts-wave-bar-lg"
+                :style="{ height: Math.max(6, v * 48) + 'px' }"
+              />
+            </div>
+          </div>
+          <div class="text-center space-y-1">
+            <p class="text-sm font-medium text-foreground">正在聆听…</p>
+            <p class="text-[11px] text-muted-foreground">请对着麦克风说话</p>
+          </div>
+          <!-- 停止按钮 -->
+          <button
+            class="size-12 rounded-full bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25 flex items-center justify-center transition-all cursor-pointer"
+            @click="toggleTTSRecording"
+          >
+            <MicOff class="size-5" />
+          </button>
+          <p class="text-[10px] text-muted-foreground/50">点击停止录音</p>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ── 右侧：报告 ── -->
     <aside class="w-64 shrink-0 border-l border-border/60 flex flex-col bg-sidebar">
 
-      <!-- 标签切换 -->
-      <div class="flex border-b border-border/60 shrink-0">
-        <button
-          v-for="tab in rightTabs"
-          :key="tab.key"
-          :class="[
-            'flex-1 py-2.5 text-xs font-medium text-center transition-all duration-150',
-            rightTab === tab.key
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground border-b-2 border-transparent hover:text-foreground hover:border-border',
-          ]"
-          @click="rightTab = tab.key"
-        >
-          <div class="flex items-center justify-center gap-1.5">
-            <component :is="tab.icon" class="size-3" />
-            {{ tab.label }}
-          </div>
-        </button>
+      <!-- 标题 -->
+      <div class="flex items-center gap-1.5 px-3.5 py-3 border-b border-border/60">
+        <FileText class="size-3.5 text-primary/70" />
+        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">报告</span>
       </div>
 
       <!-- 报告面板 -->
-      <div v-show="rightTab === 'report'" class="flex flex-col flex-1 min-h-0">
+      <div class="flex flex-col flex-1 min-h-0">
         <div class="px-3 py-3 border-b border-border/60 space-y-2 shrink-0">
           <div class="grid grid-cols-2 gap-1.5">
             <Button
@@ -360,75 +381,6 @@
           </div>
         </div>
       </div>
-
-      <!-- TTS 面板 -->
-      <div v-show="rightTab === 'tts'" class="flex flex-col flex-1 min-h-0">
-        <div class="px-3 py-3 border-b border-border/60 space-y-2 shrink-0">
-          <textarea
-            v-model="ttsText"
-            rows="3"
-            placeholder="输入文本，将其转为语音…"
-            class="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-xs placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/30 transition-all"
-          />
-          <Button
-            size="sm"
-            class="cursor-pointer text-xs gap-1.5 w-full h-7"
-            :disabled="!ttsText.trim() || ttsCreating"
-            @click="createTTS"
-          >
-            <Volume2 class="size-3" />
-            {{ ttsCreating ? '创建中…' : '创建 TTS 任务' }}
-          </Button>
-          <Transition name="fade">
-            <p
-              v-if="ttsMsg"
-              class="text-[10px] text-center"
-              :class="ttsMsgOk ? 'text-emerald-400' : 'text-destructive'"
-            >
-              {{ ttsMsg }}
-            </p>
-          </Transition>
-        </div>
-
-        <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
-          <div v-if="ttsLoading" class="space-y-1.5">
-            <Skeleton v-for="i in 3" :key="i" class="h-12 w-full rounded-lg" />
-          </div>
-          <div
-            v-else-if="ttsTasks.length === 0"
-            class="flex flex-col items-center justify-center py-10 gap-2"
-          >
-            <Volume2 class="size-6 text-muted-foreground/20" />
-            <p class="text-[11px] text-muted-foreground/50">暂无 TTS 任务</p>
-          </div>
-          <div
-            v-for="t in ttsTasks"
-            :key="t.id"
-            class="rounded-lg border border-border/50 p-2.5 space-y-1.5"
-          >
-            <div class="flex items-center justify-between gap-1">
-              <span class="text-[10px] text-muted-foreground/60 tabular-nums">#{{ t.id }}</span>
-              <Badge class="text-[9px] h-4 px-1.5" :class="ttsStateColor(t.state)">
-                {{ t.state }}
-              </Badge>
-            </div>
-            <p class="text-[11px] text-muted-foreground/80 line-clamp-2">{{ t.text_preview }}</p>
-            <div v-if="t.state === 'PENDING'" class="pt-0.5">
-              <Button
-                variant="outline"
-                size="sm"
-                class="cursor-pointer text-[10px] h-5 w-full gap-1 hover:border-primary/30 hover:text-primary"
-                @click="processTTS(t.id)"
-              >
-                <Play class="size-2.5" /> 模拟处理
-              </Button>
-            </div>
-            <div v-if="t.audio_path" class="text-[10px] text-emerald-400/80 truncate font-mono">
-              {{ t.audio_path }}
-            </div>
-          </div>
-        </div>
-      </div>
     </aside>
   </div>
 </template>
@@ -437,7 +389,6 @@
 import { onMounted, onUnmounted, ref, reactive } from 'vue'
 import { aiApi } from '@/api/ai'
 import { reportApi } from '@/api/report'
-import { ttsApi, type TTSTask } from '@/api/tts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -464,10 +415,9 @@ import {
   MessageCircle,
   MessagesSquare,
   Mic,
-  Play,
+  MicOff,
   ScanLine,
   SquarePen,
-  Volume2,
 } from 'lucide-vue-next'
 
 interface Message_ {
@@ -499,12 +449,6 @@ const quickHints = [
   '威胁溯源分析',
 ]
 
-const rightTabs = [
-  { key: 'report', label: '报告', icon: FileText },
-  { key: 'tts', label: 'TTS', icon: Volume2 },
-]
-const rightTab = ref('report')
-
 // ── 状态 ──
 const messages = ref<Message_[]>([])
 const aiThinking = ref(false)
@@ -520,12 +464,6 @@ const reportMsg = ref('')
 const reportMsgOk = ref(true)
 const selectedReport = ref<Report | null>(null)
 
-const ttsText = ref('')
-const ttsCreating = ref(false)
-const ttsMsg = ref('')
-const ttsMsgOk = ref(true)
-const ttsTasks = ref<TTSTask[]>([])
-const ttsLoading = ref(false)
 const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
 
@@ -679,46 +617,6 @@ const generateReport = async (type: string) => {
   }
 }
 
-// ── TTS ──
-const loadTTS = async () => {
-  ttsLoading.value = true
-  try {
-    const data = await ttsApi.listTasks({ page: 1, page_size: 20 })
-    ttsTasks.value = data?.items ?? []
-  } catch {
-    ttsTasks.value = []
-  } finally {
-    ttsLoading.value = false
-  }
-}
-
-const createTTS = async () => {
-  const text = ttsText.value.trim()
-  if (!text) return
-  ttsCreating.value = true
-  ttsMsg.value = ''
-  try {
-    await ttsApi.createTask(text)
-    ttsText.value = ''
-    ttsMsgOk.value = true
-    ttsMsg.value = 'TTS 任务已创建'
-    await loadTTS()
-  } catch {
-    ttsMsgOk.value = false
-    ttsMsg.value = '创建失败'
-  } finally {
-    ttsCreating.value = false
-    setTimeout(() => { ttsMsg.value = '' }, 3000)
-  }
-}
-
-const processTTS = async (taskId: number) => {
-  try {
-    await ttsApi.processTask(taskId)
-    await loadTTS()
-  } catch { /* ignore */ }
-}
-
 // ── TTS 录音按钮 ──
 const startRecording = (stream: MediaStream) => {
   micStream = stream
@@ -760,16 +658,6 @@ const retryMicPermission = async () => {
   }
 }
 
-const ttsStateColor = (s: string) => {
-  const m: Record<string, string> = {
-    PENDING: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    PROCESSING: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    SUCCESS: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    FAILED: 'bg-destructive/15 text-destructive border-destructive/30',
-  }
-  return m[s] || 'bg-muted text-muted-foreground'
-}
-
 // ── 格式化 ──
 const formatTime = (t: string) =>
   t ? new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
@@ -780,7 +668,6 @@ const formatDate = (t: string) =>
 onMounted(() => {
   loadSessions()
   loadReports()
-  loadTTS()
 })
 </script>
 
@@ -837,13 +724,23 @@ onMounted(() => {
   max-height: 4rem;
 }
 
-/* TTS 实时声音波形条 */
+/* TTS 输入框内小波形条 */
 .tts-wave-bar {
   display: inline-block;
   width: 2.5px;
   min-height: 3px;
   border-radius: 9999px;
   background: currentColor;
+  transition: height 0.08s ease-out;
+}
+
+/* TTS 弹窗大波形条 */
+.tts-wave-bar-lg {
+  display: inline-block;
+  width: 4px;
+  min-height: 6px;
+  border-radius: 9999px;
+  background: #f87171;
   transition: height 0.08s ease-out;
 }
 </style>
