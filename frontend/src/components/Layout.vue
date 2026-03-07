@@ -279,7 +279,7 @@
               class="sidebar-mode-label"
               :class="sidebarCollapsed ? 'sidebar-mode-label-collapsed' : 'sidebar-mode-label-expanded'"
             >
-              {{ sidebarCollapsed ? (activeMode === 'defense' ? 'Defense' : 'Probe') : activeModeLabel }}
+              {{ sidebarCollapsed ? (activeMode === 'defense' ? '防御' : '探测') : activeModeLabel }}
             </span>
           </p>
         </div>
@@ -310,8 +310,8 @@
             type="button"
             class="flex h-11 w-full items-center rounded-md text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             :class="sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'"
-            :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-            :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+            :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             @click="toggleSidebarCollapsed"
           >
             <ChevronRight
@@ -695,18 +695,18 @@ interface SidebarItem {
 
 const sidebarMap: Record<ModeKey, SidebarItem[]> = {
   defense: [
-    { to: '/defense/dashboard', label: 'Dashboard', icon: Activity },
-    { to: '/defense/realtime', label: 'Realtime', icon: Activity },
-    { to: '/defense/events', label: 'Threat Ops', icon: ShieldAlert },
-    { to: '/defense/ai', label: 'AI Insight', icon: BrainCircuit },
-    { to: '/workflow/catalog', label: 'Workflow', icon: Blocks, permissions: ['workflow_view'] },
-    { to: '/workflow/runs', label: 'Workflow Runs', icon: Activity, permissions: ['workflow_view'] },
+    { to: '/defense/dashboard', label: '仪表盘', icon: Activity },
+    { to: '/defense/realtime', label: '实时监测', icon: Activity },
+    { to: '/defense/events', label: '威胁处置', icon: ShieldAlert },
+    { to: '/defense/ai', label: 'AI 研判', icon: BrainCircuit },
+    { to: '/workflow/catalog', label: '工作流', icon: Blocks, permissions: ['workflow_view'] },
+    { to: '/workflow/runs', label: '流程执行', icon: Activity, permissions: ['workflow_view'] },
   ],
   probe: [
-    { to: '/probe/dashboard', label: 'Dashboard', icon: Activity },
-    { to: '/probe/realtime', label: 'Realtime', icon: Radar },
-    { to: '/probe/scan', label: 'Scan Ops', icon: ScanSearch },
-    { to: '/probe/ai', label: 'AI Insight', icon: BrainCircuit },
+    { to: '/probe/dashboard', label: '仪表盘', icon: Activity },
+    { to: '/probe/realtime', label: '实时监测', icon: Radar },
+    { to: '/probe/scan', label: '扫描管理', icon: ScanSearch },
+    { to: '/probe/ai', label: 'AI 分析', icon: BrainCircuit },
   ],
 }
 
@@ -716,7 +716,7 @@ const modeDefaultRoute: Record<ModeKey, string> = {
 }
 
 const activeModeLabel = computed(() => {
-  return activeMode.value === 'defense' ? 'Defense Mode' : 'Probe Mode'
+  return activeMode.value === 'defense' ? '防御模式' : '探测模式'
 })
 
 const currentSidebarItems = computed(() => {

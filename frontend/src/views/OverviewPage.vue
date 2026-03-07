@@ -160,7 +160,7 @@
         </Card>
       </section>
 
-      <section class="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
+      <section class="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
         <Card class="ops-section-card">
           <CardHeader class="space-y-3 pb-0">
             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -800,10 +800,10 @@ const narrativeCards = computed<NarrativeCard[]>(() => {
 const trendHighlights = computed(() => {
   const alertTrend = trends.value.alert_trend
   const highTrend = trends.value.high_alert_trend
-  const latest = alertTrend.at(-1)?.count ?? 0
-  const previous = alertTrend.at(-2)?.count ?? latest
+  const latest = alertTrend.length > 0 ? (alertTrend[alertTrend.length - 1]?.count ?? 0) : 0
+  const previous = alertTrend.length > 1 ? (alertTrend[alertTrend.length - 2]?.count ?? latest) : latest
   const delta = latest - previous
-  const highLatest = highTrend.at(-1)?.count ?? 0
+  const highLatest = highTrend.length > 0 ? (highTrend[highTrend.length - 1]?.count ?? 0) : 0
   const average = alertTrend.length ? Math.round(alertTrend.reduce((sum, item) => sum + item.count, 0) / alertTrend.length) : 0
   const blockRate = defenseMetrics.value?.block_success_rate ?? 0
 
