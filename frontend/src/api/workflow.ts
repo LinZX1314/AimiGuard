@@ -176,6 +176,92 @@ export interface WorkflowValidateResult {
   summary: WorkflowValidateSummary
 }
 
+export interface WorkflowRunSummary {
+  total_runs: number
+  queued_runs: number
+  running_runs: number
+  success_runs: number
+  failed_runs: number
+  manual_required_runs: number
+  cancelled_runs: number
+  failure_rate: number
+  avg_duration_ms: number
+}
+
+export interface WorkflowRunItem {
+  run_id: number
+  workflow_id: number
+  workflow_key: string
+  workflow_name: string
+  workflow_version: number
+  run_state: string
+  trigger_source: string | null
+  trigger_ref: string | null
+  trace_id: string | null
+  audit_path: string | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string | null
+  updated_at: string | null
+  duration_ms: number | null
+  step_count: number
+  failed_step_count: number
+  latest_error_message: string | null
+}
+
+export interface WorkflowRunStepItem {
+  id: number
+  node_id: string
+  node_type: string
+  step_state: string
+  attempt: number
+  trace_id: string | null
+  audit_path: string | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string | null
+  updated_at: string | null
+  duration_ms: number | null
+  error_message: string | null
+  input_summary: string | null
+  output_summary: string | null
+  input_payload: unknown
+  output_payload: unknown
+}
+
+export interface WorkflowRunDetail extends WorkflowRunItem {
+  input_payload: unknown
+  output_payload: unknown
+  context: unknown
+  input_summary: string | null
+  output_summary: string | null
+  context_summary: string | null
+}
+
+export interface WorkflowRunListResult {
+  summary: WorkflowRunSummary
+  total: number
+  page: number
+  page_size: number
+  items: WorkflowRunItem[]
+}
+
+export interface WorkflowRunDetailResult {
+  run: WorkflowRunDetail
+  steps: WorkflowRunStepItem[]
+}
+
+export interface WorkflowRunListParams {
+  page?: number
+  page_size?: number
+  workflow_id?: number
+  workflow_key?: string
+  run_state?: string
+  trace_id?: string
+  trigger_source?: string
+  keyword?: string
+}
+
 const toNumber = (value: unknown, fallback: number): number => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
@@ -197,6 +283,81 @@ const normalizeValidationIssue = (value: unknown): WorkflowValidateIssue => {
     node_id: typeof record.node_id === 'string' ? record.node_id : undefined,
     value: record.value,
     allowed_values: Array.isArray(record.allowed_values) ? record.allowed_values.map((item) => String(item)) : undefined,
+  }
+}
+
+const normalizeRunSummary = (value: unknown): WorkflowRunSummary => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    total_runs: toNumber(record.total_runs, 0),
+    queued_runs: toNumber(record.queued_runs, 0),
+    running_runs: toNumber(record.running_runs, 0),
+    success_runs: toNumber(record.success_runs, 0),
+    failed_runs: toNumber(record.failed_runs, 0),
+    manual_required_runs: toNumber(record.manual_required_runs, 0),
+    cancelled_runs: toNumber(record.cancelled_runs, 0),
+    failure_rate: toNumber(record.failure_rate, 0),
+    avg_duration_ms: toNumber(record.avg_duration_ms, 0),
+  }
+}
+
+const normalizeRunItem = (value: unknown): WorkflowRunItem => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    run_id: toNumber(record.run_id, 0),
+    workflow_id: toNumber(record.workflow_id, 0),
+    workflow_key: typeof record.workflow_key === 'string' ? record.workflow_key : '',
+    workflow_name: typeof record.workflow_name === 'string' ? record.workflow_name : '',
+    workflow_version: toNumber(record.workflow_version, 0),
+    run_state: typeof record.run_state === 'string' ? record.run_state : 'UNKNOWN',
+    trigger_source: toStringOrNull(record.trigger_source),
+    trigger_ref: toStringOrNull(record.trigger_ref),
+    trace_id: toStringOrNull(record.trace_id),
+    audit_path: toStringOrNull(record.audit_path),
+    started_at: toStringOrNull(record.started_at),
+    ended_at: toStringOrNull(record.ended_at),
+    created_at: toStringOrNull(record.created_at),
+    updated_at: toStringOrNull(record.updated_at),
+    duration_ms: record.duration_ms == null ? null : toNumber(record.duration_ms, 0),
+    step_count: toNumber(record.step_count, 0),
+    failed_step_count: toNumber(record.failed_step_count, 0),
+    latest_error_message: toStringOrNull(record.latest_error_message),
+  }
+}
+
+const normalizeRunStep = (value: unknown): WorkflowRunStepItem => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    id: toNumber(record.id, 0),
+    node_id: typeof record.node_id === 'string' ? record.node_id : '',
+    node_type: typeof record.node_type === 'string' ? record.node_type : '',
+    step_state: typeof record.step_state === 'string' ? record.step_state : 'UNKNOWN',
+    attempt: toNumber(record.attempt, 1),
+    trace_id: toStringOrNull(record.trace_id),
+    audit_path: toStringOrNull(record.audit_path),
+    started_at: toStringOrNull(record.started_at),
+    ended_at: toStringOrNull(record.ended_at),
+    created_at: toStringOrNull(record.created_at),
+    updated_at: toStringOrNull(record.updated_at),
+    duration_ms: record.duration_ms == null ? null : toNumber(record.duration_ms, 0),
+    error_message: toStringOrNull(record.error_message),
+    input_summary: toStringOrNull(record.input_summary),
+    output_summary: toStringOrNull(record.output_summary),
+    input_payload: record.input_payload,
+    output_payload: record.output_payload,
+  }
+}
+
+const normalizeRunDetail = (value: unknown): WorkflowRunDetail => {
+  const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    ...normalizeRunItem(record),
+    input_payload: record.input_payload,
+    output_payload: record.output_payload,
+    context: record.context,
+    input_summary: toStringOrNull(record.input_summary),
+    output_summary: toStringOrNull(record.output_summary),
+    context_summary: toStringOrNull(record.context_summary),
   }
 }
 
@@ -333,6 +494,29 @@ export const workflowApi = {
       page: toNumber(record.page, params?.page ?? 1),
       page_size: toNumber(record.page_size, params?.page_size ?? 20),
       items: items.map((item) => normalizeDefinition(item)),
+    }
+  },
+
+  async getWorkflowRuns(params?: WorkflowRunListParams): Promise<WorkflowRunListResult> {
+    const data = await apiClient.get('/workflows/runs', { params }) as unknown
+    const record = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    const items = Array.isArray(record.items) ? record.items : []
+    return {
+      summary: normalizeRunSummary(record.summary),
+      total: toNumber(record.total, 0),
+      page: toNumber(record.page, params?.page ?? 1),
+      page_size: toNumber(record.page_size, params?.page_size ?? 20),
+      items: items.map((item) => normalizeRunItem(item)),
+    }
+  },
+
+  async getWorkflowRunDetail(runId: number): Promise<WorkflowRunDetailResult> {
+    const data = await apiClient.get(`/workflows/runs/${runId}`) as unknown
+    const record = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    const steps = Array.isArray(record.steps) ? record.steps : []
+    return {
+      run: normalizeRunDetail(record.run),
+      steps: steps.map((item) => normalizeRunStep(item)),
     }
   },
 

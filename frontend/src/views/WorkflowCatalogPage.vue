@@ -59,6 +59,9 @@
           <CardTitle class="text-base">流程清单</CardTitle>
           <div class="flex items-center gap-2">
             <span class="text-xs text-muted-foreground">共 {{ total }} 条</span>
+            <Button variant="outline" size="sm" class="h-8 cursor-pointer" @click="router.push('/workflow/runs')">
+              运行监控
+            </Button>
             <Button variant="outline" size="sm" class="h-8 cursor-pointer" :disabled="loading" @click="loadWorkflows">
               刷新
             </Button>

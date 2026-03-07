@@ -8,13 +8,15 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from api.auth import require_permissions
 from core.database import (
     User,
     WorkflowDefinition,
+    WorkflowRun,
+    WorkflowStepRun,
     WorkflowVersion,
     get_db,
 )
@@ -41,6 +43,143 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
 def _state_value(value: Any) -> str:
     raw = getattr(value, "value", value)
     return str(raw)
+
+
+def _duration_ms(started_at: Optional[datetime], ended_at: Optional[datetime]) -> Optional[int]:
+    if started_at is None:
+        return None
+    start = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
+    end_value = ended_at or _utc_now()
+    end = end_value if end_value.tzinfo else end_value.replace(tzinfo=timezone.utc)
+    return max(0, int((end - start).total_seconds() * 1000))
+
+
+def _safe_json_value(raw: Optional[str]) -> Any:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return raw
+
+
+def _payload_summary(raw: Optional[str], limit: int = 180) -> Optional[str]:
+    value = _safe_json_value(raw)
+    if value is None:
+        return None
+    text = json.dumps(value, ensure_ascii=False, default=str) if isinstance(value, (dict, list)) else str(value)
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 3]}..."
+
+
+def _audit_trace_path(trace_id: Optional[str]) -> Optional[str]:
+    trace = str(trace_id or "").strip()
+    if not trace:
+        return None
+    return f"/audit?trace_id={trace}"
+
+
+def _apply_run_filters(
+    query,
+    *,
+    workflow_id: Optional[int] = None,
+    workflow_key: Optional[str] = None,
+    run_state: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    trigger_source: Optional[str] = None,
+    keyword: Optional[str] = None,
+):
+    if workflow_id is not None:
+        query = query.filter(WorkflowRun.workflow_id == workflow_id)
+    if workflow_key:
+        query = query.filter(WorkflowDefinition.workflow_key == workflow_key.strip())
+    if run_state:
+        query = query.filter(WorkflowRun.run_state == run_state.strip().upper())
+    if trace_id:
+        query = query.filter(WorkflowRun.trace_id == trace_id.strip())
+    if trigger_source:
+        query = query.filter(WorkflowRun.trigger_source == trigger_source.strip())
+    if keyword:
+        term = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(
+                WorkflowDefinition.workflow_key.like(term),
+                WorkflowDefinition.name.like(term),
+                WorkflowRun.trigger_ref.like(term),
+                WorkflowRun.trace_id.like(term),
+            )
+        )
+    return query
+
+
+def _run_state_summary(counts: Dict[str, int]) -> Dict[str, Any]:
+    total_runs = sum(counts.values())
+    failed_total = counts.get("FAILED", 0) + counts.get("MANUAL_REQUIRED", 0) + counts.get("CANCELLED", 0)
+    return {
+        "total_runs": total_runs,
+        "queued_runs": counts.get("QUEUED", 0),
+        "running_runs": counts.get("RUNNING", 0) + counts.get("RETRYING", 0),
+        "success_runs": counts.get("SUCCESS", 0),
+        "failed_runs": counts.get("FAILED", 0),
+        "manual_required_runs": counts.get("MANUAL_REQUIRED", 0),
+        "cancelled_runs": counts.get("CANCELLED", 0),
+        "failure_rate": round((failed_total / total_runs) * 100, 2) if total_runs > 0 else 0.0,
+    }
+
+
+def _to_run_item(
+    run: WorkflowRun,
+    definition: WorkflowDefinition,
+    version: WorkflowVersion,
+    *,
+    step_count: int,
+    failed_step_count: int,
+    latest_error_message: Optional[str],
+) -> Dict[str, Any]:
+    duration_ms = _duration_ms(run.started_at, run.ended_at)
+    return {
+        "run_id": run.id,
+        "workflow_id": definition.id,
+        "workflow_key": definition.workflow_key,
+        "workflow_name": definition.name,
+        "workflow_version": version.version,
+        "run_state": run.run_state,
+        "trigger_source": run.trigger_source,
+        "trigger_ref": run.trigger_ref,
+        "trace_id": run.trace_id,
+        "audit_path": _audit_trace_path(run.trace_id),
+        "started_at": _iso(run.started_at),
+        "ended_at": _iso(run.ended_at),
+        "created_at": _iso(run.created_at),
+        "updated_at": _iso(run.updated_at),
+        "duration_ms": duration_ms,
+        "step_count": step_count,
+        "failed_step_count": failed_step_count,
+        "latest_error_message": latest_error_message,
+    }
+
+
+def _to_step_item(step: WorkflowStepRun) -> Dict[str, Any]:
+    return {
+        "id": step.id,
+        "node_id": step.node_id,
+        "node_type": step.node_type,
+        "step_state": step.step_state,
+        "attempt": step.attempt,
+        "trace_id": step.trace_id,
+        "audit_path": _audit_trace_path(step.trace_id),
+        "started_at": _iso(step.started_at),
+        "ended_at": _iso(step.ended_at),
+        "created_at": _iso(step.created_at),
+        "updated_at": _iso(step.updated_at),
+        "duration_ms": _duration_ms(step.started_at, step.ended_at),
+        "error_message": step.error_message,
+        "input_summary": _payload_summary(step.input_payload),
+        "output_summary": _payload_summary(step.output_payload),
+        "input_payload": _safe_json_value(step.input_payload),
+        "output_payload": _safe_json_value(step.output_payload),
+    }
 
 
 def _to_definition_item(model: WorkflowDefinition) -> Dict[str, Any]:
@@ -275,6 +414,176 @@ async def create_workflow(
         "code": 0,
         "data": _to_definition_item(definition),
         "message": "workflow created",
+    }
+
+
+@router.get("/runs")
+async def list_workflow_runs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    workflow_id: Optional[int] = Query(default=None),
+    workflow_key: Optional[str] = Query(default=None),
+    run_state: Optional[str] = Query(default=None),
+    trace_id: Optional[str] = Query(default=None),
+    trigger_source: Optional[str] = Query(default=None),
+    keyword: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("workflow_view")),
+):
+    base_query = (
+        db.query(WorkflowRun, WorkflowDefinition, WorkflowVersion)
+        .join(WorkflowDefinition, WorkflowDefinition.id == WorkflowRun.workflow_id)
+        .join(WorkflowVersion, WorkflowVersion.id == WorkflowRun.workflow_version_id)
+    )
+    base_query = _apply_run_filters(
+        base_query,
+        workflow_id=workflow_id,
+        workflow_key=workflow_key,
+        run_state=run_state,
+        trace_id=trace_id,
+        trigger_source=trigger_source,
+        keyword=keyword,
+    )
+
+    total = base_query.count()
+    rows = (
+        base_query.order_by(WorkflowRun.created_at.desc(), WorkflowRun.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    run_ids = [row[0].id for row in rows]
+    step_meta: Dict[int, Dict[str, Any]] = {}
+    if run_ids:
+        step_rows = (
+            db.query(WorkflowStepRun)
+            .filter(WorkflowStepRun.workflow_run_id.in_(run_ids))
+            .order_by(WorkflowStepRun.workflow_run_id.asc(), WorkflowStepRun.id.desc())
+            .all()
+        )
+        for step in step_rows:
+            meta = step_meta.setdefault(
+                step.workflow_run_id,
+                {"step_count": 0, "failed_step_count": 0, "latest_error_message": None},
+            )
+            meta["step_count"] += 1
+            if str(step.step_state or "").upper() in {"FAILED", "MANUAL_REQUIRED"}:
+                meta["failed_step_count"] += 1
+            if meta["latest_error_message"] is None and step.error_message:
+                meta["latest_error_message"] = str(step.error_message)[:500]
+
+    count_query = (
+        db.query(WorkflowRun.run_state, func.count(WorkflowRun.id))
+        .join(WorkflowDefinition, WorkflowDefinition.id == WorkflowRun.workflow_id)
+    )
+    count_query = _apply_run_filters(
+        count_query,
+        workflow_id=workflow_id,
+        workflow_key=workflow_key,
+        run_state=run_state,
+        trace_id=trace_id,
+        trigger_source=trigger_source,
+        keyword=keyword,
+    )
+    state_counts = {str(state): int(count) for state, count in count_query.group_by(WorkflowRun.run_state).all()}
+
+    duration_query = (
+        db.query(WorkflowRun.started_at, WorkflowRun.ended_at)
+        .join(WorkflowDefinition, WorkflowDefinition.id == WorkflowRun.workflow_id)
+    )
+    duration_query = _apply_run_filters(
+        duration_query,
+        workflow_id=workflow_id,
+        workflow_key=workflow_key,
+        run_state=run_state,
+        trace_id=trace_id,
+        trigger_source=trigger_source,
+        keyword=keyword,
+    )
+    duration_values = [
+        value
+        for value in (_duration_ms(started_at, ended_at) for started_at, ended_at in duration_query.all())
+        if value is not None
+    ]
+
+    items = []
+    for run, definition, version in rows:
+        meta = step_meta.get(run.id, {})
+        items.append(
+            _to_run_item(
+                run,
+                definition,
+                version,
+                step_count=int(meta.get("step_count", 0)),
+                failed_step_count=int(meta.get("failed_step_count", 0)),
+                latest_error_message=meta.get("latest_error_message"),
+            )
+        )
+
+    summary = _run_state_summary(state_counts)
+    summary["avg_duration_ms"] = round(sum(duration_values) / len(duration_values), 2) if duration_values else 0.0
+
+    return {
+        "code": 0,
+        "data": {
+            "summary": summary,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": items,
+        },
+    }
+
+
+@router.get("/runs/{run_id}")
+async def get_workflow_run_detail(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("workflow_view")),
+):
+    row = (
+        db.query(WorkflowRun, WorkflowDefinition, WorkflowVersion)
+        .join(WorkflowDefinition, WorkflowDefinition.id == WorkflowRun.workflow_id)
+        .join(WorkflowVersion, WorkflowVersion.id == WorkflowRun.workflow_version_id)
+        .filter(WorkflowRun.id == run_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="workflow run not found")
+
+    run, definition, version = row
+    steps = db.query(WorkflowStepRun).filter(WorkflowStepRun.workflow_run_id == run_id).all()
+    steps.sort(
+        key=lambda item: (
+            item.started_at or item.created_at or _utc_now(),
+            item.attempt,
+            item.id,
+        )
+    )
+    failed_step_count = sum(1 for step in steps if str(step.step_state or "").upper() in {"FAILED", "MANUAL_REQUIRED"})
+    latest_error_message = next((str(step.error_message)[:500] for step in reversed(steps) if step.error_message), None)
+
+    return {
+        "code": 0,
+        "data": {
+            "run": {
+                **_to_run_item(
+                    run,
+                    definition,
+                    version,
+                    step_count=len(steps),
+                    failed_step_count=failed_step_count,
+                    latest_error_message=latest_error_message,
+                ),
+                "input_payload": _safe_json_value(run.input_payload),
+                "output_payload": _safe_json_value(run.output_payload),
+                "context": _safe_json_value(run.context_json),
+                "input_summary": _payload_summary(run.input_payload),
+                "output_summary": _payload_summary(run.output_payload),
+                "context_summary": _payload_summary(run.context_json),
+            },
+            "steps": [_to_step_item(step) for step in steps],
+        },
     }
 
 

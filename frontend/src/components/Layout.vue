@@ -700,6 +700,7 @@ const sidebarMap: Record<ModeKey, SidebarItem[]> = {
     { to: '/defense/events', label: 'Threat Ops', icon: ShieldAlert },
     { to: '/defense/ai', label: 'AI Insight', icon: BrainCircuit },
     { to: '/workflow/catalog', label: 'Workflow', icon: Blocks, permissions: ['workflow_view'] },
+    { to: '/workflow/runs', label: 'Workflow Runs', icon: Activity, permissions: ['workflow_view'] },
   ],
   probe: [
     { to: '/probe/dashboard', label: 'Dashboard', icon: Activity },

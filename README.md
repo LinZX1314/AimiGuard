@@ -2420,6 +2420,9 @@ requirements.txt
 - `M4-01 scan 节点模型与适配器（后端）`
   - 代码：`backend/services/workflow_runtime.py`、`backend/services/workflow_validator.py`、`tests/test_workflow_m4_01_scan_runtime.py`
   - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py tests/test_workflow_m4_01_scan_runtime.py -q`
+- `M4-02 运行监控看板（前后端）`
+  - 代码：`backend/api/workflow.py`、`frontend/src/api/workflow.ts`、`frontend/src/views/WorkflowRunsPage.vue`、`frontend/src/router/index.ts`、`frontend/src/components/Layout.vue`、`frontend/src/views/WorkflowCatalogPage.vue`、`tests/test_workflow_m4_02_monitoring_api.py`
+  - 验证：`python -m pytest tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py tests/test_workflow_m4_01_scan_runtime.py tests/test_workflow_m4_02_monitoring_api.py -q`、`cd frontend && npx vite build`
 
 ### 全链路可视化自定义编辑（详细规划）
 
@@ -2584,10 +2587,10 @@ requirements.txt
   - [x] 漏洞聚合与报告节点对接。
   - 验收证据：扫描任务从创建到报告完成端到端测试。
 
-- [ ] `M4-02` 运行监控看板（前端）
-  - [ ] 流程运行列表（状态、耗时、失败率、版本）。
-  - [ ] 节点级时间线（每步输入摘要/输出摘要/错误信息）。
-  - [ ] 支持 `trace_id` 全链路跳转。
+- [x] `M4-02` 运行监控看板（前后端）
+  - [x] 流程运行列表（状态、耗时、失败率、版本）。
+  - [x] 节点级时间线（每步输入摘要/输出摘要/错误信息）。
+  - [x] 支持 `trace_id` 全链路跳转。
   - 验收证据：监控页面冒烟测试 + 性能采样。
 
 - [ ] `M4-03` 回放与调试工具（前后端）

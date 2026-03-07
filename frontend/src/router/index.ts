@@ -15,6 +15,7 @@ import AuditPage from '../views/AuditPage.vue'
 import ObservabilityPage from '../views/ObservabilityPage.vue'
 import ForbiddenPage from '../views/ForbiddenPage.vue'
 import WorkflowCatalogPage from '../views/WorkflowCatalogPage.vue'
+import WorkflowRunsPage from '../views/WorkflowRunsPage.vue'
 import WorkflowReadonlyGraphPage from '../views/WorkflowReadonlyGraphPage.vue'
 import WorkflowEditorPage from '../views/WorkflowEditorPage.vue'
 import { hasAnyPermission, parseStoredUserInfo } from '../composables/useAuthz'
@@ -129,6 +130,12 @@ const router = createRouter({
           path: '/workflow/catalog',
           name: 'workflow-catalog',
           component: WorkflowCatalogPage,
+          meta: { requiredPermissions: ['workflow_view'] }
+        },
+        {
+          path: '/workflow/runs',
+          name: 'workflow-runs',
+          component: WorkflowRunsPage,
           meta: { requiredPermissions: ['workflow_view'] }
         },
         {
