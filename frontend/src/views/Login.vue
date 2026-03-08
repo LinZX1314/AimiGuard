@@ -20,7 +20,7 @@
         <div class="mx-auto inline-flex size-12 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10">
           <ShieldCheck class="size-6 text-emerald-400" />
         </div>
-        <CardTitle class="text-2xl tracking-tight">AI 蜜罐</CardTitle>
+        <CardTitle class="text-2xl tracking-tight">玄枢·AI攻防指挥官</CardTitle>
         <CardDescription>智能安全运营平台</CardDescription>
       </CardHeader>
 
