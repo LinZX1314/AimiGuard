@@ -356,6 +356,37 @@ async def get_session_context(
     )
 
 
+@router.post("/sessions/cleanup-expired")
+async def cleanup_expired_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("approve_event")),
+):
+    """S1-03: 清理过期会话及其上下文消息"""
+    now = datetime.now(timezone.utc)
+    expired_sessions = (
+        db.query(AIChatSession)
+        .filter(
+            AIChatSession.expires_at.isnot(None),
+            AIChatSession.expires_at < now,
+        )
+        .all()
+    )
+    cleaned_count = 0
+    msg_count = 0
+    for s in expired_sessions:
+        msgs_deleted = db.query(AIChatMessage).filter(AIChatMessage.session_id == s.id).delete()
+        msg_count += msgs_deleted
+        db.delete(s)
+        cleaned_count += 1
+
+    db.commit()
+
+    return APIResponse.success({
+        "cleaned_sessions": cleaned_count,
+        "cleaned_messages": msg_count,
+    }, message=f"已清理 {cleaned_count} 个过期会话")
+
+
 @router.get("/decisions")
 async def list_decisions(
     context_type: Optional[str] = QueryParam(None, description="筛选 context_type: threat/scan/chat/report"),
