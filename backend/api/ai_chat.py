@@ -398,3 +398,19 @@ async def list_decisions(
 
     return APIResponse.success({"total": total, "page": page, "items": items})
 
+
+@router.get("/monitor/check")
+async def ai_monitor_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_ai_sessions")),
+):
+    """S4-03: 执行 AI 异常行为检测"""
+    from services.ai_monitor import run_all_checks
+
+    alerts = run_all_checks(db)
+    return APIResponse.success({
+        "alerts": alerts,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "alert_count": len(alerts),
+    })
+

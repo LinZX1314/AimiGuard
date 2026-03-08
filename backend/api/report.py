@@ -182,22 +182,26 @@ async def generate_report(
         trace_id=trace_id,
     )
     db.add(report)
-
-    prompt_text = json.dumps(payload, ensure_ascii=False)
-    decision_log = AIDecisionLog(
-        context_type="report",
-        model_name=str(ai_result.get("model") or "unknown"),
-        decision=ai_result.get("fallback_reason") or "ok",
-        confidence=None,
-        reason=summary[:500] if summary else None,
-        prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
-        inference_ms=round(elapsed_ms, 2),
-        model_params=json.dumps({"provider": ai_result.get("provider"), "degraded": ai_result.get("degraded"), "report_type": req.report_type}, ensure_ascii=False),
-        trace_id=trace_id,
-    )
-    db.add(decision_log)
     db.commit()
     db.refresh(report)
+
+    try:
+        prompt_text = json.dumps(payload, ensure_ascii=False)
+        decision_log = AIDecisionLog(
+            context_type="report",
+            model_name=str(ai_result.get("model") or "unknown"),
+            decision=ai_result.get("fallback_reason") or "ok",
+            confidence=None,
+            reason=summary[:500] if summary else None,
+            prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
+            inference_ms=round(elapsed_ms, 2),
+            model_params=json.dumps({"provider": ai_result.get("provider"), "degraded": ai_result.get("degraded"), "report_type": req.report_type}, ensure_ascii=False),
+            trace_id=trace_id,
+        )
+        db.add(decision_log)
+        db.commit()
+    except Exception:
+        db.rollback()
 
     AuditService.log(
         db=db,
