@@ -102,7 +102,8 @@ def test_hfish_sync_disabled(client, admin_token):
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert response.status_code == 400
-    assert "未启用" in response.json()["detail"]
+    body = response.json()
+    assert "未启用" in (body.get("detail") or body.get("message", ""))
 
 
 def test_nmap_config_save(client, admin_token):
@@ -190,7 +191,8 @@ def test_nmap_scan_invalid_profile(client, operator_token):
         headers={"Authorization": f"Bearer {operator_token}"}
     )
     assert response.status_code == 400
-    assert "无效的扫描配置" in response.json()["detail"]
+    body = response.json()
+    assert "无效的扫描配置" in (body.get("detail") or body.get("message", ""))
 
 
 def test_nmap_scan_disabled(client, admin_token, operator_token):
@@ -213,7 +215,8 @@ def test_nmap_scan_disabled(client, admin_token, operator_token):
         headers={"Authorization": f"Bearer {operator_token}"}
     )
     assert response.status_code == 400
-    assert "未启用" in response.json()["detail"]
+    body = response.json()
+    assert "未启用" in (body.get("detail") or body.get("message", ""))
 
 
 def test_get_win7_hosts(client, operator_token, test_db):

@@ -97,3 +97,5 @@ export const pluginsApi = {
     return d as { total: number; items: PluginAnomaly[] }
   },
 }
+
+export const pluginApi = pluginsApi

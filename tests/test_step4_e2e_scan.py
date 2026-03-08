@@ -11,61 +11,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 import pytest
-from fastapi.testclient import TestClient
-from main import app
-from core.database import SessionLocal, Base, engine, Asset, ScanTask
-from sqlalchemy import text
-from datetime import datetime, timezone
 import time
-
-client = TestClient(app)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_database():
-    """初始化测试数据库"""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    
-    db = SessionLocal()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    
-    # 创建测试用户
-    db.execute(
-        text("""
-        INSERT INTO user (username, password_hash, email, enabled, created_at, updated_at)
-        VALUES ('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin@test.com', 1, :now, :now)
-        """),
-        {"now": now},
-    )
-    
-    # 创建角色
-    db.execute(
-        text("""
-        INSERT INTO role (name, description, created_at, updated_at)
-        VALUES ('admin', '管理员', :now, :now)
-        """),
-        {"now": now},
-    )
-    
-    # 绑定用户角色
-    db.execute(
-        text("""
-        INSERT INTO user_role (user_id, role_id, granted_by, created_at, updated_at)
-        VALUES (1, 1, 'system', :now, :now)
-        """),
-        {"now": now},
-    )
-    
-    db.commit()
-    db.close()
-    
-    yield
-    
-    Base.metadata.drop_all(bind=engine)
+from datetime import datetime, timezone
+from sqlalchemy import text
 
 
-def get_admin_token():
+def get_admin_token(client):
     """获取管理员 token"""
     response = client.post(
         "/api/v1/auth/login",
@@ -75,10 +26,9 @@ def get_admin_token():
     return response.json()["access_token"]
 
 
-def test_scan_e2e_localhost():
+def test_scan_e2e_localhost(client, admin_token):
     """端到端测试：扫描 localhost"""
-    token = get_admin_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {admin_token}"}
     
     # 1. 创建资产
     asset_resp = client.post(
@@ -160,9 +110,11 @@ def test_scan_e2e_localhost():
             print(f"AI 分析: {finding['ai_analysis'][:100]}...")
     
     # 7. 验证数据库状态
-    db = SessionLocal()
+    from core.database import ScanTask as ScanTaskModel
+    from conftest import TestingSessionLocal
+    _db = TestingSessionLocal()
     try:
-        task = db.query(ScanTask).filter(ScanTask.id == task_id).first()
+        task = _db.query(ScanTaskModel).filter(ScanTaskModel.id == task_id).first()
         assert task is not None
         assert task.state in ["REPORTED", "FAILED"]
         
@@ -171,15 +123,14 @@ def test_scan_e2e_localhost():
             print(f"原始输出文件: {task.raw_output_path}")
             assert os.path.getsize(task.raw_output_path) > 0
     finally:
-        db.close()
+        _db.close()
     
     print("\n✅ 端到端扫描链路验证通过")
 
 
-def test_scan_e2e_invalid_target():
+def test_scan_e2e_invalid_target(client, admin_token):
     """端到端测试：无效目标处理"""
-    token = get_admin_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {admin_token}"}
     
     # 1. 创建资产（无效 IP）
     asset_resp = client.post(
@@ -233,10 +184,9 @@ def test_scan_e2e_invalid_target():
     print(f"\n✅ 无效目标处理验证通过，最终状态: {final_status}")
 
 
-def test_scan_state_machine():
+def test_scan_state_machine(client, admin_token):
     """测试扫描任务状态机流转"""
-    token = get_admin_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {admin_token}"}
     
     # 创建资产和任务（如果已存在则获取现有资产）
     asset_resp = client.post(

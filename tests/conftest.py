@@ -315,6 +315,9 @@ def reset_test_data():
     """每个测试函数运行前：恢复依赖覆盖 + 清理非核心数据"""
     app.dependency_overrides[get_db] = override_get_db
 
+    # Ensure tables exist (guard against other modules clearing metadata state)
+    Base.metadata.create_all(bind=test_engine)
+
     db = TestingSessionLocal()
     try:
         tables_to_clean = [

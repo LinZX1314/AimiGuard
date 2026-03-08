@@ -80,21 +80,22 @@ def test_auto_suspend_plugin(db: SASession):
     """自动暂停插件"""
     from services.plugin_monitor import auto_suspend_plugin
     from core.database import PluginRegistry
+    from datetime import datetime, timezone
 
-    db.execute(
-        text(
-            "INSERT INTO plugin_registry (plugin_name, plugin_type, enabled, created_at, updated_at) "
-            "VALUES ('suspend-test', 'mcp', 1, datetime('now'), datetime('now'))"
-        )
+    now = datetime.now(timezone.utc)
+    plugin = PluginRegistry(
+        plugin_name="suspend-test", plugin_type="mcp", enabled=True,
+        created_at=now, updated_at=now,
     )
+    db.add(plugin)
     db.commit()
-    row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
-    pid = row[0]
+    db.refresh(plugin)
+    pid = plugin.id
 
     result = auto_suspend_plugin(db, pid, "test_reason")
     assert result is True
 
-    plugin = db.query(PluginRegistry).filter(PluginRegistry.id == pid).first()
+    db.refresh(plugin)
     assert plugin.enabled == 0
 
 

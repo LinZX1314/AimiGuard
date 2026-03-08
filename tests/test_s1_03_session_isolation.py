@@ -71,15 +71,18 @@ def test_session_messages_isolation(client: TestClient, admin_token: str):
 
 def test_expired_session_rejected(client: TestClient, admin_token: str, db: SASession):
     """访问过期会话应返回410"""
-    db.execute(
-        text(
-            "INSERT INTO ai_chat_session (user_id, operator, started_at, expires_at) "
-            "VALUES (1, 'admin', datetime('now', '-25 hours'), datetime('now', '-1 hour'))"
-        )
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    expired_session = AIChatSession(
+        user_id=1,
+        operator="admin",
+        started_at=now - timedelta(hours=25),
+        expires_at=now - timedelta(hours=1),
     )
+    db.add(expired_session)
     db.commit()
-    row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
-    sid = row[0]
+    db.refresh(expired_session)
+    sid = expired_session.id
 
     res = client.get(
         f"/api/v1/ai/sessions/{sid}/messages",
@@ -92,23 +95,20 @@ def test_expired_session_rejected(client: TestClient, admin_token: str, db: SASe
 
 def test_cleanup_expired_sessions_api(client: TestClient, admin_token: str, db: SASession):
     """POST /ai/sessions/cleanup-expired 应清理过期会话"""
-    db.execute(
-        text(
-            "INSERT INTO ai_chat_session (user_id, operator, started_at, expires_at) "
-            "VALUES (1, 'admin', datetime('now', '-48 hours'), datetime('now', '-24 hours'))"
-        )
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    expired = AIChatSession(
+        user_id=1, operator="admin",
+        started_at=now - timedelta(hours=48),
+        expires_at=now - timedelta(hours=24),
     )
+    db.add(expired)
     db.commit()
-    row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
-    sid = row[0]
+    db.refresh(expired)
+    sid = expired.id
 
-    db.execute(
-        text(
-            "INSERT INTO ai_chat_message (session_id, role, content, created_at) "
-            "VALUES (:sid, 'user', '过期消息', datetime('now', '-48 hours'))"
-        ),
-        {"sid": sid},
-    )
+    msg = AIChatMessage(session_id=sid, role="user", content="过期消息", created_at=now - timedelta(hours=48))
+    db.add(msg)
     db.commit()
 
     res = client.post(
@@ -125,24 +125,21 @@ def test_cleanup_expired_sessions_api(client: TestClient, admin_token: str, db: 
 def test_session_cleanup_service(db: SASession):
     """SessionCleanupService应清理过期会话"""
     from services.session_cleanup import SessionCleanupService
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
 
-    db.execute(
-        text(
-            "INSERT INTO ai_chat_session (user_id, operator, started_at, expires_at) "
-            "VALUES (1, 'admin', datetime('now', '-48 hours'), datetime('now', '-2 hours'))"
-        )
+    expired = AIChatSession(
+        user_id=1, operator="admin",
+        started_at=now - timedelta(hours=48),
+        expires_at=now - timedelta(hours=2),
     )
+    db.add(expired)
     db.commit()
-    row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
-    sid = row[0]
+    db.refresh(expired)
+    sid = expired.id
 
-    db.execute(
-        text(
-            "INSERT INTO ai_chat_message (session_id, role, content, created_at) "
-            "VALUES (:sid, 'user', 'expired msg', datetime('now'))"
-        ),
-        {"sid": sid},
-    )
+    msg = AIChatMessage(session_id=sid, role="user", content="expired msg", created_at=now)
+    db.add(msg)
     db.commit()
 
     cleaned = SessionCleanupService.cleanup_expired_sessions(db)

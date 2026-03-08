@@ -40,6 +40,13 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _reapply_db_override():
+    """Re-apply this module's DB override after conftest reset_test_data runs."""
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+
+
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
     """初始化测试数据库"""
@@ -123,9 +130,8 @@ def setup_database():
 
     yield
 
-    # 清理
-    app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
+    # Only remove this module's override; don't clear ALL overrides
+    app.dependency_overrides.pop(get_db, None)
 
 
 def get_token():
