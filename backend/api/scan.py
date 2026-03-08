@@ -13,6 +13,7 @@ from core.database import get_db, ScanTask, ScanFinding, Asset
 from core.response import APIResponse
 from services.scanner import scanner
 from services.audit_service import AuditService
+from services.event_broadcaster import SCAN_TASKS_CHANNEL, event_broadcaster
 from api.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/v1/scan", tags=["scan"])
@@ -118,6 +119,56 @@ def _normalize_tags(tags: Optional[str], target_type: str) -> str:
     if not normalized_tags:
         return ASSET_DEFAULT_TAG_BY_TYPE[target_type]
     return ",".join(normalized_tags)
+
+
+async def _broadcast_scan_task_change(
+    *,
+    task_id: int,
+    state: str,
+    trace_id: Optional[str],
+    reason: str,
+    target: Optional[str] = None,
+    profile: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    payload: Dict[str, Any] = {
+        "task_id": task_id,
+        "state": state,
+    }
+    if target is not None:
+        payload["target"] = target
+    if profile is not None:
+        payload["profile"] = profile
+    if error_message:
+        payload["error_message"] = error_message
+    await event_broadcaster.publish(
+        SCAN_TASKS_CHANNEL,
+        "scan.task_changed",
+        payload,
+        trace_id=trace_id,
+        reason=reason,
+    )
+
+
+async def _broadcast_scan_finding_change(
+    *,
+    finding_id: int,
+    scan_task_id: int,
+    status: str,
+    trace_id: Optional[str],
+    reason: str,
+) -> None:
+    await event_broadcaster.publish(
+        SCAN_TASKS_CHANNEL,
+        "scan.finding_changed",
+        {
+            "finding_id": finding_id,
+            "scan_task_id": scan_task_id,
+            "status": status,
+        },
+        trace_id=trace_id,
+        reason=reason,
+    )
 
 
 class CreateScanRequest(BaseModel):
@@ -485,6 +536,14 @@ async def create_scan_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    await _broadcast_scan_task_change(
+        task_id=task.id,
+        state=task.state,
+        trace_id=trace_id,
+        reason="created",
+        target=task.target,
+        profile=task.profile,
+    )
 
     # 异步调度扫描任务
     try:
@@ -501,6 +560,15 @@ async def create_scan_task(
         # 并发限制，任务仍创建但标记为等待
         task.state = "CREATED"  # 保持 CREATED 状态等待调度
         db.commit()
+        await _broadcast_scan_task_change(
+            task_id=task.id,
+            state=task.state,
+            trace_id=trace_id,
+            reason="queued",
+            target=task.target,
+            profile=task.profile,
+            error_message=str(e),
+        )
         return APIResponse.error(
             code=429,
             message=f"Scan task created but queued: {str(e)}",
@@ -741,6 +809,14 @@ async def update_finding_status(
         target_type="scan_finding",
         result="success",
         reason=f"状态更新为: {status}",
+    )
+
+    await _broadcast_scan_finding_change(
+        finding_id=finding_id,
+        scan_task_id=int(finding.scan_task_id),
+        status=status,
+        trace_id=getattr(finding, "trace_id", None),
+        reason="finding_status_updated",
     )
 
     return APIResponse.success(message="Finding status updated")

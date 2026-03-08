@@ -955,6 +955,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Monitor, Plus, RefreshCw, Scan, Search, Settings as SettingsIcon, Shield, ShieldCheck, Target, Trash2, Bug, X } from 'lucide-vue-next'
 import NmapHostDetailDialog from '@/components/NmapHostDetailDialog.vue'
+import { RealtimeChannel } from '@/api/realtime'
 
 // ===== Active Tab =====
 const activeTab = ref('assets')
@@ -1380,24 +1381,33 @@ watch(activeTab, (tab) => {
   else if (tab === 'discovered-assets') loadDiscoveredAssets(0)
 })
 
-let _scanPollTimer: ReturnType<typeof setInterval> | null = null
+let _scanWsChannel: RealtimeChannel | null = null
+let _scanRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
-const startScanPoll = () => {
-  if (_scanPollTimer) return
-  _scanPollTimer = setInterval(() => {
-    if (activeTab.value === 'tasks') loadTasks(taskPage.value)
-    else if (activeTab.value === 'nmap-hosts') loadNmapHosts(nmapHostOffset.value)
-    else if (activeTab.value === 'findings') loadFindings(findingPage.value)
-  }, 30_000)
-}
-
-const stopScanPoll = () => {
-  if (_scanPollTimer) { clearInterval(_scanPollTimer); _scanPollTimer = null }
+const scheduleScanRefresh = () => {
+  if (_scanRefreshTimer) return
+  _scanRefreshTimer = setTimeout(() => {
+    _scanRefreshTimer = null
+    if (activeTab.value === 'tasks') void loadTasks(taskPage.value)
+    else if (activeTab.value === 'nmap-hosts') void loadNmapHosts(nmapHostOffset.value)
+    else if (activeTab.value === 'findings') void loadFindings(findingPage.value)
+  }, 150)
 }
 
 onMounted(async () => {
   await Promise.all([loadAssets(1), loadProfiles()])
-  startScanPoll()
+  _scanWsChannel = new RealtimeChannel('/ws/scan/tasks', {
+    onEvent: (event) => {
+      if (event.type === 'ready') return
+      scheduleScanRefresh()
+    },
+  })
+  _scanWsChannel.connect()
 })
-onUnmounted(stopScanPoll)
+
+onUnmounted(() => {
+  if (_scanRefreshTimer) { clearTimeout(_scanRefreshTimer); _scanRefreshTimer = null }
+  _scanWsChannel?.close()
+  _scanWsChannel = null
+})
 </script>

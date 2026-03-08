@@ -13,6 +13,39 @@ from pathlib import Path
 from core.database import SessionLocal, ScanTask, ScanFinding, Asset
 from services.ai_engine import ai_engine
 from services.audit_service import AuditService
+from services.event_broadcaster import SCAN_TASKS_CHANNEL, event_broadcaster
+
+
+async def _broadcast_scan_task_state(
+    *,
+    task_id: int,
+    state: str,
+    trace_id: Optional[str],
+    reason: str,
+    target: Optional[str] = None,
+    profile: Optional[str] = None,
+    error_message: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    payload: Dict[str, Any] = {
+        "task_id": task_id,
+        "state": state,
+    }
+    if target is not None:
+        payload["target"] = target
+    if profile is not None:
+        payload["profile"] = profile
+    if error_message:
+        payload["error_message"] = error_message
+    if extra:
+        payload.update(extra)
+    await event_broadcaster.publish(
+        SCAN_TASKS_CHANNEL,
+        "scan.task_changed",
+        payload,
+        trace_id=trace_id,
+        reason=reason,
+    )
 
 
 class NmapParser:
@@ -314,11 +347,27 @@ class Scanner:
             scan_task.state = "DISPATCHED"
             scan_task.trace_id = trace_id
             db.commit()
+            await _broadcast_scan_task_state(
+                task_id=task_id,
+                state="DISPATCHED",
+                trace_id=trace_id,
+                reason="dispatched",
+                target=target,
+                profile=profile,
+            )
 
             # 2. 更新状态为 RUNNING
             scan_task.state = "RUNNING"
             scan_task.started_at = datetime.now(timezone.utc)
             db.commit()
+            await _broadcast_scan_task_state(
+                task_id=task_id,
+                state="RUNNING",
+                trace_id=trace_id,
+                reason="running",
+                target=target,
+                profile=profile,
+            )
 
             # 记录审计
             AuditService.log(
@@ -343,6 +392,15 @@ class Scanner:
                 scan_task.error_message = f"Scan timeout after {effective_timeout}s"
                 scan_task.ended_at = datetime.now(timezone.utc)
                 db.commit()
+                await _broadcast_scan_task_state(
+                    task_id=task_id,
+                    state="FAILED",
+                    trace_id=trace_id,
+                    reason="timeout",
+                    target=target,
+                    profile=profile,
+                    error_message=scan_task.error_message,
+                )
                 AuditService.log(
                     db=db,
                     actor=operator or "system",
@@ -361,6 +419,15 @@ class Scanner:
                 scan_task.error_message = result.get("error", "Unknown error")
                 scan_task.ended_at = datetime.now(timezone.utc)
                 db.commit()
+                await _broadcast_scan_task_state(
+                    task_id=task_id,
+                    state="FAILED",
+                    trace_id=trace_id,
+                    reason="failed",
+                    target=target,
+                    profile=profile,
+                    error_message=scan_task.error_message,
+                )
 
                 AuditService.log(
                     db=db,
@@ -448,11 +515,37 @@ class Scanner:
             # 6. 更新状态为 PARSED
             scan_task.state = "PARSED"
             db.commit()
+            await _broadcast_scan_task_state(
+                task_id=task_id,
+                state="PARSED",
+                trace_id=trace_id,
+                reason="parsed",
+                target=target,
+                profile=profile,
+                extra={
+                    "findings_count": len(findings),
+                    "new_findings_count": new_count,
+                    "deduped_findings_count": dedup_count,
+                },
+            )
 
             # 7. 生成报告并更新为 REPORTED
             scan_task.state = "REPORTED"
             scan_task.ended_at = datetime.now(timezone.utc)
             db.commit()
+            await _broadcast_scan_task_state(
+                task_id=task_id,
+                state="REPORTED",
+                trace_id=trace_id,
+                reason="reported",
+                target=target,
+                profile=profile,
+                extra={
+                    "findings_count": len(findings),
+                    "new_findings_count": new_count,
+                    "deduped_findings_count": dedup_count,
+                },
+            )
 
             # 记录成功审计
             AuditService.log(
@@ -477,6 +570,15 @@ class Scanner:
                 scan_task.error_message = str(e)[:500]
                 scan_task.ended_at = datetime.now(timezone.utc)
                 db.commit()
+                await _broadcast_scan_task_state(
+                    task_id=task_id,
+                    state="FAILED",
+                    trace_id=trace_id,
+                    reason="exception",
+                    target=target,
+                    profile=profile,
+                    error_message=scan_task.error_message,
+                )
 
             AuditService.log(
                 db=db,
@@ -520,6 +622,15 @@ class Scanner:
                 scan_task.state = "FAILED"
                 scan_task.error_message = "Cancelled by user"
                 db.commit()
+                await _broadcast_scan_task_state(
+                    task_id=task_id,
+                    state="FAILED",
+                    trace_id=getattr(scan_task, "trace_id", None),
+                    reason="cancelled",
+                    target=getattr(scan_task, "target", None),
+                    profile=getattr(scan_task, "profile", None),
+                    error_message="Cancelled by user",
+                )
         finally:
             db.close()
 

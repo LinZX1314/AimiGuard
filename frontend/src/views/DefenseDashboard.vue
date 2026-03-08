@@ -242,6 +242,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { defenseApi, type HFishLog } from '@/api/defense'
 import { apiClient } from '@/api/client'
+import { RealtimeChannel } from '@/api/realtime'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -413,20 +414,32 @@ const exportLogsCSV = async () => {
   } catch (e) { console.error('导出失败', e) }
 }
 
-let _pollTimer: ReturnType<typeof setInterval> | null = null
+let realtimeChannel: RealtimeChannel | null = null
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null
 
-const startPoll = () => {
-  stopPoll()
-  _pollTimer = setInterval(() => {
-    if (activeTab.value === 'events') loadEvents()
-    else if (activeTab.value === 'logs') loadLogs(logOffset.value)
-  }, 30_000)
+const scheduleRefresh = () => {
+  if (_refreshTimer) return
+  _refreshTimer = setTimeout(() => {
+    _refreshTimer = null
+    if (activeTab.value === 'events') void loadEvents()
+    else if (activeTab.value === 'logs') void loadLogs(logOffset.value)
+  }, 150)
 }
 
-const stopPoll = () => {
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
-}
+onMounted(() => {
+  loadEvents()
+  realtimeChannel = new RealtimeChannel('/ws/defense/events', {
+    onEvent: (event) => {
+      if (event.type === 'ready') return
+      scheduleRefresh()
+    },
+  })
+  realtimeChannel.connect()
+})
 
-onMounted(() => { loadEvents(); startPoll() })
-onUnmounted(stopPoll)
+onUnmounted(() => {
+  if (_refreshTimer) { clearTimeout(_refreshTimer); _refreshTimer = null }
+  realtimeChannel?.close()
+  realtimeChannel = null
+})
 </script>

@@ -11,7 +11,7 @@
             />
             实时检测
           </h1>
-          <p class="text-sm text-muted-foreground">防御坚守模式下的实时威胁态势大屏 · 每 {{ INTERVAL }}s 自动刷新</p>
+          <p class="text-sm text-muted-foreground">防御坚守模式下的实时威胁态势大屏 · WebSocket 实时推送</p>
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-muted-foreground">{{ lastUpdated }}</span>
@@ -174,13 +174,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { apiClient } from '@/api/client'
+import { RealtimeChannel } from '@/api/realtime'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertTriangle, Bell, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-vue-next'
 
-const INTERVAL = 15
 const MAX_STREAM = 30
 
 interface StreamEvent {
@@ -209,8 +209,9 @@ const eventStream = ref<StreamEvent[]>([])
 const highRiskList = ref<StreamEvent[]>([])
 const auditItems = ref<AuditItem[]>([])
 
-let pollTimer: ReturnType<typeof setInterval> | null = null
 let seenIds = new Set<number>()
+let realtimeChannel: RealtimeChannel | null = null
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const loadMetrics = async () => {
   try {
@@ -290,14 +291,35 @@ const scoreColor = (score: number) => {
   return 'bg-muted text-muted-foreground'
 }
 
+const scheduleRefresh = () => {
+  if (refreshTimer) return
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    void Promise.all([refresh(), loadAudit()])
+  }, 150)
+}
+
 onMounted(async () => {
-  polling.value = true
   await Promise.all([refresh(), loadAudit()])
-  pollTimer = setInterval(refresh, INTERVAL * 1000)
+  realtimeChannel = new RealtimeChannel('/ws/defense/events', {
+    onConnectionChange: (connected) => {
+      polling.value = connected
+    },
+    onEvent: (event) => {
+      if (event.type === 'ready') return
+      scheduleRefresh()
+    },
+  })
+  realtimeChannel.connect()
 })
 
 onUnmounted(() => {
   polling.value = false
-  if (pollTimer) clearInterval(pollTimer)
+  if (refreshTimer) {
+    clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
+  realtimeChannel?.close()
+  realtimeChannel = null
 })
 </script>

@@ -22,6 +22,7 @@ from services.workflow_rollout import (
     should_route_to_workflow_runtime,
 )
 from services.workflow_runtime import run_published_workflow
+from services.event_broadcaster import DEFENSE_EVENTS_CHANNEL, event_broadcaster
 
 router = APIRouter(prefix="/api/v1/defense", tags=["defense"])
 compat_router = APIRouter(tags=["defense"])
@@ -185,6 +186,59 @@ def _iso_z(dt: Optional[datetime]) -> Optional[str]:
     if dt is None:
         return None
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+async def _broadcast_defense_event_change(
+    *,
+    event_id: Optional[int],
+    status: Optional[str],
+    trace_id: Optional[str],
+    reason: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    payload: Dict[str, Any] = {
+        "event_id": event_id,
+        "status": status,
+    }
+    if extra:
+        payload.update(extra)
+    await event_broadcaster.publish(
+        DEFENSE_EVENTS_CHANNEL,
+        "defense.event_changed",
+        payload,
+        trace_id=trace_id,
+        reason=reason,
+    )
+
+
+async def _broadcast_execution_task_change(
+    *,
+    task_id: int,
+    task_state: str,
+    event_id: Optional[int],
+    event_status: Optional[str],
+    trace_id: Optional[str],
+    reason: str,
+    error_message: Optional[str] = None,
+    retry_count: Optional[int] = None,
+) -> None:
+    payload: Dict[str, Any] = {
+        "task_id": task_id,
+        "task_state": task_state,
+        "event_id": event_id,
+        "event_status": event_status,
+    }
+    if error_message:
+        payload["error_message"] = error_message
+    if retry_count is not None:
+        payload["retry_count"] = retry_count
+    await event_broadcaster.publish(
+        DEFENSE_EVENTS_CHANNEL,
+        "defense.execution_task_changed",
+        payload,
+        trace_id=trace_id,
+        reason=reason,
+    )
 
 
 def _build_fallback_event_id(
@@ -365,7 +419,7 @@ def _latest_runtime_step(db: Session, workflow_run_id: int) -> WorkflowStepRun |
     )
 
 
-def _sync_task_from_runtime(
+async def _sync_task_from_runtime(
     db: Session,
     *,
     event_id: int,
@@ -427,6 +481,16 @@ def _sync_task_from_runtime(
         result=audit_result,
         trace_id=trace_id,
     )
+    await _broadcast_execution_task_change(
+        task_id=task_id,
+        task_state=task_state,
+        event_id=event_id,
+        event_status=event_state,
+        trace_id=trace_id,
+        reason="runtime_sync",
+        error_message=error_message,
+        retry_count=retry_count,
+    )
 
 
 async def _execute_block_task_via_workflow_runtime(
@@ -449,6 +513,14 @@ async def _execute_block_task_via_workflow_runtime(
         {"status": "EXECUTING", "updated_at": now}
     )
     db.commit()
+    await _broadcast_execution_task_change(
+        task_id=task_id,
+        task_state="RUNNING",
+        event_id=event_id,
+        event_status="EXECUTING",
+        trace_id=trace_id,
+        reason="execution_started",
+    )
 
     event_payload = {
         "id": event_id,
@@ -478,7 +550,7 @@ async def _execute_block_task_via_workflow_runtime(
     except ValueError:
         return False
 
-    _sync_task_from_runtime(
+    await _sync_task_from_runtime(
         db,
         event_id=event_id,
         task_id=task_id,
@@ -517,6 +589,14 @@ async def _execute_block_task(
         {"status": "EXECUTING", "updated_at": now}
     )
     db.commit()
+    await _broadcast_execution_task_change(
+        task_id=task_id,
+        task_state="RUNNING",
+        event_id=event_id,
+        event_status="EXECUTING",
+        trace_id=trace_id,
+        reason="execution_started",
+    )
 
     attempt = 0
     while True:
@@ -545,6 +625,14 @@ async def _execute_block_task(
                 reason=_json_dumps({"attempt": attempt + 1, "result": result}),
                 result="success",
                 trace_id=trace_id,
+            )
+            await _broadcast_execution_task_change(
+                task_id=task_id,
+                task_state="SUCCESS",
+                event_id=event_id,
+                event_status="DONE",
+                trace_id=trace_id,
+                reason="execution_completed",
             )
             return
 
@@ -590,6 +678,16 @@ async def _execute_block_task(
                 result="failed",
                 trace_id=trace_id,
             )
+            await _broadcast_execution_task_change(
+                task_id=task_id,
+                task_state="MANUAL_REQUIRED",
+                event_id=event_id,
+                event_status="FAILED",
+                trace_id=trace_id,
+                reason="execution_manual_required",
+                error_message=error_message,
+                retry_count=attempt,
+            )
             return
 
         db.query(ExecutionTask).filter(ExecutionTask.id == task_id).update(
@@ -601,6 +699,16 @@ async def _execute_block_task(
             {"state": "RETRYING", "updated_at": _utc_now()}
         )
         db.commit()
+        await _broadcast_execution_task_change(
+            task_id=task_id,
+            task_state="RETRYING",
+            event_id=event_id,
+            event_status="EXECUTING",
+            trace_id=trace_id,
+            reason="execution_retrying",
+            error_message=error_message,
+            retry_count=attempt,
+        )
 
         delay_seconds = BASE_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
         await _sleep_for_retry(delay_seconds)
@@ -690,6 +798,15 @@ async def _run_execution_task_background(
             }
         )
         db.commit()
+        await _broadcast_execution_task_change(
+            task_id=task_id,
+            task_state="MANUAL_REQUIRED",
+            event_id=getattr(task, "event_id", None),
+            event_status="FAILED",
+            trace_id=trace_id,
+            reason="execution_exception",
+            error_message=str(exc),
+        )
     finally:
         db.close()
 
@@ -977,6 +1094,19 @@ async def receive_alert(
             trace_id=trace_id,
         )
 
+    if ingested_event_ids:
+        await _broadcast_defense_event_change(
+            event_id=ingested_event_ids[0],
+            status="PENDING",
+            trace_id=trace_id,
+            reason="ingested",
+            extra={
+                "event_ids": ingested_event_ids,
+                "deduped_event_ids": deduped_event_ids,
+                "invalid_reasons": invalid_reasons,
+            },
+        )
+
     first_id: Optional[int] = None
     if ingested_event_ids:
         first_id = ingested_event_ids[0]
@@ -1254,6 +1384,27 @@ async def approve_event(
         task_state = str(task_row[0] or "QUEUED")
         retry_count = _safe_int(task_row[1], 0)
 
+    await _broadcast_defense_event_change(
+        event_id=event_id,
+        status="APPROVED",
+        trace_id=trace_id,
+        reason="approved",
+        extra={
+            "task_id": task.id,
+            "task_state": task_state,
+            "retry_count": retry_count,
+        },
+    )
+    await _broadcast_execution_task_change(
+        task_id=task_id,
+        task_state=task_state,
+        event_id=event_id,
+        event_status="APPROVED",
+        trace_id=trace_id,
+        reason="task_queued",
+        retry_count=retry_count,
+    )
+
     return {
         "code": 0,
         "message": "Event approved",
@@ -1282,6 +1433,13 @@ async def reject_event(
         {"status": "REJECTED", "updated_at": _utc_now()}
     )
     db.commit()
+
+    await _broadcast_defense_event_change(
+        event_id=event_id,
+        status="REJECTED",
+        trace_id=getattr(event, "trace_id", None),
+        reason="rejected",
+    )
 
     return {"code": 0, "message": "Event rejected"}
 

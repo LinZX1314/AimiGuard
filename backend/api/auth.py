@@ -146,12 +146,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     )
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-) -> User:
+def resolve_current_user_from_token(token: str, db: Session) -> User:
     try:
-        token = credentials.credentials
         if token in BLACKLISTED_TOKENS:
             raise HTTPException(status_code=401, detail={"code": 40102, "message": "令牌已失效，请重新登录"})
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -165,6 +161,13 @@ async def get_current_user(
     if user is None or getattr(user, "enabled", 0) != 1:
         raise HTTPException(status_code=401, detail="用户不存在或已禁用")
     return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> User:
+    return resolve_current_user_from_token(credentials.credentials, db)
 
 
 @router.post("/refresh")
