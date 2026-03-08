@@ -737,7 +737,7 @@ CREATE INDEX IF NOT EXISTS idx_fix_ticket_finding_id ON fix_ticket(finding_id);
 CREATE INDEX IF NOT EXISTS idx_fix_ticket_priority ON fix_ticket(priority);
 
 -- CI安全扫描报告表 (E1-01)
-CREATE TABLE IF NOT EXISTS security_scan_report (
+CREATE TABLE IF NOT EXISTS ci_security_scan_report (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   scan_tool TEXT NOT NULL CHECK(scan_tool IN ('bandit','semgrep','pip-audit')),
   trigger_type TEXT NOT NULL CHECK(trigger_type IN ('pr','push','manual','scheduled')) DEFAULT 'manual',
@@ -753,9 +753,9 @@ CREATE TABLE IF NOT EXISTS security_scan_report (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_security_scan_tool ON security_scan_report(scan_tool);
-CREATE INDEX IF NOT EXISTS idx_security_scan_passed ON security_scan_report(passed);
-CREATE INDEX IF NOT EXISTS idx_security_scan_created_at ON security_scan_report(created_at);
+CREATE INDEX IF NOT EXISTS idx_ci_security_scan_tool ON ci_security_scan_report(scan_tool);
+CREATE INDEX IF NOT EXISTS idx_ci_security_scan_passed ON ci_security_scan_report(passed);
+CREATE INDEX IF NOT EXISTS idx_ci_security_scan_created_at ON ci_security_scan_report(created_at);
 
 -- 蜜罐配置表 (D2-01)
 CREATE TABLE IF NOT EXISTS honeypot_config (
