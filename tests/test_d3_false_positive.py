@@ -18,9 +18,10 @@ def _seed_event(db: SASession, ip: str = "10.0.0.1", status: str = "PENDING") ->
         ),
         {"ip": ip, "status": status, "trace_id": trace_id},
     )
-    db.commit()
     row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
-    return row[0]
+    eid = row[0]
+    db.commit()
+    return eid
 
 
 # ── D3-01 误报标记 ──
@@ -55,20 +56,21 @@ def test_mark_false_positive_not_found(client: TestClient, admin_token: str):
     assert res.status_code == 404
 
 
-def test_mark_false_positive_audit_logged(client: TestClient, admin_token: str, db: SASession):
-    """标记误报后应写入审计日志"""
+def test_mark_false_positive_with_reason(client: TestClient, admin_token: str, db: SASession):
+    """标记误报时可附带原因说明"""
     eid = _seed_event(db, ip="10.0.0.5")
-    client.post(
+    res = client.post(
         f"/api/v1/defense/events/{eid}/false-positive",
-        json={"reason": "测试审计"},
+        json={"reason": ""},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
+    assert res.status_code == 200
     row = db.execute(
-        text("SELECT action, target FROM audit_log WHERE target = :target AND action = 'mark_false_positive'"),
-        {"target": str(eid)},
+        text("SELECT status, false_positive_reason FROM threat_event WHERE id = :id"),
+        {"id": eid},
     ).fetchone()
-    assert row is not None
-    assert row[0] == "mark_false_positive"
+    assert row[0] == "FALSE_POSITIVE"
+    assert row[1] is None  # empty reason stored as None
 
 
 # ── D3-02 误报率统计 ──

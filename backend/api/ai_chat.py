@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from api.auth import require_permissions
 from core.database import (
     AIChatMessage,
     AIChatSession,
+    AIDecisionLog,
     ScanFinding,
     ScanTask,
     ThreatEvent,
@@ -190,6 +193,22 @@ async def chat(
         created_at=datetime.now(timezone.utc),
     )
     db.add(ai_msg)
+
+    prompt_text = req.message + (context_summary or "")
+    decision_log = AIDecisionLog(
+        context_type="chat",
+        model_name=str(ai_result.get("model") or "unknown"),
+        decision=ai_result.get("fallback_reason") or "ok",
+        confidence=None,
+        reason=response_content[:500] if response_content else None,
+        prompt_tokens=None,
+        completion_tokens=None,
+        prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
+        inference_ms=round(elapsed_ms, 2),
+        model_params=json.dumps({"provider": ai_result.get("provider"), "degraded": ai_result.get("degraded")}, ensure_ascii=False),
+        trace_id=trace_id,
+    )
+    db.add(decision_log)
     db.commit()
 
     return APIResponse.success(
@@ -317,4 +336,65 @@ async def get_session_context(
             ],
         }
     )
+
+
+@router.get("/decisions")
+async def list_decisions(
+    context_type: Optional[str] = QueryParam(None, description="筛选 context_type: threat/scan/chat/report"),
+    model_name: Optional[str] = QueryParam(None, description="筛选模型名称"),
+    min_confidence: Optional[float] = QueryParam(None, description="最低置信度"),
+    max_confidence: Optional[float] = QueryParam(None, description="最高置信度"),
+    range: str = QueryParam("7d", pattern="^(24h|7d|30d|all)$"),
+    page: int = QueryParam(1, ge=1),
+    page_size: int = QueryParam(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_ai_sessions")),
+):
+    """AI 决策日志多维查询（S4-01）"""
+    query = db.query(AIDecisionLog)
+
+    if context_type:
+        query = query.filter(AIDecisionLog.context_type == context_type)
+    if model_name:
+        query = query.filter(AIDecisionLog.model_name == model_name)
+    if min_confidence is not None:
+        query = query.filter(AIDecisionLog.confidence >= min_confidence)
+    if max_confidence is not None:
+        query = query.filter(AIDecisionLog.confidence <= max_confidence)
+
+    if range != "all":
+        delta_map = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+        since = datetime.now(timezone.utc) - delta_map[range]
+        query = query.filter(AIDecisionLog.created_at >= since)
+
+    total = query.count()
+    rows = (
+        query.order_by(AIDecisionLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = [
+        {
+            "id": r.id,
+            "context_type": r.context_type,
+            "model_name": r.model_name,
+            "decision": r.decision,
+            "confidence": r.confidence,
+            "reason": r.reason,
+            "prompt_hash": r.prompt_hash,
+            "inference_ms": r.inference_ms,
+            "model_params": r.model_params,
+            "prompt_tokens": r.prompt_tokens,
+            "completion_tokens": r.completion_tokens,
+            "event_id": r.event_id,
+            "scan_task_id": r.scan_task_id,
+            "trace_id": r.trace_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+    return APIResponse.success({"total": total, "page": page, "items": items})
 

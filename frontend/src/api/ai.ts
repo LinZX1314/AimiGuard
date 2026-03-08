@@ -21,6 +21,30 @@ export interface ChatSession {
   expires_at: string | null
 }
 
+export interface DecisionLogItem {
+  id: number
+  context_type: string
+  model_name: string
+  decision: string | null
+  confidence: number | null
+  reason: string | null
+  prompt_hash: string | null
+  inference_ms: number | null
+  model_params: string | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  event_id: number | null
+  scan_task_id: number | null
+  trace_id: string
+  created_at: string | null
+}
+
+export interface DecisionListResult {
+  total: number
+  page: number
+  items: DecisionLogItem[]
+}
+
 export const aiApi = {
   async chat(
     message: string,
@@ -49,5 +73,19 @@ export const aiApi = {
 
   async deleteSession(sessionId: number): Promise<void> {
     await apiClient.delete(`/ai/sessions/${sessionId}`)
+  },
+
+  async getDecisions(params?: {
+    context_type?: string
+    model_name?: string
+    min_confidence?: number
+    max_confidence?: number
+    range?: string
+    page?: number
+    page_size?: number
+  }): Promise<DecisionListResult> {
+    const res = await apiClient.get('/ai/decisions', { params })
+    const d = (res as any)?.data ?? res
+    return d as DecisionListResult
   },
 }

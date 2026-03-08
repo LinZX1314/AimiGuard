@@ -286,17 +286,39 @@
       </DialogContent>
     </Dialog>
 
-    <!-- ── 右侧：报告 ── -->
+    <!-- ── 右侧：报告 / 决策审计 ── -->
     <aside class="w-64 shrink-0 border-l border-border/60 flex flex-col bg-sidebar">
 
-      <!-- 标题 -->
-      <div class="flex items-center gap-1.5 px-3.5 py-3 border-b border-border/60">
-        <FileText class="size-3.5 text-primary/70" />
-        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">报告</span>
+      <!-- 标签切换 -->
+      <div class="flex border-b border-border/60 shrink-0">
+        <button
+          :class="[
+            'flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-widest transition-colors',
+            rightTab === 'report'
+              ? 'text-primary border-b-2 border-primary bg-primary/5'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+          ]"
+          @click="rightTab = 'report'"
+        >
+          <FileText class="size-3.5" />
+          报告
+        </button>
+        <button
+          :class="[
+            'flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-widest transition-colors',
+            rightTab === 'decisions'
+              ? 'text-primary border-b-2 border-primary bg-primary/5'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+          ]"
+          @click="rightTab = 'decisions'; loadDecisions()"
+        >
+          <ScrollText class="size-3.5" />
+          决策审计
+        </button>
       </div>
 
       <!-- 报告面板 -->
-      <div class="flex flex-col flex-1 min-h-0">
+      <div v-show="rightTab === 'report'" class="flex flex-col flex-1 min-h-0">
         <div class="px-3 py-3 border-b border-border/60 space-y-2 shrink-0">
           <div class="grid grid-cols-2 gap-1.5">
             <Button
@@ -393,6 +415,87 @@
           </Button>
         </div>
       </div>
+
+      <!-- 决策审计面板 -->
+      <div v-show="rightTab === 'decisions'" class="flex flex-col flex-1 min-h-0">
+        <div class="px-3 py-2.5 border-b border-border/60 shrink-0">
+          <select
+            v-model="decisionFilter"
+            class="w-full text-[11px] rounded-md border border-border/60 bg-background px-2 py-1.5 text-foreground"
+            @change="decisionPage = 1; loadDecisions()"
+          >
+            <option value="">全部类型</option>
+            <option value="chat">对话</option>
+            <option value="report">报告</option>
+            <option value="threat">威胁评估</option>
+            <option value="scan">扫描分析</option>
+          </select>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+          <div v-if="decisionsLoading" class="space-y-1.5">
+            <Skeleton v-for="i in 4" :key="i" class="h-16 w-full rounded-lg" />
+          </div>
+          <div
+            v-else-if="decisions.length === 0"
+            class="flex flex-col items-center justify-center py-10 gap-2"
+          >
+            <ScrollText class="size-6 text-muted-foreground/20" />
+            <p class="text-[11px] text-muted-foreground/50">暂无决策记录</p>
+          </div>
+          <div
+            v-for="d in decisions"
+            :key="d.id"
+            class="rounded-lg border border-border/50 p-2.5 space-y-1 hover:border-primary/30 hover:bg-muted/30 transition-all"
+          >
+            <div class="flex items-center justify-between gap-1">
+              <Badge variant="outline" class="text-[9px] h-4 capitalize px-1.5">{{ d.context_type }}</Badge>
+              <span class="text-[10px] text-muted-foreground tabular-nums">{{ formatDate(d.created_at) }}</span>
+            </div>
+            <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span class="truncate" :title="d.model_name">{{ d.model_name }}</span>
+              <span v-if="d.inference_ms != null" class="tabular-nums shrink-0">{{ Math.round(d.inference_ms) }}ms</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span
+                class="inline-block size-1.5 rounded-full shrink-0"
+                :class="d.decision === 'ok' ? 'bg-emerald-500' : 'bg-amber-500'"
+              />
+              <span class="text-[10px] truncate" :class="d.decision === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
+                {{ d.decision === 'ok' ? '正常' : d.decision }}
+              </span>
+            </div>
+            <p v-if="d.reason" class="text-[10px] text-muted-foreground/70 line-clamp-2 leading-relaxed">{{ d.reason }}</p>
+            <div class="flex items-center gap-2 text-[9px] text-muted-foreground/40">
+              <span v-if="d.prompt_hash" :title="'Prompt Hash: ' + d.prompt_hash">🔑 {{ d.prompt_hash.slice(0, 8) }}</span>
+              <span v-if="d.trace_id" :title="'Trace: ' + d.trace_id">📍 {{ d.trace_id.slice(0, 8) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="decisionTotal > decisionPageSize" class="shrink-0 border-t border-border/60 px-2 py-2 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6 cursor-pointer"
+            :disabled="decisionPage <= 1"
+            @click="decisionPage--; loadDecisions()"
+          >
+            <ChevronLeft class="size-3.5" />
+          </Button>
+          <span class="text-[10px] text-muted-foreground tabular-nums">{{ decisionPage }} / {{ Math.ceil(decisionTotal / decisionPageSize) }}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6 cursor-pointer"
+            :disabled="decisionPage >= Math.ceil(decisionTotal / decisionPageSize)"
+            @click="decisionPage++; loadDecisions()"
+          >
+            <ChevronRight class="size-3.5" />
+          </Button>
+        </div>
+      </div>
     </aside>
 
     <!-- ── 报告预览弹窗 ── -->
@@ -483,6 +586,7 @@ import {
   Mic,
   ScanLine,
   SquarePen,
+  ScrollText,
   Trash2,
 } from 'lucide-vue-next'
 
@@ -524,6 +628,15 @@ const reportMsgOk = ref(true)
 const reportPage = ref(1)
 const reportPageSize = 10
 const reportTotal = ref(0)
+
+const rightTab = ref<'report' | 'decisions'>('report')
+
+const decisions = ref<any[]>([])
+const decisionsLoading = ref(false)
+const decisionFilter = ref('')
+const decisionPage = ref(1)
+const decisionPageSize = 20
+const decisionTotal = ref(0)
 
 const showReportPreview = ref(false)
 const previewReport = ref<Report | null>(null)
@@ -730,6 +843,21 @@ const loadReports = async () => {
     reports.value = []
   } finally {
     reportsLoading.value = false
+  }
+}
+
+const loadDecisions = async () => {
+  decisionsLoading.value = true
+  try {
+    const params: any = { page: decisionPage.value, page_size: decisionPageSize, range: 'all' }
+    if (decisionFilter.value) params.context_type = decisionFilter.value
+    const data = await aiApi.getDecisions(params)
+    decisions.value = data?.items ?? []
+    decisionTotal.value = typeof data?.total === 'number' ? data.total : decisions.value.length
+  } catch {
+    decisions.value = []
+  } finally {
+    decisionsLoading.value = false
   }
 }
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -12,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from api.auth import require_permissions
 from core.database import (
+    AIDecisionLog,
     AIReport,
     ExecutionTask,
     ScanFinding,
@@ -158,12 +162,14 @@ async def generate_report(
         "scan_summary": scan_summary,
     }
 
+    _t0 = time.monotonic()
     ai_result = await ai_engine.generate_report(
         req.report_type,
         payload,
         trace_id=trace_id,
         with_meta=True,
     )
+    elapsed_ms = (time.monotonic() - _t0) * 1000
     report_content = str(ai_result.get("text") or "").strip() or summary_fallback
     summary = _extract_summary(report_content, summary_fallback)
     detail_path = _write_report_to_disk(req.report_type, report_content, now)
@@ -176,6 +182,20 @@ async def generate_report(
         trace_id=trace_id,
     )
     db.add(report)
+
+    prompt_text = json.dumps(payload, ensure_ascii=False)
+    decision_log = AIDecisionLog(
+        context_type="report",
+        model_name=str(ai_result.get("model") or "unknown"),
+        decision=ai_result.get("fallback_reason") or "ok",
+        confidence=None,
+        reason=summary[:500] if summary else None,
+        prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
+        inference_ms=round(elapsed_ms, 2),
+        model_params=json.dumps({"provider": ai_result.get("provider"), "degraded": ai_result.get("degraded"), "report_type": req.report_type}, ensure_ascii=False),
+        trace_id=trace_id,
+    )
+    db.add(decision_log)
     db.commit()
     db.refresh(report)
 

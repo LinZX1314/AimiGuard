@@ -318,9 +318,10 @@ def reset_test_data():
     db = TestingSessionLocal()
     try:
         tables_to_clean = [
-            "ai_chat_message", "ai_chat_session", "push_channel",
+            "ai_chat_message", "ai_chat_session", "ai_decision_log",
+            "push_channel",
             "scan_task", "scan_finding", "threat_event",
-            "ai_tts_task", "firewall_sync_task", "plugin_registry",
+            "ai_tts_task", "ai_report", "firewall_sync_task", "plugin_registry",
         ]
         for tbl in tables_to_clean:
             try:

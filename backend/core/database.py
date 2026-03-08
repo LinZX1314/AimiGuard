@@ -257,6 +257,9 @@ class AIDecisionLog(Base):
     reason = Column(Text)
     prompt_tokens = Column(Integer)
     completion_tokens = Column(Integer)
+    prompt_hash = Column(String)
+    inference_ms = Column(Float)
+    model_params = Column(Text)
     trace_id = Column(String, nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
