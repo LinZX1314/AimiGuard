@@ -160,3 +160,104 @@ def clear_cache() -> int:
     count = len(_cve_cache)
     _cve_cache.clear()
     return count
+
+
+# ── D1-03: 多源威胁情报聚合 ──
+
+_kev_cache: Dict[str, Any] = {}  # {"data": set(), "ts": 0}
+
+
+async def fetch_cisa_kev() -> Dict[str, Any]:
+    """
+    获取 CISA KEV（已知被利用漏洞目录）列表。
+    返回 CVE ID 集合，本地缓存 24h。
+    """
+    if _kev_cache.get("data") and (time.time() - _kev_cache.get("ts", 0)) < _CACHE_TTL:
+        return {"kev_ids": _kev_cache["data"], "from_cache": True, "count": len(_kev_cache["data"])}
+
+    try:
+        url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+
+        vulns = data.get("vulnerabilities", [])
+        kev_ids = {v.get("cveID", "") for v in vulns if v.get("cveID")}
+        _kev_cache["data"] = kev_ids
+        _kev_cache["ts"] = time.time()
+
+        return {"kev_ids": kev_ids, "from_cache": False, "count": len(kev_ids)}
+    except Exception as exc:
+        return {"kev_ids": set(), "from_cache": False, "count": 0, "error": str(exc)}
+
+
+async def check_kev(cve_id: str) -> bool:
+    """检查 CVE 是否在 CISA KEV 目录中"""
+    result = await fetch_cisa_kev()
+    return cve_id.upper() in result.get("kev_ids", set())
+
+
+class ThreatIntelSource:
+    """统一威胁情报源接口"""
+
+    def __init__(self, name: str, source_type: str, endpoint: str, api_key: Optional[str] = None):
+        self.name = name
+        self.source_type = source_type
+        self.endpoint = endpoint
+        self.api_key = api_key
+
+    async def query_ip(self, ip: str) -> Dict[str, Any]:
+        """查询 IP 情报"""
+        try:
+            headers = {"Accept": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self.endpoint}/indicators/IPv4/{ip}", headers=headers)
+                if resp.status_code == 200:
+                    return {"source": self.name, "ip": ip, "data": resp.json(), "hit": True}
+                return {"source": self.name, "ip": ip, "hit": False}
+        except Exception as exc:
+            return {"source": self.name, "ip": ip, "hit": False, "error": str(exc)}
+
+    async def query_cve(self, cve_id: str) -> Dict[str, Any]:
+        """查询 CVE 情报"""
+        try:
+            headers = {"Accept": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self.endpoint}/indicators/CVE/{cve_id}", headers=headers)
+                if resp.status_code == 200:
+                    return {"source": self.name, "cve_id": cve_id, "data": resp.json(), "hit": True}
+                return {"source": self.name, "cve_id": cve_id, "hit": False}
+        except Exception as exc:
+            return {"source": self.name, "cve_id": cve_id, "hit": False, "error": str(exc)}
+
+
+def load_intel_sources_from_plugins(db) -> list:
+    """从 plugin_registry 加载 threat_intel 类型插件"""
+    from core.database import PluginRegistry
+    plugins = db.query(PluginRegistry).filter(
+        PluginRegistry.plugin_type == "threat_intel",
+        PluginRegistry.enabled == 1,
+    ).all()
+
+    sources = []
+    for p in plugins:
+        config = {}
+        if p.config_json:
+            try:
+                config = json.loads(p.config_json)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        sources.append(ThreatIntelSource(
+            name=p.plugin_name,
+            source_type="threat_intel",
+            endpoint=p.endpoint or "",
+            api_key=config.get("api_key"),
+        ))
+    return sources
