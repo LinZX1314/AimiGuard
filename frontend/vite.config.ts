@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
+      '@': path.resolve(__dirname, './src'),
+      'mermaid': path.resolve(__dirname, './src/stubs/mermaid.ts'),
     }
   },
   server: {
