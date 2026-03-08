@@ -38,6 +38,7 @@ const md = computed(() => (slotContent.value ?? props.content ?? '') as string)
         props.class,
       )
     "
+    :cdn-options="{ mermaid: false, beautifulMermaid: false }"
     v-bind="$attrs"
   />
 </template>

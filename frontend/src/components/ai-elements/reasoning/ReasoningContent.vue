@@ -40,6 +40,6 @@ const md = computed(() => (slotContent.value ?? props.content ?? '') as string)
       props.class,
     )"
   >
-    <Markdown :content="md" />
+    <Markdown :content="md" :cdn-options="{ mermaid: false, beautifulMermaid: false }" />
   </CollapsibleContent>
 </template>

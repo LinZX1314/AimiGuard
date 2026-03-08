@@ -424,7 +424,7 @@
             <Skeleton class="h-4 w-2/3" />
           </div>
           <div v-else-if="previewContent" ref="previewContentRef" class="report-markdown prose prose-sm dark:prose-invert max-w-none">
-            <Markdown :content="previewContent" />
+            <Markdown :content="previewContent" :cdn-options="{ mermaid: false, beautifulMermaid: false }" />
           </div>
           <div v-else class="text-center text-muted-foreground py-12">
             <p class="text-sm">无法加载报告内容</p>
