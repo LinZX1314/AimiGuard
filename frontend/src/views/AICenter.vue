@@ -1,18 +1,18 @@
-<template>
+﻿<template>
   <div class="ai-center flex h-[calc(100vh-64px)] overflow-hidden">
 
-    <!-- ── 左侧：会话历史 ── -->
+    <!-- 鈹€鈹€ 宸︿晶锛氫細璇濆巻鍙?鈹€鈹€ -->
     <aside class="sessions-sidebar w-56 shrink-0 border-r border-border bg-sidebar flex flex-col">
       <div class="flex items-center justify-between px-3.5 py-3 border-b border-border/60">
         <div class="flex items-center gap-1.5">
           <MessagesSquare class="size-3.5 text-primary/70" />
-          <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">历史会话</span>
+          <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">鍘嗗彶浼氳瘽</span>
         </div>
         <Button
           variant="ghost"
           size="icon"
           class="size-6 cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
-          title="新建会话"
+          title="鏂板缓浼氳瘽"
           @click="newSession"
         >
           <SquarePen class="size-3.5" />
@@ -27,7 +27,7 @@
           <div class="size-8 rounded-full bg-muted/50 flex items-center justify-center">
             <MessageCircle class="size-4 text-muted-foreground/40" />
           </div>
-          <p class="text-xs text-muted-foreground/60">暂无历史会话</p>
+          <p class="text-xs text-muted-foreground/60">鏆傛棤鍘嗗彶浼氳瘽</p>
         </div>
         <button
           v-for="s in sessions"
@@ -47,13 +47,13 @@
             />
             <div class="min-w-0 flex-1">
               <p class="truncate text-xs font-medium leading-snug">
-                {{ s.context_type || 'AI 对话' }}
+                {{ s.context_type || 'AI 瀵硅瘽' }}
               </p>
               <p class="text-[10px] opacity-50 mt-0.5 tabular-nums">{{ formatTime(s.started_at) }}</p>
             </div>
             <div
               class="shrink-0 size-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-destructive/15 hover:text-destructive transition-all cursor-pointer"
-              title="删除会话"
+              title="鍒犻櫎浼氳瘽"
               @click.stop="deleteSession(s)"
             >
               <Trash2 class="size-3" />
@@ -63,21 +63,21 @@
       </div>
     </aside>
 
-    <!-- ── 中：对话区 ── -->
+    <!-- 鈹€鈹€ 涓細瀵硅瘽鍖?鈹€鈹€ -->
     <div class="flex flex-1 flex-col min-w-0 min-h-0">
 
-      <!-- 对话顶部 -->
+      <!-- 瀵硅瘽椤堕儴 -->
       <div class="flex items-center justify-between border-b border-border/60 px-5 py-2.5 shrink-0 bg-background/80 backdrop-blur-sm">
         <div class="flex items-center gap-2.5">
           <div class="size-7 rounded-lg bg-primary/10 flex items-center justify-center ring-1 ring-primary/20">
             <BrainCircuit class="size-3.5 text-primary" />
           </div>
           <div>
-            <span class="font-semibold text-sm leading-none">AI 研判助手</span>
+            <span class="font-semibold text-sm leading-none">AI 鐮斿垽鍔╂墜</span>
             <div class="flex items-center gap-1.5 mt-0.5">
               <span class="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span class="text-[10px] text-muted-foreground">在线</span>
-              <span v-if="currentSessionId" class="text-[10px] text-muted-foreground/50">· 会话 #{{ currentSessionId }}</span>
+              <span class="text-[10px] text-muted-foreground">鍦ㄧ嚎</span>
+              <span v-if="currentSessionId" class="text-[10px] text-muted-foreground/50">路 浼氳瘽 #{{ currentSessionId }}</span>
             </div>
           </div>
         </div>
@@ -88,17 +88,17 @@
           @click="newSession"
         >
           <SquarePen class="size-3" />
-          新建对话
+          鏂板缓瀵硅瘽
         </Button>
       </div>
 
-      <!-- 消息列表：使用 AI Elements Conversation 组件 -->
+      <!-- 娑堟伅鍒楄〃锛氫娇鐢?AI Elements Conversation 缁勪欢 -->
       <Conversation class="flex-1 min-h-0 px-5 py-4 [&>div]:!overflow-y-auto">
-        <!-- 空状态：使用 AI Elements ConversationEmptyState -->
+        <!-- 绌虹姸鎬侊細浣跨敤 AI Elements ConversationEmptyState -->
         <ConversationEmptyState
           v-if="messages.length === 0 && !aiThinking"
-          title="开始 AI 研判对话"
-          description="询问告警分析、漏洞解读、修复建议，或引用事件 ID 进行深度分析"
+          title="寮€濮?AI 鐮斿垽瀵硅瘽"
+          description="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栧紩鐢ㄤ簨浠?ID 杩涜娣卞害鍒嗘瀽"
         >
           <template #icon>
             <div class="size-14 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center mb-1">
@@ -106,7 +106,7 @@
             </div>
           </template>
 
-          <!-- 快捷提示按钮 -->
+          <!-- 蹇嵎鎻愮ず鎸夐挳 -->
           <div class="flex flex-wrap gap-2 justify-center mt-3">
             <button
               v-for="hint in quickHints"
@@ -119,7 +119,7 @@
           </div>
         </ConversationEmptyState>
 
-        <!-- 消息流：使用 AI Elements Message / MessageContent / MessageAvatar -->
+        <!-- 娑堟伅娴侊細浣跨敤 AI Elements Message / MessageContent / MessageAvatar -->
         <div v-if="messages.length > 0 || aiThinking" class="space-y-5 py-2">
           <TransitionGroup name="msg" tag="div" class="space-y-5">
             <Message
@@ -127,7 +127,7 @@
               :key="idx"
               :from="msg.role"
             >
-              <!-- AI 助手消息：头像在左 -->
+              <!-- AI 鍔╂墜娑堟伅锛氬ご鍍忓湪宸?-->
               <MessageAvatar
                 v-if="msg.role === 'assistant'"
                 src=""
@@ -152,7 +152,7 @@
                 </span>
               </div>
 
-              <!-- 用户消息：头像在右 -->
+              <!-- 鐢ㄦ埛娑堟伅锛氬ご鍍忓湪鍙?-->
               <MessageAvatar
                 v-if="msg.role === 'user'"
                 src=""
@@ -162,7 +162,7 @@
             </Message>
           </TransitionGroup>
 
-          <!-- AI 思考中指示器 -->
+          <!-- AI 鎬濊€冧腑鎸囩ず鍣?-->
           <Transition name="thinking">
             <Message v-if="aiThinking" from="assistant">
               <MessageAvatar
@@ -186,23 +186,23 @@
         </div>
       </Conversation>
 
-      <!-- 输入区：使用 AI Elements PromptInput 组件 -->
+      <!-- 杈撳叆鍖猴細浣跨敤 AI Elements PromptInput 缁勪欢 -->
       <div class="shrink-0 border-t border-border/60 px-4 py-3 bg-background/80 backdrop-blur-sm">
         <PromptInput
           class="rounded-xl border-border/60 shadow-sm"
           @submit="handlePromptSubmit"
         >
           <PromptInputTextarea
-            placeholder="询问告警分析、漏洞解读、修复建议，或输入事件 ID…"
+            placeholder="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栬緭鍏ヤ簨浠?ID鈥?
             :disabled="aiThinking"
             class="min-h-10 max-h-36 text-sm placeholder:text-muted-foreground/50"
           />
           <PromptInputFooter class="px-2 pb-2">
             <span class="text-[10px] text-muted-foreground/50 select-none">
-              Enter 发送 · Shift+Enter 换行 · 可引用事件 ID
+              Enter 鍙戦€?路 Shift+Enter 鎹㈣ 路 鍙紩鐢ㄤ簨浠?ID
             </span>
             <div class="flex items-center gap-1.5">
-              <!-- TTS 麦克风按钮 + 录音气泡 -->
+              <!-- TTS 楹﹀厠椋庢寜閽?+ 褰曢煶姘旀场 -->
               <div class="relative">
                 <button
                   class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
@@ -211,7 +211,7 @@
                       ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25'
                       : 'bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary',
                   ]"
-                  :title="ttsRecording ? '停止录音' : '语音输入'"
+                  :title="ttsRecording ? '鍋滄褰曢煶' : '璇煶杈撳叆'"
                   @click="toggleTTSRecording"
                 >
                   <Mic v-if="!ttsRecording" class="size-3.5" />
@@ -228,14 +228,14 @@
                     class="absolute inset-0 rounded-full border-2 border-red-400/40 animate-ping pointer-events-none"
                   />
                 </button>
-                <!-- 录音中小气泡提示 -->
+                <!-- 褰曢煶涓皬姘旀场鎻愮ず -->
                 <Transition name="tts-bubble">
                   <div
                     v-if="ttsRecording"
                     class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 rounded-xl bg-popover border border-border/60 shadow-lg px-3 py-2.5 flex flex-col items-center gap-2 z-50"
                     :class="sttText ? 'w-52' : 'w-36'"
                   >
-                    <!-- 实时波形 -->
+                    <!-- 瀹炴椂娉㈠舰 -->
                     <div class="flex items-center gap-[3px] h-6">
                       <span
                         v-for="(v, i) in waveBars"
@@ -246,8 +246,8 @@
                     </div>
                     <p v-if="sttText" class="text-[10px] text-foreground leading-tight text-center max-w-full truncate">{{ sttText }}</p>
                     <p v-else class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
-                    <p class="text-[9px] text-muted-foreground/40 leading-none">点击停止并发送</p>
-                    <!-- 小三角箭头 -->
+                    <p class="text-[9px] text-muted-foreground/40 leading-none">鐐瑰嚮鍋滄骞跺彂閫</p>
+                    <!-- 灏忎笁瑙掔澶?-->
                     <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 size-2 rotate-45 bg-popover border-r border-b border-border/60" />
                   </div>
                 </Transition>
@@ -263,39 +263,38 @@
       </div>
     </div>
 
-    <!-- 麦克风权限弹窗 -->
+    <!-- 楹﹀厠椋庢潈闄愬脊绐?-->
     <Dialog :open="showMicPermissionDialog" @update:open="showMicPermissionDialog = $event">
       <DialogContent class="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
             <Mic class="size-4 text-primary" />
-            需要麦克风权限
+            闇€瑕侀害鍏嬮鏉冮檺
           </DialogTitle>
           <DialogDescription>
-            语音输入功能需要访问您的麦克风。请在浏览器弹出的权限请求中点击「允许」，或在浏览器设置中手动开启麦克风权限。
-          </DialogDescription>
+            璇煶杈撳叆鍔熻兘闇€瑕佽闂偍鐨勯害鍏嬮銆傝鍦ㄦ祻瑙堝櫒寮瑰嚭鐨勬潈闄愯姹備腑鐐瑰嚮銆屽厑璁搞€嶏紝鎴栧湪娴忚鍣ㄨ缃腑鎵嬪姩寮€鍚害鍏嬮鏉冮檺銆?          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" size="sm" class="cursor-pointer" @click="showMicPermissionDialog = false">
-            我知道了
+            鎴戠煡閬撲簡
           </Button>
           <Button size="sm" class="cursor-pointer" @click="retryMicPermission">
-            重新授权
+            閲嶆柊鎺堟潈
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
-    <!-- ── 右侧：报告 ── -->
+    <!-- 鈹€鈹€ 鍙充晶锛氭姤鍛?鈹€鈹€ -->
     <aside class="w-64 shrink-0 border-l border-border/60 flex flex-col bg-sidebar">
 
-      <!-- 标题 -->
+      <!-- 鏍囬 -->
       <div class="flex items-center gap-1.5 px-3.5 py-3 border-b border-border/60">
         <FileText class="size-3.5 text-primary/70" />
-        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">报告</span>
+        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">鎶ュ憡</span>
       </div>
 
-      <!-- 报告面板 -->
+      <!-- 鎶ュ憡闈㈡澘 -->
       <div class="flex flex-col flex-1 min-h-0">
         <div class="px-3 py-3 border-b border-border/60 space-y-2 shrink-0">
           <div class="grid grid-cols-2 gap-1.5">
@@ -306,7 +305,7 @@
               :disabled="reportGenerating"
               @click="generateReport('daily')"
             >
-              <FileText class="size-3" /> 日报
+              <FileText class="size-3" /> 鏃ユ姤
             </Button>
             <Button
               variant="outline"
@@ -315,7 +314,7 @@
               :disabled="reportGenerating"
               @click="generateReport('weekly')"
             >
-              <FileText class="size-3" /> 周报
+              <FileText class="size-3" /> 鍛ㄦ姤
             </Button>
           </div>
           <Button
@@ -325,7 +324,7 @@
             :disabled="reportGenerating"
             @click="generateReport('scan')"
           >
-            <ScanLine class="size-3" /> 扫描报告
+            <ScanLine class="size-3" /> 鎵弿鎶ュ憡
           </Button>
           <Transition name="fade">
             <p
@@ -336,8 +335,7 @@
               {{ reportMsg }}
             </p>
             <p v-else-if="reportGenerating" class="text-[10px] text-muted-foreground text-center animate-pulse">
-              生成中…
-            </p>
+              鐢熸垚涓€?            </p>
           </Transition>
         </div>
 
@@ -350,7 +348,7 @@
             class="flex flex-col items-center justify-center py-10 gap-2"
           >
             <FileText class="size-6 text-muted-foreground/20" />
-            <p class="text-[11px] text-muted-foreground/50">暂无报告</p>
+            <p class="text-[11px] text-muted-foreground/50">鏆傛棤鎶ュ憡</p>
           </div>
           <div
             v-for="r in reports"
@@ -365,13 +363,13 @@
             <p class="text-[11px] text-muted-foreground/80 line-clamp-2 leading-relaxed">{{ r.summary }}</p>
             <div class="flex items-center justify-between text-[10px] text-muted-foreground/50">
               <span v-if="r.file_size != null">{{ formatFileSize(r.file_size) }}</span>
-              <span v-else>—</span>
+              <span v-else>…</span>
               <Eye class="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>
         </div>
 
-        <!-- 分页 -->
+        <!-- 鍒嗛〉 -->
         <div v-if="reportTotal > reportPageSize" class="shrink-0 border-t border-border/60 px-2 py-2 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -396,7 +394,7 @@
       </div>
     </aside>
 
-    <!-- ── 报告预览弹窗 ── -->
+    <!-- 鈹€鈹€ 鎶ュ憡棰勮寮圭獥 鈹€鈹€ -->
     <Dialog v-model:open="showReportPreview">
       <DialogContent class="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader class="shrink-0 px-6 pt-5 pb-3 border-b border-border/60">
@@ -404,7 +402,7 @@
             <div class="flex items-center gap-2">
               <FileText class="size-4 text-primary" />
               <DialogTitle class="text-base">
-                {{ previewReport?.report_type === 'daily' ? '日报' : previewReport?.report_type === 'weekly' ? '周报' : previewReport?.report_type === 'scan' ? '扫描报告' : '报告' }}
+                {{ previewReport?.report_type === 'daily' ? '鏃ユ姤' : previewReport?.report_type === 'weekly' ? '鍛ㄦ姤' : previewReport?.report_type === 'scan' ? '鎵弿鎶ュ憡' : '鎶ュ憡' }}
               </DialogTitle>
               <Badge variant="outline" class="text-[10px] h-5 capitalize">{{ previewReport?.report_type }}</Badge>
             </div>
@@ -413,7 +411,7 @@
               <span class="tabular-nums">{{ previewReport ? formatTime(previewReport.created_at) : '' }}</span>
             </div>
           </div>
-          <DialogDescription class="sr-only">报告预览</DialogDescription>
+          <DialogDescription class="sr-only">鎶ュ憡棰勮</DialogDescription>
         </DialogHeader>
         <div class="flex-1 overflow-y-auto px-6 py-5 min-h-0">
           <div v-if="previewLoading" class="space-y-3 py-8">
@@ -427,16 +425,16 @@
             <Markdown :content="previewContent" :cdn-options="{ mermaid: false, beautifulMermaid: false }" />
           </div>
           <div v-else class="text-center text-muted-foreground py-12">
-            <p class="text-sm">无法加载报告内容</p>
+            <p class="text-sm">鏃犳硶鍔犺浇鎶ュ憡鍐呭</p>
           </div>
         </div>
         <div class="shrink-0 border-t border-border/60 px-6 py-3 flex items-center justify-end gap-2">
           <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 text-xs" @click="exportReportPdf">
             <Download class="size-3.5" />
-            导出 PDF
+            瀵煎嚭 PDF
           </Button>
           <Button variant="outline" size="sm" class="cursor-pointer text-xs" @click="showReportPreview = false">
-            关闭
+            鍏抽棴
           </Button>
         </div>
       </DialogContent>
@@ -503,13 +501,13 @@ interface Session {
 type Report = ReportItem
 
 const quickHints = [
-  '分析最近告警',
-  '解读扫描结果',
-  '给出修复建议',
-  '威胁溯源分析',
+  '鍒嗘瀽鏈€杩戝憡璀?,
+  '瑙ｈ鎵弿缁撴灉',
+  '缁欏嚭淇寤鸿',
+  '濞佽儊婧簮鍒嗘瀽',
 ]
 
-// ── 状态 ──
+// 鈹€鈹€ 鐘舵€?鈹€鈹€
 const messages = ref<Message_[]>([])
 const aiThinking = ref(false)
 const currentSessionId = ref<number | null>(null)
@@ -537,8 +535,7 @@ const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
 const sttText = ref('')
 
-// 实时音频波形状态
-const waveBars = reactive([0, 0, 0, 0, 0])
+// 瀹炴椂闊抽娉㈠舰鐘舵€?const waveBars = reactive([0, 0, 0, 0, 0])
 let audioCtx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let micStream: MediaStream | null = null
@@ -557,13 +554,12 @@ const startAudioVisualizer = (stream: MediaStream) => {
   const tick = () => {
     if (!analyser || !ttsRecording.value) return
     analyser.getByteFrequencyData(dataArr)
-    // 从频谱中取 5 个采样点映射到波形条高度 (0~1)
+    // 浠庨璋变腑鍙?5 涓噰鏍风偣鏄犲皠鍒版尝褰㈡潯楂樺害 (0~1)
     const len = dataArr.length
     const step = Math.max(1, Math.floor(len / 5))
     for (let i = 0; i < 5; i++) {
       const val = dataArr[Math.min(i * step, len - 1)] / 255
-      // 平滑过渡，避免跳动
-      waveBars[i] = waveBars[i] * 0.4 + val * 0.6
+      // 骞虫粦杩囨浮锛岄伩鍏嶈烦鍔?      waveBars[i] = waveBars[i] * 0.4 + val * 0.6
     }
     animFrameId = requestAnimationFrame(tick)
   }
@@ -595,8 +591,7 @@ const startSTTStream = (stream: MediaStream) => {
       sttText.value = event.text || ''
     }
     if (event.type === 'final' && event.text) {
-      // 录音结束后自动发送转写文字
-      const finalText = event.text
+      // 褰曢煶缁撴潫鍚庤嚜鍔ㄥ彂閫佽浆鍐欐枃瀛?      const finalText = event.text
       setTimeout(() => {
         if (finalText.trim()) sendMessage(finalText.trim())
         sttText.value = ''
@@ -605,7 +600,7 @@ const startSTTStream = (stream: MediaStream) => {
   })
 
   sttStream.connect().then(() => {
-    // 启动 MediaRecorder 流式发送音频块
+    // 鍚姩 MediaRecorder 娴佸紡鍙戦€侀煶棰戝潡
     try {
       mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -620,10 +615,9 @@ const startSTTStream = (stream: MediaStream) => {
         e.data.arrayBuffer().then((buf) => sttStream?.sendAudio(buf))
       }
     }
-    mediaRecorder.start(250) // 每 250ms 发送一个音频块
+    mediaRecorder.start(250) // 姣?250ms 鍙戦€佷竴涓煶棰戝潡
   }).catch(() => {
-    // WebSocket 连接失败时仍然允许录音（只是没有转写）
-  })
+    // WebSocket 杩炴帴澶辫触鏃朵粛鐒跺厑璁稿綍闊筹紙鍙槸娌℃湁杞啓锛?  })
 }
 
 onUnmounted(() => {
@@ -631,14 +625,13 @@ onUnmounted(() => {
   stopSTTStream()
 })
 
-// ── 快捷提示 ──
+// 鈹€鈹€ 蹇嵎鎻愮ず 鈹€鈹€
 const fillHint = (hint: string) => {
-  // PromptInput 内部管理文本状态，无法直接注入
-  // 降级为直接发送
-  sendMessage(hint)
+  // PromptInput 鍐呴儴绠＄悊鏂囨湰鐘舵€侊紝鏃犳硶鐩存帴娉ㄥ叆
+  // 闄嶇骇涓虹洿鎺ュ彂閫?  sendMessage(hint)
 }
 
-// ── 会话管理 ──
+// 鈹€鈹€ 浼氳瘽绠＄悊 鈹€鈹€
 const newSession = () => {
   currentSessionId.value = null
   messages.value = []
@@ -683,7 +676,7 @@ const loadSession = async (s: Session) => {
   }
 }
 
-// ── 发送消息 ──
+// 鈹€鈹€ 鍙戦€佹秷鎭?鈹€鈹€
 const sendMessage = async (text: string) => {
   if (!text.trim() || aiThinking.value) return
 
@@ -695,7 +688,7 @@ const sendMessage = async (text: string) => {
     const res: any = await aiApi.chat(text, currentSessionId.value ?? undefined)
     const data = res?.data ?? res
     const sessionId = data?.session_id ?? res?.session_id
-    const reply = data?.message ?? res?.message ?? '（无响应）'
+    const reply = data?.message ?? res?.message ?? '锛堟棤鍝嶅簲锛?
 
     if (sessionId && !currentSessionId.value) {
       currentSessionId.value = sessionId
@@ -706,7 +699,7 @@ const sendMessage = async (text: string) => {
   } catch {
     messages.value.push({
       role: 'assistant',
-      content: '抱歉，服务暂时不可用，请稍后重试。',
+      content: '鎶辨瓑锛屾湇鍔℃殏鏃朵笉鍙敤锛岃绋嶅悗閲嶈瘯銆?,
       created_at: new Date().toISOString(),
     })
   } finally {
@@ -714,12 +707,12 @@ const sendMessage = async (text: string) => {
   }
 }
 
-// PromptInput submit 事件处理
+// PromptInput submit 浜嬩欢澶勭悊
 const handlePromptSubmit = (payload: PromptInputMessage) => {
   sendMessage(payload.text)
 }
 
-// ── 报告 ──
+// 鈹€鈹€ 鎶ュ憡 鈹€鈹€
 const loadReports = async () => {
   reportsLoading.value = true
   try {
@@ -739,12 +732,12 @@ const generateReport = async (type: string) => {
   reportMsg.value = ''
   try {
     await reportApi.generate(type)
-    reportMsg.value = '报告已生成'
+    reportMsg.value = '鎶ュ憡宸茬敓鎴?
     reportMsgOk.value = true
     reportPage.value = 1
     await loadReports()
   } catch {
-    reportMsg.value = '生成失败'
+    reportMsg.value = '鐢熸垚澶辫触'
     reportMsgOk.value = false
   } finally {
     reportGenerating.value = false
@@ -763,7 +756,7 @@ const openReportPreview = async (r: Report) => {
     previewContent.value = data?.content ?? ''
     previewFileSize.value = data?.file_size ?? r.file_size ?? null
   } catch {
-    previewContent.value = r.summary ? `> ${r.summary}\n\n*报告原始文件不可用*` : ''
+    previewContent.value = r.summary ? `> ${r.summary}\n\n*鎶ュ憡鍘熷鏂囦欢涓嶅彲鐢?` : ''
   } finally {
     previewLoading.value = false
   }
@@ -779,9 +772,9 @@ const exportReportPdf = () => {
   const el = previewContentRef.value
   if (!el) return
   const reportType = previewReport.value?.report_type ?? 'report'
-  const title = reportType === 'daily' ? '每日安全报告'
-    : reportType === 'weekly' ? '每周安全报告'
-    : reportType === 'scan' ? '安全扫描报告' : '安全报告'
+  const title = reportType === 'daily' ? '姣忔棩瀹夊叏鎶ュ憡'
+    : reportType === 'weekly' ? '姣忓懆瀹夊叏鎶ュ憡'
+    : reportType === 'scan' ? '瀹夊叏鎵弿鎶ュ憡' : '瀹夊叏鎶ュ憡'
   const titleEn = reportType === 'daily' ? 'Daily Security Report'
     : reportType === 'weekly' ? 'Weekly Security Report'
     : reportType === 'scan' ? 'Scan Report' : 'Security Report'
@@ -799,307 +792,339 @@ const exportReportPdf = () => {
 <style>
   @page {
     size: A4;
-    margin: 12mm 10mm 16mm 10mm;
+    margin: 14mm 12mm 16mm 12mm;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #fff;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    color: #1e293b;
-    line-height: 1.8;
+    color: #111111;
+    line-height: 1.75;
     font-size: 13px;
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* ── 封面头部 ── */
+  /* 鈹€鈹€ 灏侀潰澶撮儴 鈹€鈹€ */
   .cover-header {
     position: relative;
     z-index: 1;
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1e40af 100%);
-    color: #fff;
-    padding: 48px 56px 40px;
+    background: #ffffff;
+    color: #111111;
+    padding: 22px 24px 18px;
+    border: 1px solid #111111;
+    border-top-width: 4px;
     page-break-after: avoid;
   }
   .cover-header .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 32px;
+    gap: 10px;
+    margin-bottom: 16px;
   }
   .cover-header .brand-icon {
-    width: 40px; height: 40px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.15);
-    backdrop-filter: blur(8px);
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    border: 1px solid #111111;
+    background: #ffffff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
+    font-size: 14px;
+    color: #111111;
   }
   .cover-header .brand-text {
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 2px;
+    letter-spacing: 1.4px;
     text-transform: uppercase;
-    opacity: 0.9;
+    opacity: 1;
+    color: #444444;
   }
   .cover-header .report-title {
     font-size: 28px;
     font-weight: 800;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     margin-bottom: 6px;
+    color: #111111;
   }
   .cover-header .report-title-en {
-    font-size: 13px;
-    font-weight: 400;
-    opacity: 0.55;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 1;
+    color: #666666;
     letter-spacing: 2px;
     text-transform: uppercase;
-    margin-bottom: 24px;
+    margin-bottom: 14px;
   }
   .cover-header .meta-row {
     display: flex;
-    gap: 32px;
+    gap: 10px 18px;
     flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1px solid #d1d5db;
   }
   .cover-header .meta-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    opacity: 0.75;
+    gap: 6px;
+    font-size: 11px;
+    opacity: 1;
+    color: #444444;
   }
   .cover-header .meta-label {
-    font-weight: 600;
-    opacity: 0.6;
+    font-weight: 700;
+    opacity: 1;
+    color: #111111;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     font-size: 10px;
   }
   .cover-header .accent-bar {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981);
+    margin-top: 14px;
+    height: 0;
+    border-top: 2px solid #111111;
+    background: none;
   }
 
-  /* ── 正文容器 ── */
+  /* 鈹€鈹€ 姝ｆ枃瀹瑰櫒 鈹€鈹€ */
   .content-wrap {
     position: relative;
     z-index: 1;
     max-width: 100%;
-    padding: 36px 56px 80px;
+    margin-top: 12px;
+    padding: 20px 24px 24px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    overflow: hidden;
   }
 
-  /* ── 分类标签 ── */
+  /* 鈹€鈹€ 鍒嗙被鏍囩 鈹€鈹€ */
   .report-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px 12px;
+    background: #ffffff;
+    color: #111111;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
     border-radius: 20px;
-    border: 1px solid #bfdbfe;
-    margin-bottom: 20px;
+    border: 1px solid #111111;
+    margin-bottom: 18px;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.2px;
   }
 
-  /* ── Markdown 内容样式 ── */
+  /* 鈹€鈹€ Markdown 鍐呭鏍峰紡 鈹€鈹€ */
   .content-wrap h1 {
     font-size: 20px;
-    font-weight: 700;
-    color: #0f172a;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 10px;
-    margin: 28px 0 16px;
+    font-weight: 800;
+    color: #111111;
+    border-bottom: 1px solid #111111;
+    padding-bottom: 8px;
+    margin: 0 0 14px;
   }
-  .content-wrap h1:first-child { margin-top: 0; }
+  .content-wrap h1:not(:first-child) { margin-top: 26px; }
   .content-wrap h2 {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 700;
-    color: #1e40af;
-    margin: 24px 0 12px;
-    padding-left: 12px;
-    border-left: 3px solid #3b82f6;
+    color: #111111;
+    margin: 22px 0 10px;
+    padding-left: 10px;
+    border-left: 3px solid #111111;
   }
   .content-wrap h3 {
-    font-size: 15px;
-    font-weight: 600;
-    color: #334155;
-    margin: 20px 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #111111;
+    margin: 18px 0 8px;
   }
   .content-wrap p {
     margin: 8px 0;
-    color: #334155;
+    color: #111111;
   }
   .content-wrap ul, .content-wrap ol {
-    padding-left: 24px;
+    padding-left: 22px;
     margin: 8px 0;
   }
   .content-wrap li {
     margin: 5px 0;
-    color: #334155;
+    color: #111111;
   }
   .content-wrap li::marker {
-    color: #3b82f6;
+    color: #111111;
   }
   .content-wrap code {
-    background: #f1f5f9;
-    color: #be185d;
-    padding: 2px 7px;
+    background: #ffffff;
+    color: #111111;
+    padding: 1px 6px;
     border-radius: 4px;
     font-size: 12px;
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #d1d5db;
   }
   .content-wrap pre {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    padding: 16px 20px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    padding: 14px 16px;
     border-radius: 8px;
     overflow-x: auto;
     margin: 12px 0;
     font-size: 12px;
   }
   .content-wrap pre code {
-    background: none;
+    background: transparent;
     padding: 0;
     border: none;
-    color: #334155;
+    color: #111111;
   }
   .content-wrap table {
     border-collapse: collapse;
     width: 100%;
-    margin: 16px 0;
+    margin: 14px 0;
     font-size: 12px;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
+    border-radius: 0;
+    overflow: visible;
+    border: 1px solid #d1d5db;
   }
   .content-wrap th {
-    background: #f1f5f9;
+    background: #ffffff;
     font-weight: 700;
-    color: #1e293b;
-    padding: 10px 14px;
+    color: #111111;
+    padding: 8px 10px;
     text-align: left;
-    border-bottom: 2px solid #cbd5e1;
+    border-bottom: 1px solid #d1d5db;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
   .content-wrap td {
-    padding: 9px 14px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #475569;
+    padding: 8px 10px;
+    border-bottom: 1px solid #d1d5db;
+    color: #111111;
+    background: #ffffff;
   }
   .content-wrap tr:nth-child(even) td {
-    background: #fafbfd;
+    background: #ffffff;
   }
   .content-wrap blockquote {
-    border-left: 4px solid #3b82f6;
-    margin: 16px 0;
-    padding: 12px 20px;
-    background: #f0f9ff;
-    border-radius: 0 8px 8px 0;
-    color: #1e40af;
+    border-left: 3px solid #111111;
+    margin: 14px 0;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-radius: 0;
+    color: #333333;
     font-size: 12.5px;
   }
   .content-wrap hr {
     border: none;
-    border-top: 1px solid #e2e8f0;
-    margin: 24px 0;
+    border-top: 1px solid #d1d5db;
+    margin: 20px 0;
   }
   .content-wrap strong {
-    color: #0f172a;
+    color: #111111;
   }
 
-  /* ── 页脚 ── */
+  /* 鈹€鈹€ 椤佃剼 鈹€鈹€ */
   .page-footer {
-    border-top: 1px solid #e2e8f0;
-    padding: 16px 56px;
+    border-top: 1px solid #d1d5db;
+    padding: 14px 0 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     font-size: 10px;
-    color: #94a3b8;
-    margin-top: 32px;
+    color: #444444;
+    margin-top: 14px;
   }
   .page-footer .confidential {
     display: flex;
     align-items: center;
     gap: 6px;
     font-weight: 600;
-    color: #cbd5e1;
+    color: #111111;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
   }
   .page-footer .gen-info {
     text-align: right;
+    color: #444444;
   }
 
-  /* ── 水印 (SVG background, 打印兼容) ── */
+  /* 鈹€鈹€ 姘村嵃 (SVG background, 鎵撳嵃鍏煎) 鈹€鈹€ */
   .watermark-bg {
     position: relative;
   }
   .watermark-bg::before {
-    content: '';
+    content: 'AIMIGUAN INTERNAL REPORT';
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 52%;
+    left: 50%;
     pointer-events: none;
     z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='14' font-weight='700' fill='%2394a3b8' opacity='0.06' transform='rotate(-25 200 100)'%3ECONFIDENTIAL%3C/text%3E%3C/svg%3E");
-    background-repeat: repeat;
+    transform: translate(-50%, -50%) rotate(-28deg);
+    transform-origin: center center;
+    color: rgba(17, 17, 17, 0.06);
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    white-space: nowrap;
   }
   .watermark-bg > * { position: relative; z-index: 1; }
 
-  /* ── 打印优化 ── */
+  /* 鈹€鈹€ 鎵撳嵃浼樺寲 鈹€鈹€ */
   @media print {
-    body { background: #fff; }
-    .cover-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .watermark-bg::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { background: #fff; }
+    .cover-header,
+    .content-wrap,
+    .report-badge,
+    .page-footer,
+    .watermark-bg::before {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
 </style>
 </head><body>
 
-<!-- 封面头部 -->
+<!-- 灏侀潰澶撮儴 -->
 <div class="cover-header">
   <div class="brand">
-    <div class="brand-icon">\u{1F6E1}</div>
-    <div class="brand-text">AiMiGuan \u00B7 安全态势感知平台</div>
+    <div class="brand-icon">AI</div>
+    <div class="brand-text">AiMiGuan \u00B7 瀹夊叏鎬佸娍鎰熺煡骞冲彴</div>
   </div>
   <div class="report-title">${title}</div>
   <div class="report-title-en">${titleEn}</div>
   <div class="meta-row">
     <div class="meta-item">
-      <span class="meta-label">日期</span>
+      <span class="meta-label">鏃ユ湡</span>
       <span>${dateStr}</span>
     </div>
-    ${timeStr ? `<div class="meta-item"><span class="meta-label">时间</span><span>${timeStr}</span></div>` : ''}
-    ${fileSize ? `<div class="meta-item"><span class="meta-label">大小</span><span>${fileSize}</span></div>` : ''}
+    ${timeStr ? `<div class="meta-item"><span class="meta-label">鏃堕棿</span><span>${timeStr}</span></div>` : ''}
+    ${fileSize ? `<div class="meta-item"><span class="meta-label">澶у皬</span><span>${fileSize}</span></div>` : ''}
     <div class="meta-item">
-      <span class="meta-label">类型</span>
+      <span class="meta-label">绫诲瀷</span>
       <span>${reportType.toUpperCase()}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-label">密级</span>
-      <span>内部</span>
+      <span class="meta-label">瀵嗙骇</span>
+      <span>鍐呴儴</span>
     </div>
   </div>
   <div class="accent-bar"></div>
 </div>
 
-<!-- 正文内容 (带水印背景) -->
+<!-- 姝ｆ枃鍐呭 (甯︽按鍗拌儗鏅? -->
 <div class="content-wrap watermark-bg">
-  <div class="report-badge">\u{1F4CB} ${reportType} report</div>
+  <div class="report-badge">${reportType} report</div>
   ${el.innerHTML}
 </div>
 
-<!-- 页脚 -->
+<!-- 椤佃剼 -->
 <div class="page-footer">
-  <div class="confidential">\u{1F512} 内部资料 \u00B7 请勿外传</div>
+  <div class="confidential">鍐呴儴璧勬枡 \u00B7 璇峰嬁澶栦紶</div>
   <div class="gen-info">
     Generated by AiMiGuan &middot; ${dateStr} ${timeStr}
   </div>
@@ -1107,10 +1132,10 @@ const exportReportPdf = () => {
 
 </body></html>`)
   printWin.document.close()
-  setTimeout(() => { printWin.print() }, 400)
+  setTimeout(() => { printWin.focus(); printWin.print() }, 400)
 }
 
-// ── TTS 录音按钮 ──
+// 鈹€鈹€ TTS 褰曢煶鎸夐挳 鈹€鈹€
 const startRecording = (stream: MediaStream) => {
   micStream = stream
   ttsRecording.value = true
@@ -1125,7 +1150,7 @@ const toggleTTSRecording = async () => {
     stopAudioVisualizer()
     return
   }
-  // 检查麦克风权限
+  // 妫€鏌ラ害鍏嬮鏉冮檺
   try {
     const permStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
     if (permStatus.state === 'denied') {
@@ -1133,7 +1158,7 @@ const toggleTTSRecording = async () => {
       return
     }
   } catch {
-    // permissions API 不支持时直接尝试获取
+    // permissions API 涓嶆敮鎸佹椂鐩存帴灏濊瘯鑾峰彇
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1153,7 +1178,7 @@ const retryMicPermission = async () => {
   }
 }
 
-// ── 格式化 ──
+// 鈹€鈹€ 鏍煎紡鍖?鈹€鈹€
 const formatTime = (t: string) =>
   t ? new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 
@@ -1167,7 +1192,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 消息入场动画 */
+/* 娑堟伅鍏ュ満鍔ㄧ敾 */
 .msg-enter-active {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1176,7 +1201,7 @@ onMounted(() => {
   transform: translateY(12px) scale(0.97);
 }
 
-/* AI 思考状态入场 */
+/* AI 鎬濊€冪姸鎬佸叆鍦?*/
 .thinking-enter-active {
   transition: all 0.25s ease-out;
 }
@@ -1192,7 +1217,7 @@ onMounted(() => {
   transform: translateY(-4px);
 }
 
-/* 淡入淡出 */
+/* 娣″叆娣″嚭 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.25s ease;
@@ -1202,7 +1227,7 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* 展开收起 */
+/* 灞曞紑鏀惰捣 */
 .expand-enter-active,
 .expand-leave-active {
   transition: all 0.2s ease;
@@ -1219,12 +1244,12 @@ onMounted(() => {
   max-height: 4rem;
 }
 
-/* 解除 InputGroup overflow-hidden 裁剪，让气泡可以溢出 */
+/* 瑙ｉ櫎 InputGroup overflow-hidden 瑁佸壀锛岃姘旀场鍙互婧㈠嚭 */
 :deep([data-slot="input-group"]) {
   overflow: visible !important;
 }
 
-/* TTS 按钮内小波形条 */
+/* TTS 鎸夐挳鍐呭皬娉㈠舰鏉?*/
 .tts-wave-bar {
   display: inline-block;
   width: 2.5px;
@@ -1234,7 +1259,7 @@ onMounted(() => {
   transition: height 0.08s ease-out;
 }
 
-/* TTS 气泡中波形条 */
+/* TTS 姘旀场涓尝褰㈡潯 */
 .tts-wave-bar-pop {
   display: inline-block;
   width: 3px;
@@ -1244,7 +1269,7 @@ onMounted(() => {
   transition: height 0.08s ease-out;
 }
 
-/* 气泡弹出动画 */
+/* 姘旀场寮瑰嚭鍔ㄧ敾 */
 .tts-bubble-enter-active {
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1260,7 +1285,7 @@ onMounted(() => {
   transform: translate(-50%, 4px) scale(0.9);
 }
 
-/* 报告预览 Markdown 美化 */
+/* 鎶ュ憡棰勮 Markdown 缇庡寲 */
 .report-markdown :deep(h1) {
   font-size: 1.35rem;
   font-weight: 700;
@@ -1342,3 +1367,4 @@ onMounted(() => {
   margin: 1.25rem 0;
 }
 </style>
+
