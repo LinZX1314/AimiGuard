@@ -25,6 +25,7 @@ from core.database import (
 )
 from core.response import APIResponse
 from services.ai_engine import ai_engine
+from services.prompt_guard import sanitize_input
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
@@ -124,6 +125,23 @@ async def chat(
     current_user: User = Depends(require_permissions("ai_chat")),
 ):
     trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
+
+    # S1-01: Prompt 注入检测
+    is_safe, _reason = sanitize_input(req.message)
+    if not is_safe:
+        from services.audit_service import AuditService
+        AuditService.log(
+            db=db,
+            actor=str(current_user.username),
+            action="prompt_injection_blocked",
+            target="ai_chat",
+            target_type="ai_input",
+            reason=_reason,
+            result="blocked",
+            trace_id=trace_id,
+        )
+        raise HTTPException(status_code=400, detail="输入内容不符合安全规范")
+
     session: Optional[AIChatSession] = None
 
     if req.session_id:
