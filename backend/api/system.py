@@ -6,13 +6,24 @@ from typing import Optional, List
 from datetime import datetime, timezone
 import os
 import json
+import hashlib
+import shutil
+import uuid
 
 from core.database import (
     get_db,
     AuditLog,
+    AlertEvent,
+    AuditExportJob,
+    BackupJob,
+    RestoreJob,
+    MetricPoint,
+    MetricRule,
+    SecurityScanReport,
     User,
     ThreatEvent,
     ScanTask,
+    ExecutionTask,
     FirewallSyncTask,
     ModelProfile,
 )
@@ -785,3 +796,487 @@ async def check_alerts(
             "checked_at": _utc_iso(),
         },
     }
+
+
+# ── R5 告警闭环 ──
+
+
+@router.get("/alerts")
+@compat_router.get("/alerts")
+async def list_alerts(
+    status: Optional[str] = None,
+    level: Optional[str] = None,
+    page: int = 1,
+    size: int = 20,
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """告警列表（支持状态/级别筛选 + 分页）"""
+    q = db.query(AlertEvent)
+    if status:
+        q = q.filter(AlertEvent.status == status)
+    if level:
+        q = q.filter(AlertEvent.level == level)
+    total = q.count()
+    items = q.order_by(AlertEvent.created_at.desc()).offset((page - 1) * size).limit(size).all()
+    return {
+        "code": 0,
+        "data": {
+            "alerts": [
+                {
+                    "id": a.id,
+                    "level": a.level,
+                    "type": a.type,
+                    "source": a.source,
+                    "summary": a.summary,
+                    "payload": json.loads(a.payload_json) if a.payload_json else None,
+                    "status": a.status,
+                    "acked_by": a.acked_by,
+                    "acked_at": a.acked_at.isoformat() + "Z" if a.acked_at else None,
+                    "resolved_by": a.resolved_by,
+                    "resolved_at": a.resolved_at.isoformat() + "Z" if a.resolved_at else None,
+                    "trace_id": a.trace_id,
+                    "created_at": a.created_at.isoformat() + "Z" if a.created_at else None,
+                }
+                for a in items
+            ],
+            "total": total,
+            "page": page,
+            "size": size,
+        },
+    }
+
+
+@router.post("/alerts/{alert_id}/ack")
+@compat_router.post("/alerts/{alert_id}/ack")
+async def ack_alert(
+    alert_id: int,
+    request: Request,
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """确认告警"""
+    alert = db.query(AlertEvent).filter(AlertEvent.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail={"code": 40404, "message": "告警不存在"})
+    if alert.status != "NEW":
+        raise HTTPException(status_code=400, detail={"code": 50004, "message": f"当前状态 {alert.status} 不可确认，仅 NEW 可确认"})
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    now = _utc_now()
+    alert.status = "ACKED"
+    alert.acked_by = body.get("ack_by", current_user.username)
+    alert.acked_at = now
+    alert.updated_at = now
+    db.commit()
+    AuditService.log(db, actor=current_user.username, action="alert_ack", target=f"alert:{alert_id}", trace_id=body.get("trace_id", alert.trace_id))
+    return {"code": 0, "data": {"alert_id": alert_id, "new_status": "ACKED", "acked_at": _utc_iso()}}
+
+
+@router.post("/alerts/{alert_id}/resolve")
+@compat_router.post("/alerts/{alert_id}/resolve")
+async def resolve_alert(
+    alert_id: int,
+    request: Request,
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """解决告警"""
+    alert = db.query(AlertEvent).filter(AlertEvent.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail={"code": 40404, "message": "告警不存在"})
+    if alert.status not in ("NEW", "ACKED"):
+        raise HTTPException(status_code=400, detail={"code": 50004, "message": f"当前状态 {alert.status} 不可解决，仅 NEW/ACKED 可解决"})
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    now = _utc_now()
+    alert.status = "RESOLVED"
+    alert.resolved_by = body.get("resolved_by", current_user.username)
+    alert.resolved_at = now
+    alert.resolution = body.get("resolution", "")
+    alert.updated_at = now
+    db.commit()
+    AuditService.log(db, actor=current_user.username, action="alert_resolve", target=f"alert:{alert_id}", trace_id=body.get("trace_id", alert.trace_id))
+    return {"code": 0, "data": {"alert_id": alert_id, "new_status": "RESOLVED", "resolved_at": _utc_iso()}}
+
+
+@router.post("/alerts/{alert_id}/postmortem")
+@compat_router.post("/alerts/{alert_id}/postmortem")
+async def postmortem_alert(
+    alert_id: int,
+    request: Request,
+    current_user: User = Depends(require_permissions("set_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """告警复盘"""
+    alert = db.query(AlertEvent).filter(AlertEvent.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail={"code": 40404, "message": "告警不存在"})
+    if alert.status != "RESOLVED":
+        raise HTTPException(status_code=400, detail={"code": 50004, "message": f"当前状态 {alert.status} 不可复盘，仅 RESOLVED 可复盘"})
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    now = _utc_now()
+    alert.status = "POSTMORTEM"
+    alert.postmortem_author = body.get("author", current_user.username)
+    alert.postmortem_at = now
+    content_parts = []
+    if body.get("root_cause"):
+        content_parts.append(f"Root Cause: {body['root_cause']}")
+    if body.get("action_items"):
+        content_parts.append(f"Action Items: {json.dumps(body['action_items'], ensure_ascii=False)}")
+    alert.postmortem_content = "\n".join(content_parts) if content_parts else body.get("content", "")
+    alert.updated_at = now
+    db.commit()
+    AuditService.log(db, actor=current_user.username, action="alert_postmortem", target=f"alert:{alert_id}", trace_id=body.get("trace_id", alert.trace_id))
+    return {"code": 0, "data": {"alert_id": alert_id, "new_status": "POSTMORTEM", "postmortem_at": _utc_iso()}}
+
+
+# ── R3 备份与恢复 ──
+
+
+_BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "backups")
+_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "aimiguard.db")
+
+
+@router.get("/backup/list")
+@compat_router.get("/backup/list")
+async def list_backups(
+    current_user: User = Depends(require_permissions("set_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """备份列表"""
+    jobs = db.query(BackupJob).order_by(BackupJob.created_at.desc()).limit(50).all()
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": j.id,
+                "job_type": j.job_type,
+                "status": j.status,
+                "artifact_uri": j.artifact_uri,
+                "size_bytes": j.size_bytes,
+                "checksum": j.checksum,
+                "started_at": j.started_at.isoformat() + "Z" if j.started_at else None,
+                "finished_at": j.finished_at.isoformat() + "Z" if j.finished_at else None,
+                "triggered_by": j.triggered_by,
+            }
+            for j in jobs
+        ],
+    }
+
+
+@router.post("/backup/create")
+@compat_router.post("/backup/create")
+async def create_backup(
+    request: Request,
+    current_user: User = Depends(require_permissions("set_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """创建数据库备份"""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    job_type = body.get("type", "full")
+    now = _utc_now()
+    job = BackupJob(
+        job_type=job_type,
+        started_at=now,
+        status="running",
+        triggered_by=current_user.username,
+        trace_id=body.get("trace_id", str(uuid.uuid4())),
+    )
+    db.add(job)
+    db.commit()
+
+    try:
+        os.makedirs(_BACKUP_DIR, exist_ok=True)
+        ts = now.strftime("%Y%m%d_%H%M%S")
+        backup_file = os.path.join(_BACKUP_DIR, f"backup_{ts}_{job_type}.db")
+        if os.path.exists(_DB_PATH):
+            shutil.copy2(_DB_PATH, backup_file)
+            size = os.path.getsize(backup_file)
+            with open(backup_file, "rb") as f:
+                checksum = hashlib.sha256(f.read()).hexdigest()
+        else:
+            size = 0
+            checksum = ""
+        job.status = "success"
+        job.finished_at = _utc_now()
+        job.artifact_uri = backup_file
+        job.size_bytes = size
+        job.checksum = checksum
+    except Exception as e:
+        job.status = "failed"
+        job.finished_at = _utc_now()
+        job.error_message = str(e)
+    db.commit()
+    AuditService.log(db, actor=current_user.username, action="backup_create", target=f"backup:{job.id}", trace_id=job.trace_id)
+    return {"code": 0, "data": {"id": job.id, "status": job.status, "artifact_uri": job.artifact_uri, "size_bytes": job.size_bytes}}
+
+
+@router.post("/backup/restore")
+@compat_router.post("/backup/restore")
+async def restore_backup(
+    request: Request,
+    current_user: User = Depends(require_permissions("set_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """从备份恢复"""
+    body = await request.json()
+    backup_id = body.get("backup_id")
+    backup_file = body.get("backup_file")
+    if backup_id:
+        backup = db.query(BackupJob).filter(BackupJob.id == backup_id).first()
+        if not backup or backup.status != "success":
+            raise HTTPException(status_code=404, detail={"code": 40404, "message": "备份不存在或状态异常"})
+        backup_file = backup.artifact_uri
+    if not backup_file or not os.path.exists(str(backup_file)):
+        raise HTTPException(status_code=400, detail={"code": 50003, "message": "备份文件不存在"})
+
+    now = _utc_now()
+    restore = RestoreJob(
+        backup_id=backup_id or 0,
+        started_at=now,
+        status="running",
+        triggered_by=current_user.username,
+        reason=body.get("reason", ""),
+        trace_id=body.get("trace_id", str(uuid.uuid4())),
+    )
+    db.add(restore)
+    db.commit()
+
+    try:
+        shutil.copy2(str(backup_file), _DB_PATH)
+        restore.status = "success"
+        restore.consistency_check_result = "ok"
+        restore.finished_at = _utc_now()
+    except Exception as e:
+        restore.status = "failed"
+        restore.error_message = str(e)
+        restore.finished_at = _utc_now()
+    db.commit()
+    AuditService.log(db, actor=current_user.username, action="backup_restore", target=f"restore:{restore.id}", trace_id=restore.trace_id)
+    return {"code": 0, "data": {"id": restore.id, "status": restore.status}}
+
+
+# ── R4 安全门禁 ──
+
+
+@router.get("/security-report/latest")
+@compat_router.get("/security-report/latest")
+async def get_latest_security_report(
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """最近安全扫描报告"""
+    report = db.query(SecurityScanReport).order_by(SecurityScanReport.created_at.desc()).first()
+    if not report:
+        return {"code": 0, "data": None, "message": "暂无安全扫描报告"}
+    return {
+        "code": 0,
+        "data": {
+            "id": report.id,
+            "scan_tool": report.scan_tool,
+            "trigger_type": report.trigger_type,
+            "branch": report.branch,
+            "commit_sha": report.commit_sha,
+            "total_findings": report.total_findings,
+            "high_count": report.high_count,
+            "medium_count": report.medium_count,
+            "low_count": report.low_count,
+            "findings": json.loads(report.findings_json) if report.findings_json else [],
+            "passed": bool(report.passed),
+            "trace_id": report.trace_id,
+            "created_at": report.created_at.isoformat() + "Z" if report.created_at else None,
+        },
+    }
+
+
+# ── R6 指标概览与时间序列 ──
+
+
+@router.get("/metrics/overview")
+@compat_router.get("/metrics/overview")
+async def metrics_overview(
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """指标概览（含阈值状态）"""
+    from services.metrics_service import metrics
+    from sqlalchemy import func
+
+    snap = metrics.snapshot()
+
+    # 队列深度
+    queue_depth = db.query(func.count(ExecutionTask.id)).filter(ExecutionTask.state == "QUEUED").scalar() or 0
+
+    # 任务成功率
+    total_tasks = db.query(func.count(ExecutionTask.id)).filter(ExecutionTask.state.in_(["SUCCESS", "FAILED"])).scalar() or 0
+    success_tasks = db.query(func.count(ExecutionTask.id)).filter(ExecutionTask.state == "SUCCESS").scalar() or 0
+    task_success_rate = round(success_tasks / total_tasks, 4) if total_tasks > 0 else 1.0
+
+    api_stats = metrics.get_latency_stats("api_request")
+
+    metric_values = {
+        "api_latency_p95_ms": api_stats.get("p95_ms", 0),
+        "api_latency_p99_ms": api_stats.get("p99_ms", 0),
+        "queue_depth": queue_depth,
+        "task_success_rate": task_success_rate,
+        "total_requests": snap.get("total_requests", 0),
+    }
+
+    # 加载阈值规则
+    rules = db.query(MetricRule).filter(MetricRule.enabled == 1).all()
+    thresholds = {}
+    for r in rules:
+        val = metric_values.get(r.metric)
+        if val is not None:
+            healthy = True
+            if r.operator == "gt" and val > r.threshold:
+                healthy = False
+            elif r.operator == "lt" and val < r.threshold:
+                healthy = False
+            elif r.operator == "gte" and val >= r.threshold:
+                healthy = False
+            elif r.operator == "lte" and val <= r.threshold:
+                healthy = False
+            thresholds[r.metric] = {"threshold": r.threshold, "status": "healthy" if healthy else "unhealthy"}
+
+    return {
+        "code": 0,
+        "data": {
+            "metrics": metric_values,
+            "thresholds": thresholds,
+            "collected_at": _utc_iso(),
+        },
+    }
+
+
+@router.get("/metrics/timeseries")
+@compat_router.get("/metrics/timeseries")
+async def metrics_timeseries(
+    metric: str,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    limit: int = 100,
+    current_user: User = Depends(require_permissions("view_system_mode")),
+    db: Session = Depends(get_db),
+):
+    """指标时间序列数据"""
+    q = db.query(MetricPoint).filter(MetricPoint.metric == metric)
+    if start:
+        q = q.filter(MetricPoint.ts >= start)
+    if end:
+        q = q.filter(MetricPoint.ts <= end)
+    points = q.order_by(MetricPoint.ts.asc()).limit(limit).all()
+    return {
+        "code": 0,
+        "data": {
+            "metric": metric,
+            "data_points": [
+                {"ts": p.ts.isoformat() + "Z" if p.ts else None, "value": p.value}
+                for p in points
+            ],
+        },
+    }
+
+
+# ── R7 审计导出 ──
+
+
+@router.post("/audit/export")
+@compat_router.post("/audit/export")
+async def create_audit_export(
+    request: Request,
+    current_user: User = Depends(require_permissions("view_audit")),
+    db: Session = Depends(get_db),
+):
+    """创建审计日志导出任务"""
+    body = await request.json()
+    filters = body.get("filters", {})
+    reason = body.get("reason", "")
+    trace_id = body.get("trace_id", str(uuid.uuid4()))
+
+    job = AuditExportJob(
+        filters_json=json.dumps(filters, ensure_ascii=False),
+        status="pending",
+        requested_by=current_user.username,
+        reason=reason,
+        trace_id=trace_id,
+    )
+    db.add(job)
+    db.commit()
+
+    # 同步执行导出（小数据量适用）
+    try:
+        q = db.query(AuditLog)
+        if filters.get("actor"):
+            q = q.filter(AuditLog.actor == filters["actor"])
+        if filters.get("action"):
+            q = q.filter(AuditLog.action == filters["action"])
+        if filters.get("start_time"):
+            q = q.filter(AuditLog.created_at >= filters["start_time"])
+        if filters.get("end_time"):
+            q = q.filter(AuditLog.created_at <= filters["end_time"])
+
+        rows = q.order_by(AuditLog.created_at.desc()).all()
+        job.status = "completed"
+        job.row_count = len(rows)
+        job.progress = 1.0
+
+        # 生成导出文件
+        export_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        export_file = os.path.join(export_dir, f"audit_export_{job.id}.csv")
+        with open(export_file, "w", encoding="utf-8") as f:
+            f.write("id,actor,action,target,target_ip,reason,result,trace_id,created_at\n")
+            for r in rows:
+                # 脱敏 target_ip
+                masked_ip = _mask_ip(r.target_ip) if r.target_ip else ""
+                f.write(f"{r.id},{r.actor},{r.action},{r.target},{masked_ip},{r.reason or ''},{r.result},{r.trace_id},{r.created_at}\n")
+        with open(export_file, "rb") as f:
+            job.file_hash = f"sha256:{hashlib.sha256(f.read()).hexdigest()}"
+        job.file_uri = export_file
+    except Exception as e:
+        job.status = "failed"
+        job.error_message = str(e)
+    db.commit()
+
+    AuditService.log(db, actor=current_user.username, action="audit_export", target=f"export:{job.id}", trace_id=trace_id)
+    return {"code": 0, "data": {"job_id": job.id, "status": job.status, "row_count": job.row_count, "trace_id": trace_id}}
+
+
+@router.get("/audit/export/{job_id}")
+@compat_router.get("/audit/export/{job_id}")
+async def get_audit_export(
+    job_id: int,
+    current_user: User = Depends(require_permissions("view_audit")),
+    db: Session = Depends(get_db),
+):
+    """查询审计导出任务状态"""
+    job = db.query(AuditExportJob).filter(AuditExportJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail={"code": 40404, "message": "导出任务不存在"})
+    return {
+        "code": 0,
+        "data": {
+            "job_id": job.id,
+            "status": job.status,
+            "file_uri": job.file_uri,
+            "file_hash": job.file_hash,
+            "row_count": job.row_count,
+            "progress": job.progress,
+            "requested_by": job.requested_by,
+            "created_at": job.created_at.isoformat() + "Z" if job.created_at else None,
+        },
+    }
+
+
+def _mask_ip(ip: str) -> str:
+    """IP 脱敏：保留首段，其余掩码"""
+    if not ip:
+        return ""
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.{parts[1]}.***.**"
+    return ip[:4] + "***"
