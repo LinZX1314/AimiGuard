@@ -823,6 +823,45 @@ async def update_finding_status(
     return APIResponse.success(message="Finding status updated")
 
 
+@router.get("/tasks/{task_id}/attack-path")
+async def get_attack_path(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: object = Depends(require_role(["operator", "admin"])),
+):
+    """A1-02: 基于扫描任务结果分析攻击横向移动路径"""
+    import uuid as _uuid
+
+    task = db.query(ScanTask).filter(ScanTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    findings = db.query(ScanFinding).filter(ScanFinding.scan_task_id == task_id).all()
+
+    assets_set: dict = {}
+    findings_list = []
+    for f in findings:
+        ip = f.asset or "unknown"
+        if ip not in assets_set:
+            assets_set[ip] = {"ip": ip, "target": ip}
+        findings_list.append({
+            "asset": f.asset,
+            "port": f.port,
+            "service": f.service,
+            "severity": f.severity,
+            "cve": f.cve,
+        })
+
+    trace_id = str(_uuid.uuid4())
+    result = await ai_engine.analyze_attack_path(
+        assets=list(assets_set.values()),
+        findings=findings_list,
+        trace_id=trace_id,
+    )
+
+    return APIResponse.success(result)
+
+
 @router.post("/findings/{finding_id}/assess-exploitability")
 async def assess_finding_exploitability(
     finding_id: int,

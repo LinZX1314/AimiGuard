@@ -506,5 +506,70 @@ class AIEngine:
             }
 
 
+    async def analyze_attack_path(
+        self,
+        assets: List[Dict[str, Any]],
+        findings: List[Dict[str, Any]],
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """A1-02: 基于多资产扫描结果分析潜在横向移动路径"""
+        HIGH_RISK_SERVICES = {"smb", "rdp", "ssh", "telnet", "ftp", "vnc", "winrm"}
+        HIGH_RISK_PORTS = {21, 22, 23, 445, 3389, 5900, 5985}
+
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
+        node_map: Dict[str, int] = {}
+
+        for i, asset in enumerate(assets):
+            ip = str(asset.get("ip") or asset.get("target") or f"asset-{i}")
+            risk = "low"
+            node_map[ip] = i
+            nodes.append({
+                "id": i,
+                "ip": ip,
+                "risk": risk,
+                "services": [],
+                "findings_count": 0,
+            })
+
+        for f in findings:
+            ip = str(f.get("asset") or f.get("ip") or "")
+            port = f.get("port")
+            service = str(f.get("service") or "").lower()
+            severity = str(f.get("severity") or "").upper()
+
+            if ip in node_map:
+                idx = node_map[ip]
+                nodes[idx]["findings_count"] += 1
+                if service and service not in nodes[idx]["services"]:
+                    nodes[idx]["services"].append(service)
+
+                if service in HIGH_RISK_SERVICES or port in HIGH_RISK_PORTS:
+                    nodes[idx]["risk"] = "high"
+                elif severity in ("CRITICAL", "HIGH") and nodes[idx]["risk"] != "high":
+                    nodes[idx]["risk"] = "medium"
+
+        high_risk_nodes = [n for n in nodes if n["risk"] == "high"]
+        for i, src in enumerate(high_risk_nodes):
+            for dst in high_risk_nodes[i + 1:]:
+                shared = set(src["services"]) & set(dst["services"]) & HIGH_RISK_SERVICES
+                if shared:
+                    edges.append({
+                        "source": src["id"],
+                        "target": dst["id"],
+                        "label": f"lateral:{','.join(shared)}",
+                        "risk": "high",
+                    })
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "high_risk_count": len(high_risk_nodes),
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "trace_id": trace_id,
+        }
+
+
 ai_engine = AIEngine()
 
