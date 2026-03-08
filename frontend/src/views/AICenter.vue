@@ -98,7 +98,7 @@
         <ConversationEmptyState
           v-if="messages.length === 0 && !aiThinking"
           title="开始 AI 研判对话"
-          description="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栧紩鐢ㄤ簨浠?ID 进行深度分析"
+          description="询问告警分析、漏洞解读、修复建议，或引用事件 ID 进行深度分析"
         >
           <template #icon>
             <div class="size-14 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center mb-1">
@@ -199,10 +199,10 @@
           />
           <PromptInputFooter class="px-2 pb-2">
             <span class="text-[10px] text-muted-foreground/50 select-none">
-              Enter 鍙戦€?· Shift+Enter 换行 · 鍙紩鐢ㄤ簨浠?ID
+              Enter 发送 · Shift+Enter 换行 · 可引用事件 ID
             </span>
             <div class="flex items-center gap-1.5">
-              <!-- TTS 楹﹀厠椋庢寜閽?+ 录音气泡 -->
+              <!-- TTS 麦克风按钮 + 录音气泡 -->
               <div class="relative">
                 <button
                   class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
@@ -247,7 +247,7 @@
                     <p v-if="sttText" class="text-[10px] text-foreground leading-tight text-center max-w-full truncate">{{ sttText }}</p>
                     <p v-else class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
                     <p class="text-[9px] text-muted-foreground/40 leading-none">点击停止并发送</p>
-                    <!-- 灏忎笁瑙掔澶?-->
+                    <!-- 小三角箭头 -->
                     <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 size-2 rotate-45 bg-popover border-r border-b border-border/60" />
                   </div>
                 </Transition>
@@ -335,7 +335,7 @@
               {{ reportMsg }}
             </p>
             <p v-else-if="reportGenerating" class="text-[10px] text-muted-foreground text-center animate-pulse">
-              鐢熸垚涓€?            </p>
+              生成中…            </p>
           </Transition>
         </div>
 
@@ -535,7 +535,8 @@ const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
 const sttText = ref('')
 
-// 瀹炴椂闊抽娉㈠舰鐘舵€?const waveBars = reactive([0, 0, 0, 0, 0])
+
+const waveBars = reactive([0, 0, 0, 0, 0])
 let audioCtx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let micStream: MediaStream | null = null
@@ -554,7 +555,7 @@ const startAudioVisualizer = (stream: MediaStream) => {
   const tick = () => {
     if (!analyser || !ttsRecording.value) return
     analyser.getByteFrequencyData(dataArr)
-    // 浠庨璋变腑鍙?5 个采样点映射到波形条高度 (0~1)
+    // 从频谱中取 5 个采样点映射到波形条高度 (0~1)
     const len = dataArr.length
     const step = Math.max(1, Math.floor(len / 5))
     for (let i = 0; i < 5; i++) {
@@ -617,9 +618,10 @@ const startSTTStream = (stream: MediaStream) => {
         e.data.arrayBuffer().then((buf) => sttStream?.sendAudio(buf))
       }
     }
-    mediaRecorder.start(250) // 姣?250ms 鍙戦€佷竴涓煶棰戝潡
+    mediaRecorder.start(250) // 每 250ms 发送一个音频块
   }).catch(() => {
-    // WebSocket 杩炴帴澶辫触鏃朵粛鐒跺厑璁稿綍闊筹紙鍙槸娌℃湁杞啓锛?  })
+    // WebSocket 连接失败时仍然允许录音（只是没有转写）
+  })
 }
 
 onUnmounted(() => {
@@ -759,7 +761,7 @@ const openReportPreview = async (r: Report) => {
     previewContent.value = data?.content ?? ''
     previewFileSize.value = data?.file_size ?? r.file_size ?? null
   } catch {
-    previewContent.value = r.summary ? `> ${r.summary}\n\n*鎶ュ憡鍘熷鏂囦欢涓嶅彲鐢?` : ''
+    previewContent.value = r.summary ? `> ${r.summary}\n\n*报告原始文件不可用*` : ''
   } finally {
     previewLoading.value = false
   }
@@ -1204,7 +1206,7 @@ onMounted(() => {
   transform: translateY(12px) scale(0.97);
 }
 
-/* AI 鎬濊€冪姸鎬佸叆鍦?*/
+/* AI 思考状态入场 */
 .thinking-enter-active {
   transition: all 0.25s ease-out;
 }
@@ -1252,7 +1254,7 @@ onMounted(() => {
   overflow: visible !important;
 }
 
-/* TTS 鎸夐挳鍐呭皬娉㈠舰鏉?*/
+/* TTS 按钮内小波形条 */
 .tts-wave-bar {
   display: inline-block;
   width: 2.5px;
