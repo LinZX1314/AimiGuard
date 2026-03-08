@@ -46,4 +46,8 @@ export const aiApi = {
     const res = await apiClient.get(`/ai/sessions/${sessionId}/messages`)
     return (Array.isArray(res) ? res : (res as any) ?? []) as SessionMessage[]
   },
+
+  async deleteSession(sessionId: number): Promise<void> {
+    await apiClient.delete(`/ai/sessions/${sessionId}`)
+  },
 }

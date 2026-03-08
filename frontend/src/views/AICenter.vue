@@ -51,6 +51,13 @@
               </p>
               <p class="text-[10px] opacity-50 mt-0.5 tabular-nums">{{ formatTime(s.started_at) }}</p>
             </div>
+            <div
+              class="shrink-0 size-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-destructive/15 hover:text-destructive transition-all cursor-pointer"
+              title="删除会话"
+              @click.stop="deleteSession(s)"
+            >
+              <Trash2 class="size-3" />
+            </div>
           </div>
         </button>
       </div>
@@ -86,7 +93,7 @@
       </div>
 
       <!-- 消息列表：使用 AI Elements Conversation 组件 -->
-      <Conversation class="flex-1 min-h-0 px-5 py-4">
+      <Conversation class="flex-1 min-h-0 px-5 py-4 [&>div]:!overflow-y-auto">
         <!-- 空状态：使用 AI Elements ConversationEmptyState -->
         <ConversationEmptyState
           v-if="messages.length === 0 && !aiThinking"
@@ -477,6 +484,7 @@ import {
   Mic,
   ScanLine,
   SquarePen,
+  Trash2,
 } from 'lucide-vue-next'
 
 interface Message_ {
@@ -646,6 +654,17 @@ const loadSessions = async () => {
   } finally {
     sessionsLoading.value = false
   }
+}
+
+const deleteSession = async (s: Session) => {
+  try {
+    await aiApi.deleteSession(s.id)
+    sessions.value = sessions.value.filter(x => x.id !== s.id)
+    if (currentSessionId.value === s.id) {
+      currentSessionId.value = null
+      messages.value = []
+    }
+  } catch { /* ignore */ }
 }
 
 const loadSession = async (s: Session) => {

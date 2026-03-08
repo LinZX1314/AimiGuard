@@ -252,6 +252,25 @@ async def get_session_messages(
     return messages
 
 
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_ai_sessions")),
+):
+    session = db.query(AIChatSession).filter(AIChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    verify_session_ownership(session, current_user)
+
+    db.query(AIChatMessage).filter(AIChatMessage.session_id == session_id).delete()
+    db.delete(session)
+    db.commit()
+
+    return APIResponse.success(None, message="会话已删除")
+
+
 @router.get("/chat/{session_id}/context")
 async def get_session_context(
     session_id: int,
