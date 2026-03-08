@@ -675,6 +675,150 @@ class IPWhitelist(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+# ── Access Audit ──
+
+
+class AccessAudit(Base):
+    __tablename__ = "access_audit"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer)
+    username = Column(String)
+    action = Column(String, nullable=False)
+    resource = Column(String, nullable=False)
+    permission_required = Column(String)
+    result = Column(String, nullable=False)  # granted / denied
+    reason = Column(Text)
+    trace_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# ── Backup / Restore ──
+
+
+class BackupJob(Base):
+    __tablename__ = "backup_job"
+    id = Column(Integer, primary_key=True, index=True)
+    job_type = Column(String, nullable=False)  # full / incremental
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime)
+    status = Column(String, nullable=False)  # pending/running/success/failed
+    artifact_uri = Column(String)
+    checksum = Column(String)
+    size_bytes = Column(Integer)
+    error_message = Column(Text)
+    triggered_by = Column(String)
+    trace_id = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class RestoreJob(Base):
+    __tablename__ = "restore_job"
+    id = Column(Integer, primary_key=True, index=True)
+    backup_id = Column(Integer, ForeignKey("backup_job.id"), nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime)
+    status = Column(String, nullable=False)  # pending/running/success/failed
+    consistency_check_result = Column(Text)
+    error_message = Column(Text)
+    triggered_by = Column(String)
+    reason = Column(Text)
+    trace_id = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── Alert Event ──
+
+
+class AlertEvent(Base):
+    __tablename__ = "alert_event"
+    id = Column(Integer, primary_key=True, index=True)
+    level = Column(String, nullable=False)  # info/warning/critical
+    type = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    summary = Column(String, nullable=False)
+    payload_json = Column(Text)
+    status = Column(String, nullable=False, default="NEW")  # NEW/ACKED/RESOLVED/POSTMORTEM
+    acked_by = Column(String)
+    acked_at = Column(DateTime)
+    resolved_by = Column(String)
+    resolved_at = Column(DateTime)
+    resolution = Column(Text)
+    postmortem_author = Column(String)
+    postmortem_at = Column(DateTime)
+    postmortem_content = Column(Text)
+    trace_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── Metrics ──
+
+
+class MetricPoint(Base):
+    __tablename__ = "metric_point"
+    id = Column(Integer, primary_key=True, index=True)
+    metric = Column(String, nullable=False)
+    value = Column(Float, nullable=False)
+    labels_json = Column(Text)
+    ts = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class MetricRule(Base):
+    __tablename__ = "metric_rule"
+    id = Column(Integer, primary_key=True, index=True)
+    metric = Column(String, nullable=False, unique=True)
+    operator = Column(String, nullable=False)  # gt/lt/gte/lte/eq
+    threshold = Column(Float, nullable=False)
+    window_seconds = Column(Integer, nullable=False, default=300)
+    enabled = Column(Integer, nullable=False, default=1)
+    alert_level = Column(String, nullable=False)  # info/warning/critical
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── Audit Export ──
+
+
+class AuditExportJob(Base):
+    __tablename__ = "audit_export_job"
+    id = Column(Integer, primary_key=True, index=True)
+    filters_json = Column(Text, nullable=False)
+    status = Column(String, nullable=False)  # pending/running/completed/failed
+    file_uri = Column(String)
+    file_hash = Column(String)
+    row_count = Column(Integer)
+    error_message = Column(Text)
+    requested_by = Column(String, nullable=False)
+    reason = Column(Text)
+    progress = Column(Float, default=0)
+    trace_id = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── CI Security Scan Report (E1-01) ──
+
+
+class CISecurityScanReport(Base):
+    __tablename__ = "ci_security_scan_report"
+    id = Column(Integer, primary_key=True, index=True)
+    scan_tool = Column(String, nullable=False)  # bandit/semgrep/pip-audit
+    trigger_type = Column(String, nullable=False, default="manual")  # pr/push/manual/scheduled
+    branch = Column(String)
+    commit_sha = Column(String)
+    total_findings = Column(Integer, nullable=False, default=0)
+    high_count = Column(Integer, nullable=False, default=0)
+    medium_count = Column(Integer, nullable=False, default=0)
+    low_count = Column(Integer, nullable=False, default=0)
+    findings_json = Column(Text)
+    passed = Column(Integer, nullable=False, default=1)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 def _ensure_default_rbac_data() -> None:
     """Backfill missing RBAC roles/permissions for existing databases."""
     db = SessionLocal()
