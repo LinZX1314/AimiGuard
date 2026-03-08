@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from api.auth import require_permissions
-from core.database import FixTicket, ScanFinding, User, get_db
+from core.database import FixTicket, ScanFinding, ScanTask, User, get_db
 from core.response import APIResponse
 from services.audit_service import AuditService
 
@@ -201,3 +201,68 @@ async def update_ticket(
 
     ticket = db.query(FixTicket).filter(FixTicket.id == ticket_id).first()
     return APIResponse.success(_ticket_to_dict(ticket), message="工单已更新")
+
+
+@router.post("/{ticket_id}/retest")
+async def trigger_retest(
+    ticket_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("approve_event")),
+):
+    """A2-02: 复测触发 — 工单状态为 RESOLVED 时可一键触发复测扫描"""
+    ticket = db.query(FixTicket).filter(FixTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if ticket.status != "RESOLVED":
+        raise HTTPException(
+            status_code=400,
+            detail=f"仅 RESOLVED 状态的工单可触发复测，当前状态: {ticket.status}",
+        )
+
+    trace_id = getattr(request.state, "trace_id", str(uuid.uuid4()))
+
+    finding = None
+    asset_id = None
+    target = "unknown"
+    if ticket.finding_id:
+        finding = db.query(ScanFinding).filter(ScanFinding.id == ticket.finding_id).first()
+        if finding:
+            task = db.query(ScanTask).filter(ScanTask.id == finding.task_id).first()
+            if task:
+                asset_id = task.asset_id
+                target = task.target
+
+    retest_task = ScanTask(
+        asset_id=asset_id or 0,
+        target=target,
+        target_type="retest",
+        tool_name="nmap",
+        state="QUEUED",
+        trace_id=trace_id,
+    )
+    db.add(retest_task)
+    db.commit()
+    db.refresh(retest_task)
+
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="trigger_retest",
+        target=str(ticket_id),
+        target_type="fix_ticket",
+        reason=f"retest_scan_task_id={retest_task.id}",
+        result="success",
+        trace_id=trace_id,
+    )
+
+    return APIResponse.success(
+        {
+            "ticket_id": ticket_id,
+            "scan_task_id": retest_task.id,
+            "target": target,
+            "state": "QUEUED",
+        },
+        message="复测扫描已创建",
+    )
