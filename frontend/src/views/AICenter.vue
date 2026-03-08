@@ -193,7 +193,7 @@
           @submit="handlePromptSubmit"
         >
           <PromptInputTextarea
-            placeholder="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栬緭鍏ヤ簨浠?ID鈥?
+            placeholder="询问告警分析、漏洞解读、修复建议，或输入事件 ID…"
             :disabled="aiThinking"
             class="min-h-10 max-h-36 text-sm placeholder:text-muted-foreground/50"
           />
@@ -688,7 +688,7 @@ const sendMessage = async (text: string) => {
     const res: any = await aiApi.chat(text, currentSessionId.value ?? undefined)
     const data = res?.data ?? res
     const sessionId = data?.session_id ?? res?.session_id
-    const reply = data?.message ?? res?.message ?? '锛堟棤鍝嶅簲锛?
+    const reply = data?.message ?? res?.message ?? '（无响应）'
 
     if (sessionId && !currentSessionId.value) {
       currentSessionId.value = sessionId
@@ -732,7 +732,7 @@ const generateReport = async (type: string) => {
   reportMsg.value = ''
   try {
     await reportApi.generate(type)
-    reportMsg.value = '鎶ュ憡宸茬敓鎴?
+    reportMsg.value = '报告已生成'
     reportMsgOk.value = true
     reportPage.value = 1
     await loadReports()
