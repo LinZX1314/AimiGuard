@@ -4,6 +4,29 @@ import { toast } from 'vue-sonner'
 const DEFAULT_REQUEST_ERROR = '请求失败'
 const DEFAULT_UNAUTHORIZED_MESSAGE = '登录状态已失效，请重新登录'
 
+const stripTrailingSlash = (value: string): string => value.replace(/\/+$/, '')
+
+const resolveApiHostRoot = (value: string): string => {
+  const normalized = stripTrailingSlash(value)
+  if (normalized.endsWith('/api/v1')) return normalized.slice(0, -'/api/v1'.length)
+  if (normalized.endsWith('/api')) return normalized.slice(0, -'/api'.length)
+  return normalized
+}
+
+const resolveApiBaseUrl = (value: string): string => {
+  const normalized = stripTrailingSlash(value)
+  if (normalized.endsWith('/api/v1')) return normalized
+  if (normalized.endsWith('/api')) return `${normalized}/v1`
+  return `${normalized}/api/v1`
+}
+
+const rawApiBaseUrl = typeof import.meta.env.VITE_API_BASE_URL === 'string'
+  ? import.meta.env.VITE_API_BASE_URL.trim()
+  : ''
+
+const apiHostRoot = rawApiBaseUrl ? resolveApiHostRoot(rawApiBaseUrl) : ''
+const apiBaseUrl = rawApiBaseUrl ? resolveApiBaseUrl(rawApiBaseUrl) : '/api/v1'
+
 let isHandlingUnauthorized = false
 
 const extractMessage = (value: unknown): string | null => {
@@ -101,8 +124,10 @@ export const hasAccessToken = (): boolean => {
   }
 }
 
+export const buildApiUrl = (path: string): string => (apiHostRoot ? `${apiHostRoot}${path}` : path)
+
 const apiClient = axios.create({
-  baseURL: '/api/v1',
+  baseURL: apiBaseUrl,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'

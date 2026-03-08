@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, buildApiUrl } from './client'
 
 export interface SystemProfile {
   username: string
@@ -48,12 +48,13 @@ let preferredSystemPrefix: SystemPrefix | null = null
 
 const requestSystem = async <T>(method: 'get' | 'post', path: string, payload?: unknown): Promise<T> => {
   const execute = async (prefix: SystemPrefix): Promise<T> => {
+    const url = buildApiUrl(`${prefix}${path}`)
     if (method === 'get') {
-      const res = await apiClient.get(`${prefix}${path}`, { baseURL: '' })
+      const res = await apiClient.get(url, { baseURL: '' })
       return res as T
     }
 
-    const res = await apiClient.post(`${prefix}${path}`, payload, { baseURL: '' })
+    const res = await apiClient.post(url, payload, { baseURL: '' })
     return res as T
   }
 
