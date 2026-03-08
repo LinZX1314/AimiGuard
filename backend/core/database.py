@@ -138,6 +138,9 @@ class ThreatEvent(Base):
     trace_id = Column(String, nullable=False, index=True)
     raw_payload = Column(Text)
     extra_json = Column(Text)
+    false_positive_by = Column(String)
+    false_positive_reason = Column(Text)
+    false_positive_at = Column(DateTime)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

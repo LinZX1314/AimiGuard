@@ -1444,6 +1444,58 @@ async def reject_event(
     return {"code": 0, "message": "Event rejected"}
 
 
+class FalsePositiveRequest(BaseModel):
+    reason: str = Field("", description="误报原因说明")
+
+
+@router.post("/events/{event_id}/false-positive")
+@compat_router.post("/events/{event_id}/false-positive", include_in_schema=False)
+async def mark_false_positive(
+    event_id: int,
+    req: FalsePositiveRequest,
+    request: Request,
+    current_user: User = Depends(require_permissions("reject_event")),
+    db: Session = Depends(get_db),
+):
+    """标记事件为误报"""
+    event = db.query(ThreatEvent).filter(ThreatEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    trace_id = getattr(request.state, "trace_id", None) or getattr(event, "trace_id", str(uuid.uuid4()))
+
+    db.query(ThreatEvent).filter(ThreatEvent.id == event_id).update(
+        {
+            "status": "FALSE_POSITIVE",
+            "false_positive_by": current_user.username,
+            "false_positive_reason": req.reason or None,
+            "false_positive_at": _utc_now(),
+            "updated_at": _utc_now(),
+        }
+    )
+    db.commit()
+
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="mark_false_positive",
+        target=str(event_id),
+        target_type="threat_event",
+        reason=req.reason or "标记为误报",
+        result="success",
+        trace_id=trace_id,
+    )
+
+    await _broadcast_defense_event_change(
+        event_id=event_id,
+        status="FALSE_POSITIVE",
+        trace_id=trace_id,
+        reason="false_positive",
+    )
+
+    return {"code": 0, "message": "Event marked as false positive"}
+
+
 # ===== HFish 配置和同步 =====
 
 

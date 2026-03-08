@@ -591,3 +591,75 @@ async def get_defense_stats(
             "top_ips": top_ips,
         },
     }
+
+
+@router.get("/false-positive-stats")
+async def false_positive_stats(
+    range: str = Query("7d", pattern="^(24h|7d|30d)$"),
+    current_user: User = Depends(require_permissions("view_events")),
+    db: Session = Depends(get_db),
+):
+    """误报率统计（D3-02）"""
+    now = _utc_now()
+    delta_map = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+    since = now - delta_map[range]
+
+    total = db.query(func.count(ThreatEvent.id)).filter(
+        ThreatEvent.created_at >= since
+    ).scalar() or 0
+
+    fp_count = db.query(func.count(ThreatEvent.id)).filter(
+        ThreatEvent.created_at >= since,
+        ThreatEvent.status == "FALSE_POSITIVE",
+    ).scalar() or 0
+
+    fp_rate = round(fp_count / total * 100, 1) if total > 0 else 0.0
+
+    source_dist_rows = (
+        db.query(
+            ThreatEvent.source_vendor,
+            func.count(ThreatEvent.id).label("cnt"),
+        )
+        .filter(
+            ThreatEvent.created_at >= since,
+            ThreatEvent.status == "FALSE_POSITIVE",
+        )
+        .group_by(ThreatEvent.source_vendor)
+        .order_by(func.count(ThreatEvent.id).desc())
+        .limit(10)
+        .all()
+    )
+    source_dist = [
+        {"source": r.source_vendor or "unknown", "count": r.cnt}
+        for r in source_dist_rows
+    ]
+
+    top_fp_ip_rows = (
+        db.query(
+            ThreatEvent.ip,
+            func.count(ThreatEvent.id).label("cnt"),
+        )
+        .filter(
+            ThreatEvent.created_at >= since,
+            ThreatEvent.status == "FALSE_POSITIVE",
+        )
+        .group_by(ThreatEvent.ip)
+        .order_by(func.count(ThreatEvent.id).desc())
+        .limit(10)
+        .all()
+    )
+    top_fp_ips = [{"ip": r.ip, "count": r.cnt} for r in top_fp_ip_rows]
+
+    return {
+        "code": 0,
+        "data": {
+            "range": range,
+            "total_events": total,
+            "false_positive_count": fp_count,
+            "false_positive_rate": fp_rate,
+            "threshold": 20.0,
+            "over_threshold": fp_rate > 20.0,
+            "source_distribution": source_dist,
+            "top_false_positive_ips": top_fp_ips,
+        },
+    }

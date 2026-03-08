@@ -23,10 +23,13 @@ CREATE TABLE IF NOT EXISTS threat_event (
   ai_score INTEGER,
   ai_reason TEXT,
   action_suggest TEXT,
-  status TEXT NOT NULL CHECK(status IN ('PENDING','APPROVED','REJECTED','EXECUTING','DONE','FAILED')) DEFAULT 'PENDING',
+  status TEXT NOT NULL CHECK(status IN ('PENDING','APPROVED','REJECTED','EXECUTING','DONE','FAILED','FALSE_POSITIVE')) DEFAULT 'PENDING',
   trace_id TEXT NOT NULL,
   raw_payload TEXT,
   extra_json TEXT,
+  false_positive_by TEXT,
+  false_positive_reason TEXT,
+  false_positive_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

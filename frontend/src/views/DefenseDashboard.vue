@@ -88,6 +88,9 @@
                 <Button variant="outline" size="sm" class="cursor-pointer" @click="rejectEvent(event.id)">
                   驳回
                 </Button>
+                <Button variant="outline" size="sm" class="cursor-pointer text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950" @click="markFalsePositive(event.id)">
+                  标记误报
+                </Button>
                 <Button variant="ghost" size="sm" class="cursor-pointer gap-1.5 ml-auto text-xs" @click="showIpInfo(event.ip)">
                   <Search class="size-3.5" />
                   查扫描
@@ -338,6 +341,9 @@ const approveEvent = async (id: number) => {
 }
 const rejectEvent = async (id: number) => {
   try { await defenseApi.rejectEvent(id, '管理员驳回'); await loadEvents() } catch (e) { console.error(e) }
+}
+const markFalsePositive = async (id: number) => {
+  try { await defenseApi.markFalsePositive(id, '管理员标记为误报'); await loadEvents() } catch (e) { console.error(e) }
 }
 
 const showIpInfo = async (ip: string) => {

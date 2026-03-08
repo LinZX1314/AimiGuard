@@ -64,6 +64,10 @@ export const defenseApi = {
     return apiClient.post(`/defense/events/${eventId}/reject`, { reason })
   },
 
+  async markFalsePositive(eventId: number, reason: string) {
+    return apiClient.post(`/defense/events/${eventId}/false-positive`, { reason })
+  },
+
   async submitAlert(alert: { ip: string; source: string; attack_type?: string }) {
     return apiClient.post('/defense/alerts', alert)
   },
