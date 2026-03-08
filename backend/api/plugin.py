@@ -20,10 +20,13 @@ def _utc_now() -> datetime:
 
 class PluginCreate(BaseModel):
     plugin_name: str
-    plugin_type: str  # mcp, scanner, notifier, ai_model
+    plugin_type: str  # mcp, scanner, notifier, ai_model, threat_intel
     endpoint: Optional[str] = None
     config_json: Optional[str] = None
     enabled: int = 1
+    source_url: Optional[str] = None
+    publisher_signature: Optional[str] = None
+    content_hash: Optional[str] = None
 
 
 class PluginUpdate(BaseModel):
@@ -74,6 +77,25 @@ async def create_plugin(
         raise HTTPException(400, f"插件 '{data.plugin_name}' 已存在")
 
     trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
+
+    # S2-01: MCP 插件安全校验
+    if data.plugin_type == "mcp" and data.source_url:
+        from services.plugin_security import verify_plugin
+        is_safe, risk_level, reason = verify_plugin(
+            plugin_name=data.plugin_name,
+            source_url=data.source_url,
+            publisher_signature=data.publisher_signature,
+            content_hash=data.content_hash,
+        )
+        if not is_safe:
+            AuditService.log(
+                db=db, actor=str(current_user.username),
+                action="malicious_plugin_blocked", target=data.plugin_name,
+                target_type="plugin", reason=reason,
+                result="blocked", trace_id=trace_id,
+            )
+            raise HTTPException(403, f"插件安全校验失败: {reason}")
+
     plugin = PluginRegistry(
         plugin_name=data.plugin_name,
         plugin_type=data.plugin_type,
@@ -187,3 +209,33 @@ async def delete_plugin(
     )
 
     return APIResponse.success(None, message="插件已删除")
+
+
+@router.post("/verify")
+async def verify_plugin_security(
+    data: PluginCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("manage_plugins")),
+):
+    """S2-01: 预检验插件安全性（不注册）"""
+    from services.plugin_security import verify_plugin
+    is_safe, risk_level, reason = verify_plugin(
+        plugin_name=data.plugin_name,
+        source_url=data.source_url or "",
+        publisher_signature=data.publisher_signature,
+        content_hash=data.content_hash,
+    )
+    return APIResponse.success({
+        "is_safe": is_safe,
+        "risk_level": risk_level,
+        "reason": reason,
+    })
+
+
+@router.get("/blacklist")
+async def get_blacklist(
+    current_user: User = Depends(require_permissions("manage_plugins")),
+):
+    """S2-01: 获取恶意MCP服务器黑名单"""
+    from services.plugin_security import get_blacklist
+    return APIResponse.success({"blacklist": get_blacklist()})
