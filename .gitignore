@@ -57,6 +57,8 @@ pnpm-debug.log*
 dist/
 build/
 *.local
+backend/generated_audio/
+backend/generated_reports/
 
 # Logs
 logs/
