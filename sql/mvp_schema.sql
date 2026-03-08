@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS execution_task (
   error_message TEXT,
   started_at TEXT,
   ended_at TEXT,
+  approved_by TEXT,
   trace_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),

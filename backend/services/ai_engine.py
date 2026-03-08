@@ -29,9 +29,12 @@ def _clamp_score(value: Any, default: int = 50) -> int:
     return max(0, min(100, _safe_int(value, default)))
 
 
+ALLOWED_ACTIONS = {"BLOCK", "MONITOR", "IGNORE"}
+
+
 def _normalize_action(value: Any, score: int) -> str:
     action = str(value or "").strip().upper()
-    if action in {"BLOCK", "MONITOR"}:
+    if action in ALLOWED_ACTIONS:
         return action
     return "BLOCK" if score >= 80 else "MONITOR"
 

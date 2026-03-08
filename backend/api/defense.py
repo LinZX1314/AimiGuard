@@ -731,6 +731,19 @@ async def _run_execution_task_background(
         if task is None:
             return
 
+        if not getattr(task, "approved_by", None):
+            now = _utc_now()
+            db.query(ExecutionTask).filter(ExecutionTask.id == task_id).update(
+                {
+                    "state": "MANUAL_REQUIRED",
+                    "error_message": "S4-02: execution_task requires human approval (approved_by is empty)",
+                    "ended_at": now,
+                    "updated_at": now,
+                }
+            )
+            db.commit()
+            return
+
         event = db.query(ThreatEvent).filter(ThreatEvent.id == task.event_id).first()
         if event is None:
             now = _utc_now()
@@ -1347,6 +1360,7 @@ async def approve_event(
         event_id=event_id,
         action="BLOCK",
         state="QUEUED",
+        approved_by=current_user.username,
         trace_id=trace_id,
     )
     db.add(task)

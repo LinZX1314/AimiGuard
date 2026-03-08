@@ -169,6 +169,7 @@ class ExecutionTask(Base):
     error_message = Column(Text)
     started_at = Column(DateTime)
     ended_at = Column(DateTime)
+    approved_by = Column(String)
     trace_id = Column(String, nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
