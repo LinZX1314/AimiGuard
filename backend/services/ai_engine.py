@@ -379,6 +379,7 @@ class AIEngine:
         self,
         message: str,
         context: Optional[Any] = None,
+        history: Optional[list] = None,
         trace_id: Optional[str] = None,
         with_meta: bool = False,
     ) -> Any:
@@ -392,9 +393,18 @@ class AIEngine:
         system_prompt = (
             "你是 SOC 安全运营助手，回答要结合上下文，优先给出可执行建议。"
         )
-        prompt = message
+
+        parts: list[str] = []
         if context_text:
-            prompt = f"上下文:\n{_truncate(context_text, 4000)}\n\n用户问题:\n{message}"
+            parts.append(f"上下文:\n{_truncate(context_text, 4000)}")
+        if history:
+            turns = []
+            for h in history[-10:]:
+                role_label = "用户" if h.get("role") == "user" else "助手"
+                turns.append(f"{role_label}: {_truncate(str(h.get('content', '')), 800)}")
+            parts.append("对话历史:\n" + "\n".join(turns))
+        parts.append(f"用户问题:\n{message}")
+        prompt = "\n\n".join(parts)
 
         try:
             text = _truncate(await self.llm_client.generate(prompt, system=system_prompt), 8000).strip()

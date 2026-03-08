@@ -118,6 +118,7 @@ def setup_test_database():
             ("workflow_edit", "workflow", "edit", "编辑工作流"),
             ("workflow_publish", "workflow", "publish", "发布工作流"),
             ("workflow_rollback", "workflow", "rollback", "回滚工作流"),
+            ("generate_report", "report", "generate", "生成报告"),
         ]
         for name, resource, action, desc in permissions:
             db.execute(

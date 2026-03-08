@@ -143,7 +143,8 @@
                       : 'group-[.is-assistant]:bg-muted/50 group-[.is-assistant]:rounded-xl group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:border group-[.is-assistant]:border-border/50',
                   ]"
                 >
-                  <span class="leading-relaxed whitespace-pre-wrap">{{ msg.content }}</span>
+                  <MessageResponse v-if="msg.role === 'assistant'" :content="msg.content" class="text-sm leading-relaxed" />
+                  <span v-else class="leading-relaxed whitespace-pre-wrap">{{ msg.content }}</span>
                 </MessageContent>
                 <span class="text-[10px] text-muted-foreground/50 px-1 tabular-nums"
                   :class="msg.role === 'user' ? 'text-right' : 'text-left'"
@@ -269,7 +270,7 @@
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2">
             <Mic class="size-4 text-primary" />
-            闇€瑕侀害鍏嬮鏉冮檺
+            需要麦克风权限
           </DialogTitle>
           <DialogDescription>
             语音输入功能需要访问您的麦克风。请在浏览器弹出的权限请求中点击「允许」，或在浏览器设置中手动开启麦克风权限。          </DialogDescription>
@@ -422,7 +423,7 @@
             <Skeleton class="h-4 w-2/3" />
           </div>
           <div v-else-if="previewContent" ref="previewContentRef" class="report-markdown prose prose-sm dark:prose-invert max-w-none">
-            <pre class="whitespace-pre-wrap break-words text-sm leading-7 font-sans">{{ previewContent }}</pre>
+            <MessageResponse :content="previewContent" class="text-sm leading-7" />
           </div>
           <div v-else class="text-center text-muted-foreground py-12">
             <p class="text-sm">无法加载报告内容</p>
@@ -464,6 +465,7 @@ import ConversationEmptyState from '@/components/ai-elements/conversation/Conver
 import Message from '@/components/ai-elements/message/Message.vue'
 import MessageContent from '@/components/ai-elements/message/MessageContent.vue'
 import MessageAvatar from '@/components/ai-elements/message/MessageAvatar.vue'
+import MessageResponse from '@/components/ai-elements/message/MessageResponse.vue'
 import PromptInput from '@/components/ai-elements/prompt-input/PromptInput.vue'
 import PromptInputTextarea from '@/components/ai-elements/prompt-input/PromptInputTextarea.vue'
 import PromptInputSubmit from '@/components/ai-elements/prompt-input/PromptInputSubmit.vue'
@@ -1154,7 +1156,7 @@ const toggleTTSRecording = async () => {
     stopAudioVisualizer()
     return
   }
-  // 妫€鏌ラ害鍏嬮鏉冮檺
+  // 检查麦克风权限
   try {
     const permStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
     if (permStatus.state === 'denied') {

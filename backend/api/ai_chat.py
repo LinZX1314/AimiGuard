@@ -147,6 +147,15 @@ async def chat(
     )
     db.add(user_msg)
 
+    prior_messages = (
+        db.query(AIChatMessage)
+        .filter(AIChatMessage.session_id == session.id)
+        .order_by(AIChatMessage.created_at.asc())
+        .limit(20)
+        .all()
+    )
+    history = [{"role": m.role, "content": m.content} for m in prior_messages]
+
     context_summary = _build_context_summary(db, req, session)
     _t0 = time.monotonic()
     ai_result = await ai_engine.chat(
@@ -156,6 +165,7 @@ async def chat(
             "context_type": req.context_type or session.context_type,
             "context_id": req.context_id or session.context_id,
         },
+        history=history,
         trace_id=trace_id,
         with_meta=True,
     )

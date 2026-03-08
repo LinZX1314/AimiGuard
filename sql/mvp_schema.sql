@@ -182,12 +182,15 @@ CREATE INDEX IF NOT EXISTS idx_ai_decision_trace_id ON ai_decision_log(trace_id)
 -- AI对话会话表
 CREATE TABLE IF NOT EXISTS ai_chat_session (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  context_type TEXT CHECK(context_type IN ('threat','scan','general')),
+  user_id INTEGER NOT NULL,
+  context_type TEXT CHECK(context_type IN ('threat','scan','general','event','scan_task')),
   context_id INTEGER,
   operator TEXT NOT NULL,
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   ended_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES user(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_chat_session_operator ON ai_chat_session(operator);
@@ -209,7 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_chat_message_session_id ON ai_chat_message(ses
 -- AI报告表
 CREATE TABLE IF NOT EXISTS ai_report (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  report_type TEXT NOT NULL CHECK(report_type IN ('threat_summary','scan_analysis','daily','weekly','incident')),
+  report_type TEXT NOT NULL CHECK(report_type IN ('threat_summary','scan_analysis','daily','weekly','incident','scan')),
   scope TEXT,
   summary TEXT NOT NULL,
   detail_path TEXT,
@@ -224,12 +227,12 @@ CREATE INDEX IF NOT EXISTS idx_ai_report_created_at ON ai_report(created_at);
 -- AI TTS任务表
 CREATE TABLE IF NOT EXISTS ai_tts_task (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  source_type TEXT NOT NULL CHECK(source_type IN ('alert','report','message')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('alert','report','message','manual')),
   source_id INTEGER,
   text_content TEXT NOT NULL,
   voice_model TEXT NOT NULL DEFAULT 'local-tts-v1',
   audio_path TEXT,
-  state TEXT NOT NULL CHECK(state IN ('PENDING','PROCESSING','COMPLETED','FAILED')) DEFAULT 'PENDING',
+  state TEXT NOT NULL CHECK(state IN ('PENDING','PROCESSING','COMPLETED','SUCCESS','FAILED')) DEFAULT 'PENDING',
   error_message TEXT,
   trace_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
