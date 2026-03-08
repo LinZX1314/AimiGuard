@@ -25,8 +25,9 @@
                   v-for="item in currentSidebarItems"
                   :key="item.to"
                   :to="item.to"
-                  class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 cursor-pointer"
-                  active-class="bg-sidebar-accent text-sidebar-accent-foreground"
+                  class="flex items-center gap-2 rounded-md border bg-background/25 px-3 py-2 text-sm text-sidebar-foreground cursor-pointer"
+                  :class="activeMode === 'defense' ? 'sidebar-action sidebar-action-defense' : 'sidebar-action sidebar-action-probe'"
+                  :active-class="activeMode === 'defense' ? 'sidebar-action-active-defense' : 'sidebar-action-active-probe'"
                 >
                   <component :is="item.icon" class="size-4" />
                   <span>{{ item.label }}</span>
@@ -47,20 +48,25 @@
             class="hidden md:flex"
             @update:model-value="onModeChange"
           >
-            <TabsList class="h-9 w-auto bg-muted/50 p-1 rounded-lg gap-1">
+            <TabsList class="relative h-10 w-[180px] bg-muted/50 p-1 rounded-full grid grid-cols-2 items-center overflow-hidden border border-border/20 z-0">
+              <!-- 滑动高亮底块 -->
+              <div class="absolute inset-y-1 left-1 right-1 pointer-events-none z-0">
+                <div 
+                  class="h-full w-[calc(50%-2px)] rounded-full transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  :class="activeMode === 'defense' ? 'translate-x-0 bg-[#3B82F6] shadow-[0_2px_8px_rgba(59,130,246,0.3)]' : 'translate-x-[calc(100%+4px)] bg-[#F97316] shadow-[0_2px_8px_rgba(249,115,22,0.3)]'"
+                ></div>
+              </div>
               <TabsTrigger 
                 value="defense" 
-                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
-                data-[state=active]:!bg-[#3B82F6] data-[state=active]:!text-white data-[state=active]:shadow-sm
-                hover:text-[#3B82F6] data-[state=active]:hover:text-white"
+                class="relative z-10 w-full h-full cursor-pointer rounded-full px-0 text-xs sm:text-sm transition-colors duration-300 border-none bg-transparent hover:bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-white data-[state=active]:shadow-none"
+                :class="activeMode !== 'defense' ? 'text-muted-foreground hover:text-foreground' : 'text-white'"
               >
                 防御坚守
               </TabsTrigger>
               <TabsTrigger 
                 value="probe" 
-                class="cursor-pointer px-3 text-xs sm:text-sm rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
-                data-[state=active]:!bg-[#F97316] data-[state=active]:!text-white data-[state=active]:shadow-sm
-                hover:text-[#F97316] data-[state=active]:hover:text-white"
+                class="relative z-10 w-full h-full cursor-pointer rounded-full px-0 text-xs sm:text-sm transition-colors duration-300 border-none bg-transparent hover:bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-white data-[state=active]:shadow-none"
+                :class="activeMode !== 'probe' ? 'text-muted-foreground hover:text-foreground' : 'text-white'"
               >
                 主动探测
               </TabsTrigger>
@@ -217,20 +223,25 @@
 
       <div class="border-t border-border px-4 py-2 md:hidden">
         <Tabs :model-value="activeMode" @update:model-value="onModeChange">
-          <TabsList class="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg gap-1">
+          <TabsList class="relative w-full h-10 bg-muted/50 p-1 rounded-xl grid grid-cols-2 items-center overflow-hidden border border-border/20 z-0">
+            <!-- 移动端滑动高亮底块 -->
+            <div class="absolute inset-y-1 left-1 right-1 pointer-events-none z-0">
+              <div 
+                class="h-full w-[calc(50%-2px)] rounded-lg transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                :class="activeMode === 'defense' ? 'translate-x-0 bg-[#3B82F6] shadow-[0_2px_8px_rgba(59,130,246,0.3)]' : 'translate-x-[calc(100%+4px)] bg-[#F97316] shadow-[0_2px_8px_rgba(249,115,22,0.3)]'"
+              ></div>
+            </div>
             <TabsTrigger 
               value="defense" 
-              class="cursor-pointer rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
-              data-[state=active]:!bg-[#3B82F6] data-[state=active]:!text-white data-[state=active]:shadow-sm
-              hover:text-[#3B82F6] data-[state=active]:hover:text-white"
+              class="relative z-10 w-full h-full cursor-pointer rounded-lg border-none bg-transparent transition-colors duration-300 hover:bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-white data-[state=active]:shadow-none"
+              :class="activeMode !== 'defense' ? 'text-muted-foreground hover:text-foreground' : 'text-white'"
             >
               防御坚守
             </TabsTrigger>
             <TabsTrigger 
               value="probe" 
-              class="cursor-pointer rounded-md transition-[transform,opacity] duration-220 hover:-translate-y-px 
-              data-[state=active]:!bg-[#F97316] data-[state=active]:!text-white data-[state=active]:shadow-sm
-              hover:text-[#F97316] data-[state=active]:hover:text-white"
+              class="relative z-10 w-full h-full cursor-pointer rounded-lg border-none bg-transparent transition-colors duration-300 hover:bg-transparent shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-white data-[state=active]:shadow-none"
+              :class="activeMode !== 'probe' ? 'text-muted-foreground hover:text-foreground' : 'text-white'"
             >
               主动探测
             </TabsTrigger>
@@ -291,9 +302,12 @@
             :to="item.to"
             data-sidebar-item="true"
             :title="sidebarCollapsed ? item.label : undefined"
-            class="flex items-center rounded-md py-2 text-sm text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 cursor-pointer"
-            :class="sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'"
-            active-class="bg-sidebar-accent text-sidebar-accent-foreground"
+            class="flex items-center rounded-md border bg-background/25 py-2 text-sm text-sidebar-foreground cursor-pointer"
+            :class="[
+              sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3',
+              activeMode === 'defense' ? 'sidebar-action sidebar-action-defense' : 'sidebar-action sidebar-action-probe'
+            ]"
+            :active-class="activeMode === 'defense' ? 'sidebar-action-active-defense' : 'sidebar-action-active-probe'"
           >
             <component :is="item.icon" class="size-4" />
             <span
@@ -308,8 +322,11 @@
         <div class="mt-2 border-t border-sidebar-border/70 pt-2">
           <button
             type="button"
-            class="flex h-11 w-full items-center rounded-md text-sidebar-foreground transition-[transform,opacity] duration-220 hover:-translate-y-px hover:bg-sidebar-accent hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            :class="sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'"
+            class="flex h-11 w-full items-center rounded-md border bg-background/25 text-sidebar-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            :class="[
+              sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3',
+              activeMode === 'defense' ? 'sidebar-action sidebar-action-defense' : 'sidebar-action sidebar-action-probe'
+            ]"
             :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             @click="toggleSidebarCollapsed"
@@ -1129,6 +1146,60 @@ const handleLogout = async () => {
 .sidebar-mode-label-collapsed {
   max-width: 2.5rem;
   opacity: 0.95;
+}
+
+.sidebar-action {
+  transition: border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease, color 220ms ease;
+}
+
+.sidebar-action-defense {
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.sidebar-action-defense:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
+}
+
+.sidebar-action-defense:active {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  box-shadow: none;
+}
+
+.sidebar-action-active-defense {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(59, 130, 246, 0.1);
+}
+
+.sidebar-action-probe {
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.sidebar-action-probe:hover {
+  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.08);
+  color: #f97316;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.08);
+}
+
+.sidebar-action-probe:active {
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  box-shadow: none;
+}
+
+.sidebar-action-active-probe {
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(249, 115, 22, 0.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
