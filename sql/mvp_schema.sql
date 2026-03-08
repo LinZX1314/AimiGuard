@@ -768,3 +768,21 @@ CREATE TABLE IF NOT EXISTS honeypot_config (
 
 CREATE INDEX IF NOT EXISTS idx_honeypot_status ON honeypot_config(status);
 CREATE INDEX IF NOT EXISTS idx_honeypot_type ON honeypot_config(type);
+
+-- 蜜标表 (D2-03)
+CREATE TABLE IF NOT EXISTS honeytoken (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token_type TEXT NOT NULL CHECK(token_type IN ('credential','api_key','document','url')),
+  value_hash TEXT NOT NULL,
+  deployed_location TEXT,
+  status TEXT NOT NULL CHECK(status IN ('ACTIVE','TRIGGERED','EXPIRED','REVOKED')) DEFAULT 'ACTIVE',
+  triggered_at TEXT,
+  attacker_ip TEXT,
+  trigger_count INTEGER NOT NULL DEFAULT 0,
+  trace_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_honeytoken_status ON honeytoken(status);
+CREATE INDEX IF NOT EXISTS idx_honeytoken_type ON honeytoken(token_type);

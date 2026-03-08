@@ -1,4 +1,4 @@
-"""D2-01 蜜罐策略管理 CRUD API"""
+"""D2-01/02 蜜罐策略管理 CRUD + AI策略建议 API"""
 from __future__ import annotations
 
 import uuid
@@ -8,11 +8,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sqlfunc
 
 from api.auth import require_permissions
 from core.database import HoneypotConfig, ThreatEvent, User, get_db
 from core.response import APIResponse
 from services.audit_service import AuditService
+from services.ai_engine import ai_engine
 
 router = APIRouter(prefix="/api/v1/honeypots", tags=["honeypots"])
 
@@ -210,3 +212,35 @@ async def get_honeypot_alerts(
             for e in events
         ],
     })
+
+
+@router.get("/strategy/suggest")
+async def suggest_strategy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("approve_event")),
+):
+    """D2-02: AI 根据近期攻击趋势推荐蜜罐部署策略"""
+    rows = (
+        db.query(ThreatEvent.threat_label, sqlfunc.count(ThreatEvent.id).label("cnt"))
+        .group_by(ThreatEvent.threat_label)
+        .order_by(sqlfunc.count(ThreatEvent.id).desc())
+        .limit(10)
+        .all()
+    )
+    total_events = db.query(sqlfunc.count(ThreatEvent.id)).scalar() or 0
+
+    top_attack_types = [
+        {"type": row.threat_label or "unknown", "count": row.cnt}
+        for row in rows
+    ]
+
+    trace_id = str(uuid.uuid4())
+    result = await ai_engine.suggest_honeypot_strategy(
+        attack_trend={
+            "top_attack_types": top_attack_types,
+            "total_events": total_events,
+        },
+        trace_id=trace_id,
+    )
+
+    return APIResponse.success(result)

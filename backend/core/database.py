@@ -348,6 +348,21 @@ class SecurityScanReport(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class Honeytoken(Base):
+    __tablename__ = "honeytoken"
+    id = Column(Integer, primary_key=True, index=True)
+    token_type = Column(String, nullable=False)
+    value_hash = Column(String, nullable=False)
+    deployed_location = Column(String)
+    status = Column(String, nullable=False, default="ACTIVE")
+    triggered_at = Column(DateTime)
+    attacker_ip = Column(String)
+    trigger_count = Column(Integer, default=0)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class HoneypotConfig(Base):
     __tablename__ = "honeypot_config"
     id = Column(Integer, primary_key=True, index=True)

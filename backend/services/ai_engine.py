@@ -571,5 +571,60 @@ class AIEngine:
         }
 
 
+    async def suggest_honeypot_strategy(
+        self,
+        attack_trend: Dict[str, Any],
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """D2-02: 根据攻击趋势推荐蜜罐部署策略"""
+        SERVICE_MAP = {
+            "ssh": {"type": "ssh", "port": 22, "priority": "high"},
+            "rdp": {"type": "rdp", "port": 3389, "priority": "high"},
+            "ftp": {"type": "ftp", "port": 21, "priority": "medium"},
+            "smb": {"type": "smb", "port": 445, "priority": "high"},
+            "http": {"type": "http", "port": 80, "priority": "medium"},
+            "telnet": {"type": "telnet", "port": 23, "priority": "high"},
+            "mysql": {"type": "mysql", "port": 3306, "priority": "medium"},
+            "redis": {"type": "redis", "port": 6379, "priority": "medium"},
+        }
+
+        top_attacks = attack_trend.get("top_attack_types", [])
+        total_events = attack_trend.get("total_events", 0)
+
+        suggestions: List[Dict[str, Any]] = []
+        for item in top_attacks:
+            service = str(item.get("type", "")).lower()
+            count = item.get("count", 0)
+
+            for svc_key, svc_info in SERVICE_MAP.items():
+                if svc_key in service:
+                    suggestions.append({
+                        "honeypot_type": svc_info["type"],
+                        "port": svc_info["port"],
+                        "priority": svc_info["priority"],
+                        "reason": f"近期{service}攻击{count}次，建议部署{svc_info['type']}蜜罐",
+                        "bait_suggestion": f"模拟{svc_info['type']}服务并生成诱饵凭据",
+                        "attack_count": count,
+                    })
+                    break
+
+        if not suggestions and total_events > 0:
+            suggestions.append({
+                "honeypot_type": "ssh",
+                "port": 22,
+                "priority": "medium",
+                "reason": f"近期共{total_events}次攻击，建议部署SSH蜜罐作为基础诱捕",
+                "bait_suggestion": "模拟SSH服务并生成诱饵凭据",
+                "attack_count": total_events,
+            })
+
+        return {
+            "suggestions": suggestions,
+            "total_suggestions": len(suggestions),
+            "based_on_events": total_events,
+            "trace_id": trace_id,
+        }
+
+
 ai_engine = AIEngine()
 
