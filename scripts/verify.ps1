@@ -62,7 +62,7 @@ if (-not $SkipBackend) {
     Push-Location $ProjectRoot
     try {
         Invoke-Checked "Compile backend Python sources" {
-            & $pythonCmd -m compileall backend
+            & $pythonCmd -m compileall -q -x 'backend[\\/](venv|generated_audio|generated_reports)' backend
         }
 
         $previousTesting = $env:TESTING
