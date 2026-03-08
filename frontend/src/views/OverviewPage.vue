@@ -452,6 +452,126 @@
           </CardContent>
         </Card>
       </section>
+
+      <!-- ── 威胁情报概览 + 误报率 ── -->
+      <section class="grid gap-4 xl:grid-cols-2">
+        <Card class="ops-section-card">
+          <CardHeader class="space-y-1 pb-0">
+            <CardTitle class="ops-section-title">威胁情报概览</CardTitle>
+            <p class="ops-section-copy">CVE 情报、EPSS 可利用性 Top10 与 CISA KEV 命中统计。</p>
+          </CardHeader>
+          <CardContent class="pt-5">
+            <div v-if="loading" class="ops-empty">
+              <Skeleton class="h-32 w-full rounded-xl" />
+            </div>
+            <div v-else-if="!threatIntelOverview" class="ops-empty min-h-[10rem]">
+              <p class="ops-empty-title">情报数据加载中</p>
+              <p class="ops-empty-copy">威胁情报模块尚未返回数据，请稍后重试。</p>
+            </div>
+            <template v-else>
+              <div class="grid gap-3 md:grid-cols-4 mb-4">
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">CVE 总数</p>
+                  <p class="ops-highlight-value text-foreground">{{ threatIntelOverview.total_cves }}</p>
+                </div>
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">KEV 命中</p>
+                  <p class="ops-highlight-value" :class="threatIntelOverview.kev_hits > 0 ? 'text-red-400' : 'text-emerald-300'">{{ threatIntelOverview.kev_hits }}</p>
+                </div>
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">已补充情报</p>
+                  <p class="ops-highlight-value text-cyan-300">{{ threatIntelOverview.enriched_count }}</p>
+                </div>
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">漏洞发现</p>
+                  <p class="ops-highlight-value text-foreground">{{ threatIntelOverview.findings_total }}</p>
+                </div>
+              </div>
+              <div v-if="threatIntelOverview.epss_top10?.length" class="space-y-2">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">EPSS Top 10 — 最可能被利用</p>
+                <div class="ops-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>CVE</th>
+                        <th>EPSS</th>
+                        <th>CVSS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in threatIntelOverview.epss_top10.slice(0, 5)" :key="item.vuln_id || item.cve">
+                        <td><code class="ops-inline-code">{{ item.vuln_id || item.cve }}</code></td>
+                        <td class="tabular-nums">{{ (item.epss_score ?? 0).toFixed(3) }}</td>
+                        <td>
+                          <Badge :class="cvssColor(item.cvss_score)" class="rounded-full px-2 py-0.5 text-xs">
+                            {{ item.cvss_score?.toFixed(1) ?? '--' }}
+                          </Badge>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </CardContent>
+        </Card>
+
+        <Card class="ops-section-card">
+          <CardHeader class="space-y-1 pb-0">
+            <CardTitle class="ops-section-title">误报率治理</CardTitle>
+            <p class="ops-section-copy">周误报率 KPI ≤ 20%，超过阈值触发告警推送。</p>
+          </CardHeader>
+          <CardContent class="pt-5">
+            <div v-if="loading" class="ops-empty">
+              <Skeleton class="h-32 w-full rounded-xl" />
+            </div>
+            <div v-else-if="!fpStats" class="ops-empty min-h-[10rem]">
+              <p class="ops-empty-title">误报数据加载中</p>
+              <p class="ops-empty-copy">误报率统计尚未返回数据。</p>
+            </div>
+            <template v-else>
+              <div class="grid gap-3 md:grid-cols-3 mb-4">
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">周误报率</p>
+                  <p class="ops-highlight-value" :class="fpStats.weekly_rate > 20 ? 'text-red-400' : 'text-emerald-300'">
+                    {{ fpStats.weekly_rate.toFixed(1) }}%
+                  </p>
+                  <p class="ops-highlight-note">{{ fpStats.weekly_rate > 20 ? '超过 20% KPI 阈值' : 'KPI 达标' }}</p>
+                </div>
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">误报总数</p>
+                  <p class="ops-highlight-value text-amber-300">{{ fpStats.false_positive_count }}</p>
+                  <p class="ops-highlight-note">占 {{ fpStats.total_events }} 条事件</p>
+                </div>
+                <div class="ops-highlight-tile">
+                  <p class="ops-highlight-label">误报率</p>
+                  <p class="ops-highlight-value text-foreground">{{ fpStats.false_positive_rate.toFixed(1) }}%</p>
+                </div>
+              </div>
+              <div v-if="fpStats.by_source?.length" class="space-y-2">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">误报来源分布</p>
+                <div class="space-y-1.5">
+                  <div v-for="s in fpStats.by_source" :key="s.source" class="ops-status-row">
+                    <div class="flex items-center gap-2">
+                      <span class="ops-status-dot bg-amber-400"></span>
+                      <p class="text-sm text-foreground">{{ s.source }}</p>
+                    </div>
+                    <span class="text-sm font-semibold tabular-nums text-foreground">{{ s.count }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="fpStats.top_ips?.length" class="mt-3 space-y-2">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Top 误报 IP</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code v-for="ip in fpStats.top_ips.slice(0, 5)" :key="ip.ip" class="ops-inline-code text-[11px]">
+                    {{ ip.ip }} ({{ ip.count }})
+                  </code>
+                </div>
+              </div>
+            </template>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   </div>
 </template>
@@ -484,9 +604,11 @@ import {
   type OverviewTrends,
   type OverviewTodos,
   type DefenseStats,
+  type FalsePositiveStats,
   type PendingEventItem,
   type TrendRange,
 } from '@/api/overview'
+import { threatIntelApi, type ThreatIntelOverview } from '@/api/threat-intel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -534,6 +656,8 @@ const trends = ref<OverviewTrends>({ range: '7d', alert_trend: [], high_alert_tr
 const todos = ref<OverviewTodos | null>(null)
 const defenseStats = ref<DefenseStats | null>(null)
 const chainStatusData = ref<OverviewChainStatus | null>(null)
+const threatIntelOverview = ref<ThreatIntelOverview | null>(null)
+const fpStats = ref<FalsePositiveStats | null>(null)
 const overviewFeedback = reactive<Record<OverviewModuleKey, ModuleFeedback>>({
   metrics: createFeedbackState(),
   trends: createFeedbackState(),
@@ -1008,6 +1132,14 @@ const barChartOptions = {
   },
 }
 
+const cvssColor = (score: number | null | undefined) => {
+  if (score == null) return 'border-border/70 bg-muted text-muted-foreground'
+  if (score >= 9.0) return 'border-red-500/30 bg-red-500/12 text-red-300'
+  if (score >= 7.0) return 'border-amber-500/30 bg-amber-500/12 text-amber-300'
+  if (score >= 4.0) return 'border-yellow-500/30 bg-yellow-500/12 text-yellow-300'
+  return 'border-cyan-500/30 bg-cyan-500/12 text-cyan-300'
+}
+
 const scoreColor = (score: number | null | undefined) => {
   if (score == null) return 'border-border/70 bg-muted text-muted-foreground'
   if (score >= 80) return 'border-red-500/30 bg-red-500/12 text-red-300'
@@ -1052,12 +1184,14 @@ const loadAll = async () => {
   loading.value = true
   resetOverviewFeedback()
   try {
-    const [metricsSnapshot, trendSnapshot, todoSnapshot, defenseSnapshot, chainSnapshot] = await Promise.allSettled([
+    const [metricsSnapshot, trendSnapshot, todoSnapshot, defenseSnapshot, chainSnapshot, intelSnapshot, fpSnapshot] = await Promise.allSettled([
       overviewApi.getMetrics(),
       overviewApi.getTrends(range.value),
       overviewApi.getTodos(),
       overviewApi.getDefenseStats(range.value),
       overviewApi.getChainStatus(),
+      threatIntelApi.getOverview(),
+      overviewApi.getFalsePositiveStats(range.value),
     ])
 
     if (metricsSnapshot.status === 'fulfilled') {
@@ -1104,6 +1238,9 @@ const loadAll = async () => {
       chainStatusData.value = { defense: [], probe: [], generated_at: new Date().toISOString() }
       setOverviewFeedback('chain', chainSnapshot.reason)
     }
+
+    threatIntelOverview.value = intelSnapshot.status === 'fulfilled' ? intelSnapshot.value : null
+    fpStats.value = fpSnapshot.status === 'fulfilled' ? fpSnapshot.value : null
   } finally {
     loading.value = false
   }

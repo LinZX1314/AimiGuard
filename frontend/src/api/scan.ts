@@ -254,6 +254,26 @@ export const scanApi = {
       : '扫描已启动'
     return { success: true, message }
   },
+
+  async getAttackPath(taskId: number): Promise<any> {
+    const res = await apiClient.get(`/scan/tasks/${taskId}/attack-path`)
+    return res?.data ?? res
+  },
+
+  async enrichFinding(findingId: number): Promise<any> {
+    const res = await apiClient.post(`/scan/findings/${findingId}/enrich`)
+    return res?.data ?? res
+  },
+
+  async getPriorityFindings(params?: {
+    page?: number
+    page_size?: number
+  }): Promise<{ total: number; items: ScanFinding[] }> {
+    const res = await apiClient.get('/scan/findings/priority-fix', { params })
+    const d = res?.data ?? res
+    if (d?.total !== undefined) return d
+    return { total: 0, items: [] }
+  },
 }
 
 // ── Nmap 相关类型定义（与后端 ScanFinding 字段对齐）──

@@ -36,6 +36,15 @@
           发现资产
           <Badge v-if="discoveredTotal > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ discoveredTotal }}</Badge>
         </TabsTrigger>
+        <TabsTrigger value="fix-tickets" class="gap-2">
+          <Wrench class="size-4" />
+          修复工单
+          <Badge v-if="ticketTotal > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ ticketTotal }}</Badge>
+        </TabsTrigger>
+        <TabsTrigger value="attack-path" class="gap-2">
+          <Route class="size-4" />
+          攻击路径
+        </TabsTrigger>
       </TabsList>
 
       <!-- ===== Tab: 资产管理 ===== -->
@@ -729,6 +738,140 @@
           </div>
         </div>
       </TabsContent>
+
+      <!-- ===== Tab: 修复工单 ===== -->
+      <TabsContent value="fix-tickets" class="space-y-4">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex gap-1 flex-wrap">
+            <Button
+              v-for="s in ticketStatusOptions"
+              :key="s.value"
+              :variant="ticketStatusFilter === s.value ? 'default' : 'outline'"
+              size="sm"
+              class="cursor-pointer"
+              @click="ticketStatusFilter = s.value; loadTickets(1)"
+            >
+              {{ s.label }}
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 ml-auto" :disabled="ticketLoading" @click="loadTickets(1)">
+            <RefreshCw class="size-3.5" :class="ticketLoading ? 'animate-spin' : ''" />
+            刷新
+          </Button>
+        </div>
+
+        <div v-if="ticketLoading" class="text-center py-12 text-muted-foreground">加载中…</div>
+        <div v-else-if="tickets.length === 0" class="text-center py-12 text-muted-foreground">
+          <Wrench class="size-8 mx-auto mb-2 opacity-30" />
+          <p class="text-sm">暂无修复工单</p>
+        </div>
+        <div v-else class="rounded-lg border border-border overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-muted/30 border-b border-border">
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">ID</th>
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">优先级</th>
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">状态</th>
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">负责人</th>
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">截止日期</th>
+                <th class="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">创建时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in tickets" :key="t.id" class="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                <td class="px-4 py-2.5 font-mono text-xs">#{{ t.id }}</td>
+                <td class="px-4 py-2.5">
+                  <Badge :class="ticketPriorityColor(t.priority)" class="text-xs">{{ t.priority }}</Badge>
+                </td>
+                <td class="px-4 py-2.5">
+                  <Badge variant="outline" class="text-xs">{{ t.status }}</Badge>
+                </td>
+                <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ t.assignee || '—' }}</td>
+                <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ t.due_date?.slice(0, 10) || '—' }}</td>
+                <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ formatTime(t.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="ticketTotal > 20" class="flex items-center justify-between text-sm text-muted-foreground">
+          <span>共 {{ ticketTotal }} 个工单</span>
+          <div class="flex gap-1">
+            <Button variant="outline" size="sm" class="cursor-pointer" :disabled="ticketPage <= 1" @click="loadTickets(ticketPage - 1)">
+              <ChevronLeft class="size-4" />
+            </Button>
+            <span class="px-3 py-1 text-xs">第 {{ ticketPage }} 页</span>
+            <Button variant="outline" size="sm" class="cursor-pointer" :disabled="ticketPage * 20 >= ticketTotal" @click="loadTickets(ticketPage + 1)">
+              <ChevronRight class="size-4" />
+            </Button>
+          </div>
+        </div>
+      </TabsContent>
+
+      <!-- ===== Tab: 攻击路径 ===== -->
+      <TabsContent value="attack-path" class="space-y-4">
+        <Card>
+          <CardContent class="pt-6">
+            <div class="flex items-center gap-3 mb-4">
+              <Label>选择扫描任务</Label>
+              <Select v-model="attackPathTaskId">
+                <SelectTrigger class="w-60">
+                  <SelectValue placeholder="选择已完成的扫描任务" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="t in completedTasks" :key="t.id" :value="String(t.id)">
+                    #{{ t.id }} {{ t.target }} ({{ t.profile || 'default' }})
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" class="cursor-pointer gap-1.5" :disabled="!attackPathTaskId || attackPathLoading" @click="loadAttackPath">
+                <Route class="size-3.5" />
+                分析攻击路径
+              </Button>
+            </div>
+
+            <div v-if="attackPathLoading" class="text-center py-16 text-muted-foreground">
+              <RefreshCw class="size-6 mx-auto mb-2 animate-spin opacity-40" />
+              <p class="text-sm">正在分析攻击路径…</p>
+            </div>
+            <div v-else-if="!attackPathData" class="text-center py-16 text-muted-foreground">
+              <Route class="size-10 mx-auto mb-3 opacity-20" />
+              <p class="text-sm">选择扫描任务后点击「分析攻击路径」查看横向移动分析结果</p>
+            </div>
+            <div v-else class="space-y-4">
+              <div class="grid gap-3 md:grid-cols-3">
+                <div class="rounded-lg border border-border p-3 space-y-1">
+                  <p class="text-xs text-muted-foreground">高危节点</p>
+                  <p class="text-2xl font-bold" :class="attackPathData.high_risk_nodes > 0 ? 'text-red-400' : 'text-emerald-400'">{{ attackPathData.high_risk_nodes }}</p>
+                </div>
+                <div class="rounded-lg border border-border p-3 space-y-1">
+                  <p class="text-xs text-muted-foreground">横向移动路径</p>
+                  <p class="text-2xl font-bold text-amber-400">{{ attackPathData.lateral_paths }}</p>
+                </div>
+                <div class="rounded-lg border border-border p-3 space-y-1">
+                  <p class="text-xs text-muted-foreground">总节点数</p>
+                  <p class="text-2xl font-bold text-foreground">{{ attackPathData.total_nodes }}</p>
+                </div>
+              </div>
+              <div v-if="attackPathData.paths?.length" class="space-y-2">
+                <p class="text-sm font-semibold">发现的攻击路径</p>
+                <div v-for="(path, idx) in attackPathData.paths" :key="idx" class="rounded-lg border border-border p-3 space-y-1.5">
+                  <div class="flex items-center gap-2">
+                    <Badge :class="path.risk === 'HIGH' ? 'bg-red-500/15 text-red-400' : 'bg-amber-500/15 text-amber-400'" class="text-xs">{{ path.risk }}</Badge>
+                    <span class="text-xs text-muted-foreground">{{ path.description }}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <template v-for="(node, ni) in path.nodes" :key="ni">
+                      <code class="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{{ node }}</code>
+                      <span v-if="ni < path.nodes.length - 1" class="text-muted-foreground text-xs">→</span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
     </Tabs>
 
     <!-- 发现资产 IP 历史弹窗 -->
@@ -953,9 +1096,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Monitor, Plus, RefreshCw, Scan, Search, Settings as SettingsIcon, Shield, ShieldCheck, Target, Trash2, Bug, X } from 'lucide-vue-next'
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Monitor, Plus, RefreshCw, Route, Scan, Search, Settings as SettingsIcon, Shield, ShieldCheck, Target, Trash2, Bug, Wrench, X } from 'lucide-vue-next'
 import NmapHostDetailDialog from '@/components/NmapHostDetailDialog.vue'
 import { RealtimeChannel } from '@/api/realtime'
+import { fixTicketApi, type FixTicket } from '@/api/fix-tickets'
 
 // ===== Active Tab =====
 const activeTab = ref('assets')
@@ -1372,6 +1516,63 @@ const openDiscoveredAssetDetail = async (asset: DiscoveredAsset) => {
   } catch (e) { console.error(e) } finally { assetHistoryLoading.value = false }
 }
 
+// ===== Fix Tickets =====
+const tickets = ref<FixTicket[]>([])
+const ticketTotal = ref(0)
+const ticketPage = ref(1)
+const ticketLoading = ref(false)
+const ticketStatusFilter = ref('')
+
+const ticketStatusOptions = [
+  { value: '', label: '全部' },
+  { value: 'OPEN', label: '待处理' },
+  { value: 'IN_PROGRESS', label: '处理中' },
+  { value: 'RESOLVED', label: '已解决' },
+  { value: 'VERIFIED', label: '已验证' },
+  { value: 'CLOSED', label: '已关闭' },
+]
+
+const ticketPriorityColor = (priority: string) => {
+  const map: Record<string, string> = {
+    P0: 'bg-red-500/15 text-red-400 border-red-500/30',
+    P1: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    P2: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    P3: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  }
+  return map[priority] || 'bg-muted text-muted-foreground'
+}
+
+const loadTickets = async (page = 1) => {
+  ticketLoading.value = true
+  try {
+    const result = await fixTicketApi.list({
+      status: ticketStatusFilter.value || undefined,
+      page,
+      page_size: 20,
+    })
+    tickets.value = result.items
+    ticketTotal.value = result.total
+    ticketPage.value = page
+  } catch (e) { console.error(e) } finally { ticketLoading.value = false }
+}
+
+// ===== Attack Path =====
+const attackPathTaskId = ref('')
+const attackPathLoading = ref(false)
+const attackPathData = ref<any>(null)
+
+const completedTasks = computed(() => tasks.value.filter(t => t.state === 'REPORTED'))
+
+const loadAttackPath = async () => {
+  if (!attackPathTaskId.value) return
+  attackPathLoading.value = true
+  attackPathData.value = null
+  try {
+    const res = await scanApi.getAttackPath(Number(attackPathTaskId.value))
+    attackPathData.value = res
+  } catch (e) { console.error(e) } finally { attackPathLoading.value = false }
+}
+
 // ===== Init =====
 watch(activeTab, (tab) => {
   if (tab === 'assets') loadAssets(1)
@@ -1379,6 +1580,8 @@ watch(activeTab, (tab) => {
   else if (tab === 'findings') { loadFindings(1); loadVulnStats() }
   else if (tab === 'nmap-hosts') { loadNmapHosts(); loadNmapScans(); loadNmapStats() }
   else if (tab === 'discovered-assets') loadDiscoveredAssets(0)
+  else if (tab === 'fix-tickets') loadTickets(1)
+  else if (tab === 'attack-path') { if (!tasks.value.length) loadTasks(1) }
 })
 
 let _scanWsChannel: RealtimeChannel | null = null

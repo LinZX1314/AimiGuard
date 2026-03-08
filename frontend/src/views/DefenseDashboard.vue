@@ -38,6 +38,11 @@
           HFish 攻击日志
           <Badge v-if="logTotal > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ logTotal }}</Badge>
         </TabsTrigger>
+        <TabsTrigger value="clusters" class="gap-2">
+          <Layers class="size-4" />
+          告警聚类
+          <Badge v-if="clusters.length > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-xs">{{ clusters.length }}</Badge>
+        </TabsTrigger>
       </TabsList>
 
       <!-- ===== Tab: 待处置事件 ===== -->
@@ -229,6 +234,56 @@
           </div>
         </div>
       </TabsContent>
+
+      <!-- ===== Tab: 告警聚类 ===== -->
+      <TabsContent value="clusters" class="space-y-4">
+        <div class="flex items-center gap-3">
+          <Button variant="outline" size="sm" class="cursor-pointer gap-1.5" :disabled="clusterLoading" @click="loadClusters">
+            <RefreshCw class="size-3.5" :class="clusterLoading ? 'animate-spin' : ''" />
+            刷新聚类
+          </Button>
+          <span class="text-xs text-muted-foreground">基于攻击来源、服务类型和时间窗口进行智能聚合</span>
+        </div>
+
+        <div v-if="clusterLoading" class="space-y-3">
+          <Skeleton v-for="i in 3" :key="i" class="h-32 w-full rounded-lg" />
+        </div>
+        <div v-else-if="clusters.length === 0" class="text-center py-16">
+          <Layers class="size-12 mx-auto mb-3 text-muted-foreground/30" />
+          <p class="text-sm text-muted-foreground">暂无告警聚类结果</p>
+          <p class="text-xs text-muted-foreground/60 mt-1">需要足够的告警数据才能生成聚类分析</p>
+        </div>
+        <div v-else class="space-y-3">
+          <Card v-for="(cluster, idx) in clusters" :key="idx" class="overflow-hidden">
+            <CardHeader class="pb-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <Badge :class="clusterSeverityClass(cluster.severity)" class="text-xs">{{ cluster.severity }}</Badge>
+                  <CardTitle class="text-sm">{{ cluster.label }}</CardTitle>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span class="tabular-nums">{{ cluster.count }} 条告警</span>
+                  <span>·</span>
+                  <span>{{ cluster.time_range }}</span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent class="space-y-2">
+              <p class="text-xs text-muted-foreground leading-relaxed">{{ cluster.description }}</p>
+              <div class="flex flex-wrap gap-1.5">
+                <code v-for="ip in (cluster.top_ips || []).slice(0, 5)" :key="ip" class="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">{{ ip }}</code>
+              </div>
+              <div v-if="cluster.services?.length" class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>涉及服务:</span>
+                <Badge v-for="svc in cluster.services.slice(0, 4)" :key="svc" variant="outline" class="text-[10px] h-4">{{ svc }}</Badge>
+              </div>
+              <div v-if="cluster.recommendation" class="rounded border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary/80">
+                <span class="font-medium">建议: </span>{{ cluster.recommendation }}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
     </Tabs>
 
     <!-- IP 关联查询弹窗 -->
@@ -251,7 +306,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Activity, Download, RefreshCw, Search, ShieldAlert, ShieldCheck } from 'lucide-vue-next'
+import { Activity, Download, Layers, RefreshCw, Search, ShieldAlert, ShieldCheck } from 'lucide-vue-next'
 import NmapHostDetailDialog from '@/components/NmapHostDetailDialog.vue'
 
 interface ThreatEvent {
@@ -281,6 +336,10 @@ const logThreatFilter = ref('')
 const logServiceFilter = ref('')
 const logDaysFilter = ref(7)
 const serviceOptions = ref<string[]>([])
+
+// 告警聚类
+const clusters = ref<any[]>([])
+const clusterLoading = ref(false)
 
 // IP 弹窗
 const ipInfoOpen = ref(false)
@@ -359,9 +418,25 @@ const onRefresh = () => {
   else loadLogs(logOffset.value)
 }
 
-// 切到日志 Tab 时自动加载
+const loadClusters = async () => {
+  clusterLoading.value = true
+  try {
+    const res = await defenseApi.getEventClusters()
+    const data = res?.data ?? res
+    clusters.value = data?.clusters ?? (Array.isArray(data) ? data : [])
+  } catch { clusters.value = [] } finally { clusterLoading.value = false }
+}
+
+const clusterSeverityClass = (severity: string) => {
+  if (severity === 'HIGH' || severity === '高') return 'bg-red-500/15 text-red-400 border-red-500/30'
+  if (severity === 'MEDIUM' || severity === '中') return 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+  return 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+}
+
+// 切 Tab 时自动加载
 watch(activeTab, (tab) => {
   if (tab === 'logs' && logs.value.length === 0) loadLogs(0)
+  if (tab === 'clusters' && clusters.value.length === 0) loadClusters()
 })
 
 const threatLevelClass = (lv: string) => {

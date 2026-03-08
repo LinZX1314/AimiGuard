@@ -32,6 +32,14 @@
             <Shield class="size-3.5" />
             防火墙联动
           </TabsTrigger>
+          <TabsTrigger value="honeypot-mgmt" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
+            <Crosshair class="size-3.5" />
+            蜜罐管理
+          </TabsTrigger>
+          <TabsTrigger value="plugin-security" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
+            <ShieldCheck class="size-3.5" />
+            插件安全
+          </TabsTrigger>
         </TabsList>
 
         <!-- ── HFish 蜜罐 ── -->
@@ -807,6 +815,152 @@
             </CardContent>
           </Card>
         </TabsContent>
+
+        <!-- ── 蜜罐管理 ── -->
+        <TabsContent value="honeypot-mgmt">
+          <div class="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base flex items-center gap-2">
+                  <Crosshair class="size-4 text-amber-400" />
+                  蜜罐配置
+                </CardTitle>
+                <p class="text-xs text-muted-foreground">管理蜜罐节点部署与状态</p>
+              </CardHeader>
+              <CardContent class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <Button size="sm" class="cursor-pointer gap-1.5" @click="loadHoneypots">
+                    <RefreshCw class="size-3" :class="honeypotLoading ? 'animate-spin' : ''" />
+                    刷新
+                  </Button>
+                </div>
+                <div v-if="honeypotLoading" class="py-6 text-center text-muted-foreground text-sm">加载中…</div>
+                <div v-else-if="!honeypots.length" class="py-6 text-center text-muted-foreground text-sm">
+                  <Crosshair class="size-6 mx-auto mb-2 opacity-30" />
+                  暂无蜜罐配置
+                </div>
+                <div v-else class="space-y-2 max-h-80 overflow-y-auto">
+                  <div v-for="hp in honeypots" :key="hp.id" class="rounded-lg border border-border p-3 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm font-medium">{{ hp.name }}</span>
+                      <Badge :class="hp.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted text-muted-foreground'" class="text-xs">
+                        {{ hp.status }}
+                      </Badge>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>类型: {{ hp.honeypot_type }}</span>
+                      <span>服务: {{ hp.target_service }}</span>
+                      <span>管理: {{ hp.managed_by }}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base flex items-center gap-2">
+                  <KeyRound class="size-4 text-cyan-400" />
+                  蜜标管理
+                </CardTitle>
+                <p class="text-xs text-muted-foreground">生成与监控可追踪蜜标（假凭据/假API Key）</p>
+              </CardHeader>
+              <CardContent class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <Button size="sm" class="cursor-pointer gap-1.5" @click="loadHoneytokens">
+                    <RefreshCw class="size-3" :class="honeytokenLoading ? 'animate-spin' : ''" />
+                    刷新
+                  </Button>
+                </div>
+                <div v-if="honeytokenLoading" class="py-6 text-center text-muted-foreground text-sm">加载中…</div>
+                <div v-else-if="!honeytokens.length" class="py-6 text-center text-muted-foreground text-sm">
+                  <KeyRound class="size-6 mx-auto mb-2 opacity-30" />
+                  暂无蜜标
+                </div>
+                <div v-else class="space-y-2 max-h-80 overflow-y-auto">
+                  <div v-for="ht in honeytokens" :key="ht.id" class="rounded-lg border border-border p-3 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                      <Badge variant="outline" class="text-xs">{{ ht.token_type }}</Badge>
+                      <Badge :class="ht.status === 'triggered' ? 'bg-red-500/15 text-red-400' : ht.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted text-muted-foreground'" class="text-xs">
+                        {{ ht.status }}
+                      </Badge>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>位置: {{ ht.deployed_location }}</span>
+                      <span v-if="ht.attacker_ip" class="text-red-400">攻击者: {{ ht.attacker_ip }}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <!-- ── 插件安全 ── -->
+        <TabsContent value="plugin-security">
+          <Card>
+            <CardHeader class="pb-3">
+              <CardTitle class="text-base flex items-center gap-2">
+                <ShieldCheck class="size-4 text-emerald-400" />
+                插件安全校验
+              </CardTitle>
+              <p class="text-xs text-muted-foreground">MCP 插件来源验证、签名校验与黑名单管理</p>
+            </CardHeader>
+            <CardContent class="space-y-4">
+              <div class="grid gap-4 md:grid-cols-2">
+                <div class="space-y-3">
+                  <p class="text-sm font-medium">插件来源验证</p>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-muted-foreground">来源 URL</label>
+                    <input
+                      v-model="pluginVerifyForm.source_url"
+                      type="text"
+                      placeholder="https://example.com/plugin"
+                      class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                    />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-muted-foreground">内容哈希</label>
+                    <input
+                      v-model="pluginVerifyForm.content_hash"
+                      type="text"
+                      placeholder="sha256 哈希值（可选）"
+                      class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                    />
+                  </div>
+                  <Button size="sm" class="cursor-pointer gap-1.5" :disabled="pluginVerifying" @click="verifyPlugin">
+                    <ShieldCheck class="size-3.5" />
+                    {{ pluginVerifying ? '验证中…' : '验证插件' }}
+                  </Button>
+                  <div v-if="pluginVerifyResult" class="rounded-lg border p-3 text-sm space-y-1" :class="pluginVerifyResult.safe ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'">
+                    <div class="flex items-center gap-2">
+                      <Badge :class="pluginVerifyResult.safe ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'" class="text-xs">
+                        {{ pluginVerifyResult.safe ? '安全' : '危险' }}
+                      </Badge>
+                      <span class="text-xs text-muted-foreground">风险等级: {{ pluginVerifyResult.risk_level }}</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground">{{ pluginVerifyResult.reason }}</p>
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm font-medium">黑名单管理</p>
+                    <Button size="sm" variant="outline" class="cursor-pointer gap-1" @click="loadBlacklist">
+                      <RefreshCw class="size-3" />
+                      刷新
+                    </Button>
+                  </div>
+                  <div v-if="!blacklist.length" class="py-4 text-center text-muted-foreground text-xs">暂无黑名单条目</div>
+                  <div v-else class="space-y-1 max-h-40 overflow-y-auto">
+                    <div v-for="item in blacklist" :key="item" class="flex items-center justify-between rounded border border-border px-3 py-1.5">
+                      <code class="text-xs font-mono">{{ item }}</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <Dialog :open="promptDialog.open" @update:open="handlePromptDialogToggle">
@@ -852,12 +1006,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { BellRing, BrainCircuit, Bug, Plus, RefreshCw, Server, Shield, Volume2, Zap } from 'lucide-vue-next'
+import { BellRing, BrainCircuit, Bug, Crosshair, KeyRound, Plus, RefreshCw, Server, Shield, ShieldCheck, Volume2, Zap } from 'lucide-vue-next'
 import { apiClient, getRequestErrorMessage, hasAccessToken } from '@/api/client'
 import { defenseApi, type HFishConfig } from '@/api/defense'
 import { scanApi } from '@/api/scan'
 import { deviceApi, type DeviceInfo, type DeviceCredential } from '@/api/device'
 import { firewallApi, type FirewallConfig } from '@/api/firewall'
+import { honeypotApi } from '@/api/honeypots'
+import { pluginApi } from '@/api/plugins'
 import { systemApi, type AIAPIConfig, type TTSConfig } from '@/api/system'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -867,7 +1023,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Skeleton } from '@/components/ui/skeleton'
 
 const route = useRoute()
-const validTabs = ['hfish', 'nmap', 'push', 'device', 'ai', 'firewall']
+const validTabs = ['hfish', 'nmap', 'push', 'device', 'ai', 'firewall', 'honeypot-mgmt', 'plugin-security']
 const initialTab = computed(() => {
   const t = (route.query.tab as string) || ''
   return validTabs.includes(t) ? t : 'hfish'
@@ -1702,6 +1858,56 @@ const removeCredential = async (deviceId: number, credId: number) => {
     await deviceApi.removeCredential(deviceId, credId)
     await loadDevices()
   } catch { /* ignore */ }
+}
+
+// ── 蜜罐管理 ──
+const honeypots = ref<any[]>([])
+const honeypotLoading = ref(false)
+const honeytokens = ref<any[]>([])
+const honeytokenLoading = ref(false)
+
+const loadHoneypots = async () => {
+  honeypotLoading.value = true
+  try {
+    const res = await honeypotApi.list()
+    honeypots.value = res?.items ?? (Array.isArray(res) ? res : [])
+  } catch { honeypots.value = [] } finally { honeypotLoading.value = false }
+}
+
+const loadHoneytokens = async () => {
+  honeytokenLoading.value = true
+  try {
+    const res = await honeypotApi.listHoneytokens()
+    honeytokens.value = res?.items ?? (Array.isArray(res) ? res : [])
+  } catch { honeytokens.value = [] } finally { honeytokenLoading.value = false }
+}
+
+// ── 插件安全 ──
+const pluginVerifyForm = reactive({ source_url: '', content_hash: '' })
+const pluginVerifying = ref(false)
+const pluginVerifyResult = ref<any>(null)
+const blacklist = ref<string[]>([])
+
+const verifyPlugin = async () => {
+  if (!pluginVerifyForm.source_url.trim()) return
+  pluginVerifying.value = true
+  pluginVerifyResult.value = null
+  try {
+    const res = await pluginApi.verify({
+      source_url: pluginVerifyForm.source_url.trim(),
+      content_hash: pluginVerifyForm.content_hash.trim() || undefined,
+    })
+    pluginVerifyResult.value = res
+  } catch (e: any) {
+    pluginVerifyResult.value = { safe: false, risk_level: 'error', reason: e?.message || '验证失败' }
+  } finally { pluginVerifying.value = false }
+}
+
+const loadBlacklist = async () => {
+  try {
+    const res = await pluginApi.getBlacklist()
+    blacklist.value = res?.items ?? (Array.isArray(res) ? res : [])
+  } catch { blacklist.value = [] }
 }
 
 onMounted(() => {

@@ -128,6 +128,15 @@ export interface OverviewChainStatus {
   generated_at: string
 }
 
+export interface FalsePositiveStats {
+  total_events: number
+  false_positive_count: number
+  false_positive_rate: number
+  by_source: { source: string; count: number }[]
+  top_ips: { ip: string; count: number }[]
+  weekly_rate: number
+}
+
 let chainStatusEndpointAvailable: boolean | null = null
 
 const createEmptyChainStatus = (): OverviewChainStatus => ({
@@ -157,6 +166,11 @@ export const overviewApi = {
   async getDefenseStats(range: TrendRange = '7d'): Promise<DefenseStats> {
     const res = await apiClient.get('/overview/defense-stats', { params: { range } })
     return res as unknown as DefenseStats
+  },
+
+  async getFalsePositiveStats(range: TrendRange = '7d'): Promise<FalsePositiveStats> {
+    const res = await apiClient.get('/overview/false-positive-stats', { params: { range } })
+    return res as unknown as FalsePositiveStats
   },
 
   async getChainStatus(): Promise<OverviewChainStatus> {
