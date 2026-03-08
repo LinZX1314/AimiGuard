@@ -637,5 +637,133 @@ class Scanner:
         return True
 
 
+    # ── A1-03: Nuclei 集成 ──
+
+    NUCLEI_TEMPLATE_TAGS = {
+        "cve": "CVE 漏洞检测",
+        "network": "网络服务检测",
+        "exposure": "敏感信息暴露",
+        "misconfiguration": "错误配置",
+        "default-login": "默认凭据检测",
+        "takeover": "子域名接管",
+    }
+
+    async def scan_with_nuclei(
+        self,
+        target: str,
+        template_tags: Optional[List[str]] = None,
+        timeout: int = 600,
+    ) -> Dict[str, Any]:
+        """
+        A1-03: 使用 Nuclei 执行漏洞扫描。
+        template_tags: 模板分类标签列表，如 ["cve", "network"]
+        返回结构化扫描结果。
+        """
+        nuclei_path = os.environ.get("NUCLEI_PATH", "nuclei")
+        cmd = [nuclei_path, "-target", target, "-jsonl", "-silent"]
+
+        if template_tags:
+            valid_tags = [t for t in template_tags if t in self.NUCLEI_TEMPLATE_TAGS]
+            if valid_tags:
+                cmd.extend(["-tags", ",".join(valid_tags)])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+
+            findings: List[Dict[str, Any]] = []
+            for line in result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                try:
+                    item = json.loads(line)
+                    findings.append({
+                        "template_id": item.get("template-id", ""),
+                        "name": item.get("info", {}).get("name", ""),
+                        "severity": str(item.get("info", {}).get("severity", "info")).upper(),
+                        "host": item.get("host", target),
+                        "matched_at": item.get("matched-at", ""),
+                        "type": item.get("type", ""),
+                        "description": item.get("info", {}).get("description", "")[:500],
+                        "tags": item.get("info", {}).get("tags", []),
+                        "reference": item.get("info", {}).get("reference", []),
+                        "curl_command": item.get("curl-command", ""),
+                    })
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+            return {
+                "success": True,
+                "target": target,
+                "total_findings": len(findings),
+                "findings": findings,
+                "high_count": sum(1 for f in findings if f["severity"] in ("HIGH", "CRITICAL")),
+                "medium_count": sum(1 for f in findings if f["severity"] == "MEDIUM"),
+                "low_count": sum(1 for f in findings if f["severity"] in ("LOW", "INFO")),
+                "stderr": result.stderr[:500] if result.stderr else None,
+            }
+
+        except FileNotFoundError:
+            return {
+                "success": False,
+                "error": "nuclei not installed or not in PATH",
+                "target": target,
+                "total_findings": 0,
+                "findings": [],
+                "high_count": 0,
+                "medium_count": 0,
+                "low_count": 0,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": f"nuclei timeout (>{timeout}s)",
+                "target": target,
+                "total_findings": 0,
+                "findings": [],
+                "high_count": 0,
+                "medium_count": 0,
+                "low_count": 0,
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "target": target,
+                "total_findings": 0,
+                "findings": [],
+                "high_count": 0,
+                "medium_count": 0,
+                "low_count": 0,
+            }
+
+    def parse_nuclei_to_findings(
+        self,
+        nuclei_result: Dict[str, Any],
+        task_id: int,
+        trace_id: str,
+    ) -> List[Dict[str, Any]]:
+        """将 Nuclei 结果转换为 scan_finding 格式"""
+        rows = []
+        for f in nuclei_result.get("findings", []):
+            rows.append({
+                "scan_task_id": task_id,
+                "asset": f.get("host", ""),
+                "port": None,
+                "service": f.get("type", "http"),
+                "vuln_id": f.get("template_id", ""),
+                "cve": None,
+                "severity": f.get("severity", "INFO"),
+                "evidence": f.get("description", "")[:1000],
+                "status": "NEW",
+                "trace_id": trace_id,
+            })
+        return rows
+
+
 # Global instance
 scanner = Scanner()

@@ -53,6 +53,34 @@ SCAN_PROFILES = {
     },
 }
 
+NUCLEI_PROFILES = {
+    "cve": {
+        "name": "CVE 漏洞检测",
+        "description": "使用 Nuclei CVE 模板检测已知漏洞",
+        "tags": ["cve"],
+    },
+    "network": {
+        "name": "网络服务检测",
+        "description": "检测开放服务和网络层漏洞",
+        "tags": ["network"],
+    },
+    "exposure": {
+        "name": "敏感信息暴露",
+        "description": "检测敏感文件、目录和信息泄露",
+        "tags": ["exposure"],
+    },
+    "misconfiguration": {
+        "name": "错误配置",
+        "description": "检测常见的错误配置",
+        "tags": ["misconfiguration"],
+    },
+    "full": {
+        "name": "全面 Nuclei 扫描",
+        "description": "使用所有模板进行全面漏洞扫描",
+        "tags": ["cve", "network", "exposure", "misconfiguration", "default-login"],
+    },
+}
+
 ASSET_TARGET_TYPES = {"IP", "CIDR", "DOMAIN"}
 ASSET_DEFAULT_TAG_BY_TYPE = {
     "IP": "ip",
@@ -904,6 +932,57 @@ async def assess_finding_exploitability(
     return APIResponse.success({
         **exploit_data,
         "finding_id": finding_id,
+        "trace_id": trace_id,
+    })
+
+
+# ===== A1-03: Nuclei 扫描 =====
+
+
+class NucleiScanRequest(BaseModel):
+    target: str = Field(..., description="扫描目标 IP/域名")
+    profile: str = Field("cve", description="Nuclei 扫描模板: cve/network/exposure/misconfiguration/full")
+
+
+@router.get("/nuclei/profiles")
+async def get_nuclei_profiles(
+    current_user: object = Depends(require_role(["operator", "admin"])),
+):
+    """获取可用的 Nuclei 扫描模板列表"""
+    return APIResponse.success(NUCLEI_PROFILES)
+
+
+@router.post("/nuclei/scan")
+async def trigger_nuclei_scan(
+    req: NucleiScanRequest,
+    db: Session = Depends(get_db),
+    current_user: object = Depends(require_role(["operator", "admin"])),
+):
+    """A1-03: 触发 Nuclei 漏洞扫描"""
+    import uuid as _uuid
+
+    profile = NUCLEI_PROFILES.get(req.profile)
+    if not profile:
+        raise HTTPException(status_code=400, detail=f"无效的 Nuclei profile: {req.profile}")
+
+    trace_id = str(_uuid.uuid4())
+    tags = profile.get("tags", [])
+
+    result = await scanner.scan_with_nuclei(
+        target=req.target,
+        template_tags=tags,
+    )
+
+    return APIResponse.success({
+        "target": req.target,
+        "profile": req.profile,
+        "success": result.get("success", False),
+        "error": result.get("error"),
+        "total_findings": result.get("total_findings", 0),
+        "high_count": result.get("high_count", 0),
+        "medium_count": result.get("medium_count", 0),
+        "low_count": result.get("low_count", 0),
+        "findings": result.get("findings", []),
         "trace_id": trace_id,
     })
 
