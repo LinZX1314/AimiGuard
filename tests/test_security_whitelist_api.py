@@ -17,9 +17,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 
 @pytest.fixture(scope="module")
-def admin_headers(client):
-    resp = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin123"})
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+def admin_headers(client, admin_token):
+    return {"Authorization": f"Bearer {admin_token}"}
 
 
 class TestWhitelistAPI:
