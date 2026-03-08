@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen grid place-items-center bg-background px-4">
-    <Card class="relative w-full max-w-[400px] border-white shadow-sm">
+    <Card class="relative w-full max-w-[400px] border-transparent shadow-lg shadow-black/25">
       <div class="absolute right-4 top-4">
         <Button
           type="button"
@@ -17,8 +17,8 @@
       </div>
 
       <CardHeader class="space-y-2 text-center">
-        <div class="mx-auto inline-flex size-12 items-center justify-center rounded-lg border border-border bg-muted">
-          <ShieldCheck class="size-6 text-primary" />
+        <div class="mx-auto inline-flex size-12 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10">
+          <ShieldCheck class="size-6 text-emerald-400" />
         </div>
         <CardTitle class="text-2xl tracking-tight">AI 蜜罐</CardTitle>
         <CardDescription>智能安全运营平台</CardDescription>
@@ -55,7 +55,7 @@
             <AlertDescription>{{ error }}</AlertDescription>
           </Alert>
 
-          <Button type="submit" class="w-full cursor-pointer" :disabled="loading">
+          <Button type="submit" class="w-full cursor-pointer bg-emerald-500 text-slate-950 hover:bg-emerald-400 focus-visible:ring-emerald-400/40" :disabled="loading">
             <Loader2 v-if="loading" class="size-4 animate-spin" />
             {{ loading ? '验证中...' : '登录' }}
           </Button>
