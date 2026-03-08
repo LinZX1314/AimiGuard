@@ -800,6 +800,9 @@ async def get_findings(
                     "severity": f.severity,
                     "status": f.status,
                     "cve": f.cve,
+                    "cvss_score": f.cvss_score,
+                    "epss_score": f.epss_score,
+                    "priority_fix": bool(f.epss_score and f.epss_score >= 0.1),
                     "evidence": f.evidence[:300] if f.evidence else None,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
                 }
@@ -807,6 +810,57 @@ async def get_findings(
             ],
         }
     )
+
+
+@router.get("/findings/priority-fix")
+async def get_priority_fix_findings(
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db),
+    current_user: object = Depends(get_current_user),
+):
+    """D1-02: 按 CVSS×EPSS 综合评分排序的优先修复漏洞列表"""
+    query = db.query(ScanFinding).filter(
+        ScanFinding.epss_score.isnot(None),
+        ScanFinding.epss_score >= 0.1,
+        ScanFinding.status.in_(["NEW", "CONFIRMED"]),
+    )
+
+    total = query.count()
+    page_size = min(page_size, 100)
+    offset = (page - 1) * page_size
+
+    findings = query.all()
+
+    def _risk_score(f):
+        cvss = f.cvss_score or 5.0
+        epss = f.epss_score or 0.0
+        return cvss * epss
+
+    findings.sort(key=_risk_score, reverse=True)
+    paged = findings[offset:offset + page_size]
+
+    return APIResponse.success({
+        "total": total,
+        "page": page,
+        "items": [
+            {
+                "id": f.id,
+                "asset": f.asset,
+                "port": f.port,
+                "service": f.service,
+                "severity": f.severity,
+                "cve": f.cve,
+                "cvss_score": f.cvss_score,
+                "epss_score": f.epss_score,
+                "risk_score": round((f.cvss_score or 5.0) * (f.epss_score or 0.0), 4),
+                "patch_url": f.patch_url,
+                "status": f.status,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            }
+            for f in paged
+        ],
+    })
 
 
 @router.put("/findings/{finding_id}/status")
