@@ -319,7 +319,7 @@ def reset_test_data():
     try:
         tables_to_clean = [
             "ai_chat_message", "ai_chat_session", "ai_decision_log",
-            "fix_ticket", "push_channel",
+            "fix_ticket", "security_scan_report", "push_channel",
             "scan_task", "scan_finding", "threat_event",
             "ai_tts_task", "ai_report", "firewall_sync_task", "plugin_registry",
         ]

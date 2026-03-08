@@ -331,6 +331,23 @@ class FixTicket(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class SecurityScanReport(Base):
+    __tablename__ = "security_scan_report"
+    id = Column(Integer, primary_key=True, index=True)
+    scan_tool = Column(String, nullable=False)
+    trigger_type = Column(String, nullable=False, default="manual")
+    branch = Column(String)
+    commit_sha = Column(String)
+    total_findings = Column(Integer, default=0)
+    high_count = Column(Integer, default=0)
+    medium_count = Column(Integer, default=0)
+    low_count = Column(Integer, default=0)
+    findings_json = Column(Text)
+    passed = Column(Integer, default=1)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class PluginRegistry(Base):
     __tablename__ = "plugin_registry"
     id = Column(Integer, primary_key=True, index=True)

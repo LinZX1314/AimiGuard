@@ -730,3 +730,24 @@ CREATE TABLE IF NOT EXISTS fix_ticket (
 CREATE INDEX IF NOT EXISTS idx_fix_ticket_status ON fix_ticket(status);
 CREATE INDEX IF NOT EXISTS idx_fix_ticket_finding_id ON fix_ticket(finding_id);
 CREATE INDEX IF NOT EXISTS idx_fix_ticket_priority ON fix_ticket(priority);
+
+-- CI安全扫描报告表 (E1-01)
+CREATE TABLE IF NOT EXISTS security_scan_report (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scan_tool TEXT NOT NULL CHECK(scan_tool IN ('bandit','semgrep','pip-audit')),
+  trigger_type TEXT NOT NULL CHECK(trigger_type IN ('pr','push','manual','scheduled')) DEFAULT 'manual',
+  branch TEXT,
+  commit_sha TEXT,
+  total_findings INTEGER NOT NULL DEFAULT 0,
+  high_count INTEGER NOT NULL DEFAULT 0,
+  medium_count INTEGER NOT NULL DEFAULT 0,
+  low_count INTEGER NOT NULL DEFAULT 0,
+  findings_json TEXT,
+  passed INTEGER NOT NULL DEFAULT 1,
+  trace_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_scan_tool ON security_scan_report(scan_tool);
+CREATE INDEX IF NOT EXISTS idx_security_scan_passed ON security_scan_report(passed);
+CREATE INDEX IF NOT EXISTS idx_security_scan_created_at ON security_scan_report(created_at);
