@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import ipaddress
 import json
 import re
@@ -888,6 +888,44 @@ async def get_attack_path(
     )
 
     return APIResponse.success(result)
+
+
+@router.post("/findings/{finding_id}/enrich")
+async def enrich_finding(
+    finding_id: int,
+    db: Session = Depends(get_db),
+    current_user: object = Depends(require_role(["operator", "admin"])),
+):
+    """D1-01: 手动触发 CVE 详情补充（NVD + EPSS）"""
+    import uuid as _uuid
+    from services.threat_intel import enrich_cve, fetch_epss
+
+    finding = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+
+    cve_id = finding.cve or finding.vuln_id
+    if not cve_id or not cve_id.upper().startswith("CVE"):
+        raise HTTPException(status_code=400, detail="Finding 无有效 CVE ID")
+
+    result = await enrich_cve(cve_id)
+
+    epss = await fetch_epss(cve_id)
+    if epss is not None:
+        result["epss_score"] = epss
+
+    finding.cvss_score = result.get("cvss_score")
+    finding.cvss_vector = result.get("cvss_vector")
+    finding.epss_score = result.get("epss_score")
+    finding.patch_url = result.get("patch_url")
+    finding.enriched_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return APIResponse.success({
+        "finding_id": finding_id,
+        "cve_id": cve_id,
+        **{k: v for k, v in result.items() if k not in ("from_cache",)},
+    })
 
 
 @router.post("/findings/{finding_id}/assess-exploitability")
