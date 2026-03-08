@@ -1,18 +1,18 @@
 ﻿<template>
   <div class="ai-center flex h-[calc(100vh-64px)] overflow-hidden">
 
-    <!-- 鈹€鈹€ 宸︿晶锛氫細璇濆巻鍙?鈹€鈹€ -->
+    <!-- ── 左侧：会话历史 ── -->
     <aside class="sessions-sidebar w-56 shrink-0 border-r border-border bg-sidebar flex flex-col">
       <div class="flex items-center justify-between px-3.5 py-3 border-b border-border/60">
         <div class="flex items-center gap-1.5">
           <MessagesSquare class="size-3.5 text-primary/70" />
-          <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">鍘嗗彶浼氳瘽</span>
+          <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">历史会话</span>
         </div>
         <Button
           variant="ghost"
           size="icon"
           class="size-6 cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
-          title="鏂板缓浼氳瘽"
+          title="新建会话"
           @click="newSession"
         >
           <SquarePen class="size-3.5" />
@@ -27,7 +27,7 @@
           <div class="size-8 rounded-full bg-muted/50 flex items-center justify-center">
             <MessageCircle class="size-4 text-muted-foreground/40" />
           </div>
-          <p class="text-xs text-muted-foreground/60">鏆傛棤鍘嗗彶浼氳瘽</p>
+          <p class="text-xs text-muted-foreground/60">暂无历史会话</p>
         </div>
         <button
           v-for="s in sessions"
@@ -47,13 +47,13 @@
             />
             <div class="min-w-0 flex-1">
               <p class="truncate text-xs font-medium leading-snug">
-                {{ s.context_type || 'AI 瀵硅瘽' }}
+                {{ s.context_type || 'AI 对话' }}
               </p>
               <p class="text-[10px] opacity-50 mt-0.5 tabular-nums">{{ formatTime(s.started_at) }}</p>
             </div>
             <div
               class="shrink-0 size-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-destructive/15 hover:text-destructive transition-all cursor-pointer"
-              title="鍒犻櫎浼氳瘽"
+              title="删除会话"
               @click.stop="deleteSession(s)"
             >
               <Trash2 class="size-3" />
@@ -63,21 +63,21 @@
       </div>
     </aside>
 
-    <!-- 鈹€鈹€ 涓細瀵硅瘽鍖?鈹€鈹€ -->
+    <!-- ── 中：对话区 ── -->
     <div class="flex flex-1 flex-col min-w-0 min-h-0">
 
-      <!-- 瀵硅瘽椤堕儴 -->
+      <!-- 对话顶部 -->
       <div class="flex items-center justify-between border-b border-border/60 px-5 py-2.5 shrink-0 bg-background/80 backdrop-blur-sm">
         <div class="flex items-center gap-2.5">
           <div class="size-7 rounded-lg bg-primary/10 flex items-center justify-center ring-1 ring-primary/20">
             <BrainCircuit class="size-3.5 text-primary" />
           </div>
           <div>
-            <span class="font-semibold text-sm leading-none">AI 鐮斿垽鍔╂墜</span>
+            <span class="font-semibold text-sm leading-none">AI 研判助手</span>
             <div class="flex items-center gap-1.5 mt-0.5">
               <span class="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span class="text-[10px] text-muted-foreground">鍦ㄧ嚎</span>
-              <span v-if="currentSessionId" class="text-[10px] text-muted-foreground/50">路 浼氳瘽 #{{ currentSessionId }}</span>
+              <span class="text-[10px] text-muted-foreground">在线</span>
+              <span v-if="currentSessionId" class="text-[10px] text-muted-foreground/50">· 会话 #{{ currentSessionId }}</span>
             </div>
           </div>
         </div>
@@ -88,17 +88,17 @@
           @click="newSession"
         >
           <SquarePen class="size-3" />
-          鏂板缓瀵硅瘽
+          新建对话
         </Button>
       </div>
 
-      <!-- 娑堟伅鍒楄〃锛氫娇鐢?AI Elements Conversation 缁勪欢 -->
+      <!-- 消息列表：使用 AI Elements Conversation 组件 -->
       <Conversation class="flex-1 min-h-0 px-5 py-4 [&>div]:!overflow-y-auto">
-        <!-- 绌虹姸鎬侊細浣跨敤 AI Elements ConversationEmptyState -->
+        <!-- 空状态：使用 AI Elements ConversationEmptyState -->
         <ConversationEmptyState
           v-if="messages.length === 0 && !aiThinking"
-          title="寮€濮?AI 鐮斿垽瀵硅瘽"
-          description="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栧紩鐢ㄤ簨浠?ID 杩涜娣卞害鍒嗘瀽"
+          title="开始 AI 研判对话"
+          description="璇㈤棶鍛婅鍒嗘瀽銆佹紡娲炶В璇汇€佷慨澶嶅缓璁紝鎴栧紩鐢ㄤ簨浠?ID 进行深度分析"
         >
           <template #icon>
             <div class="size-14 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center mb-1">
@@ -106,7 +106,7 @@
             </div>
           </template>
 
-          <!-- 蹇嵎鎻愮ず鎸夐挳 -->
+          <!-- 快捷提示按钮 -->
           <div class="flex flex-wrap gap-2 justify-center mt-3">
             <button
               v-for="hint in quickHints"
@@ -119,7 +119,7 @@
           </div>
         </ConversationEmptyState>
 
-        <!-- 娑堟伅娴侊細浣跨敤 AI Elements Message / MessageContent / MessageAvatar -->
+        <!-- 消息流：使用 AI Elements Message / MessageContent / MessageAvatar -->
         <div v-if="messages.length > 0 || aiThinking" class="space-y-5 py-2">
           <TransitionGroup name="msg" tag="div" class="space-y-5">
             <Message
@@ -127,7 +127,7 @@
               :key="idx"
               :from="msg.role"
             >
-              <!-- AI 鍔╂墜娑堟伅锛氬ご鍍忓湪宸?-->
+              <!-- AI 助手消息：头像在左 -->
               <MessageAvatar
                 v-if="msg.role === 'assistant'"
                 src=""
@@ -152,7 +152,7 @@
                 </span>
               </div>
 
-              <!-- 鐢ㄦ埛娑堟伅锛氬ご鍍忓湪鍙?-->
+              <!-- 用户消息：头像在右 -->
               <MessageAvatar
                 v-if="msg.role === 'user'"
                 src=""
@@ -162,7 +162,7 @@
             </Message>
           </TransitionGroup>
 
-          <!-- AI 鎬濊€冧腑鎸囩ず鍣?-->
+          <!-- AI 思考中指示器 -->
           <Transition name="thinking">
             <Message v-if="aiThinking" from="assistant">
               <MessageAvatar
@@ -186,7 +186,7 @@
         </div>
       </Conversation>
 
-      <!-- 杈撳叆鍖猴細浣跨敤 AI Elements PromptInput 缁勪欢 -->
+      <!-- 输入区：使用 AI Elements PromptInput 组件 -->
       <div class="shrink-0 border-t border-border/60 px-4 py-3 bg-background/80 backdrop-blur-sm">
         <PromptInput
           class="rounded-xl border-border/60 shadow-sm"
@@ -199,10 +199,10 @@
           />
           <PromptInputFooter class="px-2 pb-2">
             <span class="text-[10px] text-muted-foreground/50 select-none">
-              Enter 鍙戦€?路 Shift+Enter 鎹㈣ 路 鍙紩鐢ㄤ簨浠?ID
+              Enter 鍙戦€?· Shift+Enter 换行 · 鍙紩鐢ㄤ簨浠?ID
             </span>
             <div class="flex items-center gap-1.5">
-              <!-- TTS 楹﹀厠椋庢寜閽?+ 褰曢煶姘旀场 -->
+              <!-- TTS 楹﹀厠椋庢寜閽?+ 录音气泡 -->
               <div class="relative">
                 <button
                   class="relative size-8 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
@@ -211,7 +211,7 @@
                       ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25'
                       : 'bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary',
                   ]"
-                  :title="ttsRecording ? '鍋滄褰曢煶' : '璇煶杈撳叆'"
+                  :title="ttsRecording ? '停止录音' : '语音输入'"
                   @click="toggleTTSRecording"
                 >
                   <Mic v-if="!ttsRecording" class="size-3.5" />
@@ -228,14 +228,14 @@
                     class="absolute inset-0 rounded-full border-2 border-red-400/40 animate-ping pointer-events-none"
                   />
                 </button>
-                <!-- 褰曢煶涓皬姘旀场鎻愮ず -->
+                <!-- 录音中小气泡提示 -->
                 <Transition name="tts-bubble">
                   <div
                     v-if="ttsRecording"
                     class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 rounded-xl bg-popover border border-border/60 shadow-lg px-3 py-2.5 flex flex-col items-center gap-2 z-50"
                     :class="sttText ? 'w-52' : 'w-36'"
                   >
-                    <!-- 瀹炴椂娉㈠舰 -->
+                    <!-- 实时波形 -->
                     <div class="flex items-center gap-[3px] h-6">
                       <span
                         v-for="(v, i) in waveBars"
@@ -246,7 +246,7 @@
                     </div>
                     <p v-if="sttText" class="text-[10px] text-foreground leading-tight text-center max-w-full truncate">{{ sttText }}</p>
                     <p v-else class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
-                    <p class="text-[9px] text-muted-foreground/40 leading-none">鐐瑰嚮鍋滄骞跺彂閫</p>
+                    <p class="text-[9px] text-muted-foreground/40 leading-none">点击停止并发送</p>
                     <!-- 灏忎笁瑙掔澶?-->
                     <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 size-2 rotate-45 bg-popover border-r border-b border-border/60" />
                   </div>
@@ -263,7 +263,7 @@
       </div>
     </div>
 
-    <!-- 楹﹀厠椋庢潈闄愬脊绐?-->
+    <!-- 麦克风权限弹窗 -->
     <Dialog :open="showMicPermissionDialog" @update:open="showMicPermissionDialog = $event">
       <DialogContent class="sm:max-w-sm">
         <DialogHeader>
@@ -272,29 +272,29 @@
             闇€瑕侀害鍏嬮鏉冮檺
           </DialogTitle>
           <DialogDescription>
-            璇煶杈撳叆鍔熻兘闇€瑕佽闂偍鐨勯害鍏嬮銆傝鍦ㄦ祻瑙堝櫒寮瑰嚭鐨勬潈闄愯姹備腑鐐瑰嚮銆屽厑璁搞€嶏紝鎴栧湪娴忚鍣ㄨ缃腑鎵嬪姩寮€鍚害鍏嬮鏉冮檺銆?          </DialogDescription>
+            语音输入功能需要访问您的麦克风。请在浏览器弹出的权限请求中点击「允许」，或在浏览器设置中手动开启麦克风权限。          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" size="sm" class="cursor-pointer" @click="showMicPermissionDialog = false">
-            鎴戠煡閬撲簡
+            我知道了
           </Button>
           <Button size="sm" class="cursor-pointer" @click="retryMicPermission">
-            閲嶆柊鎺堟潈
+            重新授权
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
-    <!-- 鈹€鈹€ 鍙充晶锛氭姤鍛?鈹€鈹€ -->
+    <!-- ── 右侧：报告 ── -->
     <aside class="w-64 shrink-0 border-l border-border/60 flex flex-col bg-sidebar">
 
-      <!-- 鏍囬 -->
+      <!-- 标题 -->
       <div class="flex items-center gap-1.5 px-3.5 py-3 border-b border-border/60">
         <FileText class="size-3.5 text-primary/70" />
-        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">鎶ュ憡</span>
+        <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">报告</span>
       </div>
 
-      <!-- 鎶ュ憡闈㈡澘 -->
+      <!-- 报告面板 -->
       <div class="flex flex-col flex-1 min-h-0">
         <div class="px-3 py-3 border-b border-border/60 space-y-2 shrink-0">
           <div class="grid grid-cols-2 gap-1.5">
@@ -305,7 +305,7 @@
               :disabled="reportGenerating"
               @click="generateReport('daily')"
             >
-              <FileText class="size-3" /> 鏃ユ姤
+              <FileText class="size-3" /> 日报
             </Button>
             <Button
               variant="outline"
@@ -314,7 +314,7 @@
               :disabled="reportGenerating"
               @click="generateReport('weekly')"
             >
-              <FileText class="size-3" /> 鍛ㄦ姤
+              <FileText class="size-3" /> 周报
             </Button>
           </div>
           <Button
@@ -324,7 +324,7 @@
             :disabled="reportGenerating"
             @click="generateReport('scan')"
           >
-            <ScanLine class="size-3" /> 鎵弿鎶ュ憡
+            <ScanLine class="size-3" /> 扫描报告
           </Button>
           <Transition name="fade">
             <p
@@ -348,7 +348,7 @@
             class="flex flex-col items-center justify-center py-10 gap-2"
           >
             <FileText class="size-6 text-muted-foreground/20" />
-            <p class="text-[11px] text-muted-foreground/50">鏆傛棤鎶ュ憡</p>
+            <p class="text-[11px] text-muted-foreground/50">暂无报告</p>
           </div>
           <div
             v-for="r in reports"
@@ -369,7 +369,7 @@
           </div>
         </div>
 
-        <!-- 鍒嗛〉 -->
+        <!-- 分页 -->
         <div v-if="reportTotal > reportPageSize" class="shrink-0 border-t border-border/60 px-2 py-2 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -394,7 +394,7 @@
       </div>
     </aside>
 
-    <!-- 鈹€鈹€ 鎶ュ憡棰勮寮圭獥 鈹€鈹€ -->
+    <!-- ── 报告预览弹窗 ── -->
     <Dialog v-model:open="showReportPreview">
       <DialogContent class="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader class="shrink-0 px-6 pt-5 pb-3 border-b border-border/60">
@@ -402,7 +402,7 @@
             <div class="flex items-center gap-2">
               <FileText class="size-4 text-primary" />
               <DialogTitle class="text-base">
-                {{ previewReport?.report_type === 'daily' ? '鏃ユ姤' : previewReport?.report_type === 'weekly' ? '鍛ㄦ姤' : previewReport?.report_type === 'scan' ? '鎵弿鎶ュ憡' : '鎶ュ憡' }}
+                {{ previewReport?.report_type === 'daily' ? '日报' : previewReport?.report_type === 'weekly' ? '周报' : previewReport?.report_type === 'scan' ? '扫描报告' : '报告' }}
               </DialogTitle>
               <Badge variant="outline" class="text-[10px] h-5 capitalize">{{ previewReport?.report_type }}</Badge>
             </div>
@@ -411,7 +411,7 @@
               <span class="tabular-nums">{{ previewReport ? formatTime(previewReport.created_at) : '' }}</span>
             </div>
           </div>
-          <DialogDescription class="sr-only">鎶ュ憡棰勮</DialogDescription>
+          <DialogDescription class="sr-only">报告预览</DialogDescription>
         </DialogHeader>
         <div class="flex-1 overflow-y-auto px-6 py-5 min-h-0">
           <div v-if="previewLoading" class="space-y-3 py-8">
@@ -425,16 +425,16 @@
             <Markdown :content="previewContent" :cdn-options="{ mermaid: false, beautifulMermaid: false }" />
           </div>
           <div v-else class="text-center text-muted-foreground py-12">
-            <p class="text-sm">鏃犳硶鍔犺浇鎶ュ憡鍐呭</p>
+            <p class="text-sm">无法加载报告内容</p>
           </div>
         </div>
         <div class="shrink-0 border-t border-border/60 px-6 py-3 flex items-center justify-end gap-2">
           <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 text-xs" @click="exportReportPdf">
             <Download class="size-3.5" />
-            瀵煎嚭 PDF
+            导出 PDF
           </Button>
           <Button variant="outline" size="sm" class="cursor-pointer text-xs" @click="showReportPreview = false">
-            鍏抽棴
+            关闭
           </Button>
         </div>
       </DialogContent>
@@ -501,13 +501,13 @@ interface Session {
 type Report = ReportItem
 
 const quickHints = [
-  '鍒嗘瀽鏈€杩戝憡璀?,
-  '瑙ｈ鎵弿缁撴灉',
-  '缁欏嚭淇寤鸿',
-  '濞佽儊婧簮鍒嗘瀽',
+  '分析最近告警',
+  '解读扫描结果',
+  '给出修复建议',
+  '威胁溯源分析',
 ]
 
-// 鈹€鈹€ 鐘舵€?鈹€鈹€
+// ── 状态 ──
 const messages = ref<Message_[]>([])
 const aiThinking = ref(false)
 const currentSessionId = ref<number | null>(null)
@@ -554,12 +554,13 @@ const startAudioVisualizer = (stream: MediaStream) => {
   const tick = () => {
     if (!analyser || !ttsRecording.value) return
     analyser.getByteFrequencyData(dataArr)
-    // 浠庨璋变腑鍙?5 涓噰鏍风偣鏄犲皠鍒版尝褰㈡潯楂樺害 (0~1)
+    // 浠庨璋变腑鍙?5 个采样点映射到波形条高度 (0~1)
     const len = dataArr.length
     const step = Math.max(1, Math.floor(len / 5))
     for (let i = 0; i < 5; i++) {
       const val = dataArr[Math.min(i * step, len - 1)] / 255
-      // 骞虫粦杩囨浮锛岄伩鍏嶈烦鍔?      waveBars[i] = waveBars[i] * 0.4 + val * 0.6
+      // 平滑过渡，避免跳动
+      waveBars[i] = waveBars[i] * 0.4 + val * 0.6
     }
     animFrameId = requestAnimationFrame(tick)
   }
@@ -591,7 +592,8 @@ const startSTTStream = (stream: MediaStream) => {
       sttText.value = event.text || ''
     }
     if (event.type === 'final' && event.text) {
-      // 褰曢煶缁撴潫鍚庤嚜鍔ㄥ彂閫佽浆鍐欐枃瀛?      const finalText = event.text
+      // 录音结束后自动发送转写文字
+      const finalText = event.text
       setTimeout(() => {
         if (finalText.trim()) sendMessage(finalText.trim())
         sttText.value = ''
@@ -600,7 +602,7 @@ const startSTTStream = (stream: MediaStream) => {
   })
 
   sttStream.connect().then(() => {
-    // 鍚姩 MediaRecorder 娴佸紡鍙戦€侀煶棰戝潡
+    // 启动 MediaRecorder 流式发送音频块
     try {
       mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -625,13 +627,14 @@ onUnmounted(() => {
   stopSTTStream()
 })
 
-// 鈹€鈹€ 蹇嵎鎻愮ず 鈹€鈹€
+// ── 快捷提示 ──
 const fillHint = (hint: string) => {
-  // PromptInput 鍐呴儴绠＄悊鏂囨湰鐘舵€侊紝鏃犳硶鐩存帴娉ㄥ叆
-  // 闄嶇骇涓虹洿鎺ュ彂閫?  sendMessage(hint)
+  // PromptInput 内部管理文本状态，无法直接注入
+  // 降级为直接发送
+  sendMessage(hint)
 }
 
-// 鈹€鈹€ 浼氳瘽绠＄悊 鈹€鈹€
+// ── 会话管理 ──
 const newSession = () => {
   currentSessionId.value = null
   messages.value = []
@@ -676,7 +679,7 @@ const loadSession = async (s: Session) => {
   }
 }
 
-// 鈹€鈹€ 鍙戦€佹秷鎭?鈹€鈹€
+// ── 发送消息 ──
 const sendMessage = async (text: string) => {
   if (!text.trim() || aiThinking.value) return
 
@@ -699,7 +702,7 @@ const sendMessage = async (text: string) => {
   } catch {
     messages.value.push({
       role: 'assistant',
-      content: '鎶辨瓑锛屾湇鍔℃殏鏃朵笉鍙敤锛岃绋嶅悗閲嶈瘯銆?,
+      content: '抱歉，服务暂时不可用，请稍后重试。',
       created_at: new Date().toISOString(),
     })
   } finally {
@@ -707,12 +710,12 @@ const sendMessage = async (text: string) => {
   }
 }
 
-// PromptInput submit 浜嬩欢澶勭悊
+// PromptInput submit 事件处理
 const handlePromptSubmit = (payload: PromptInputMessage) => {
   sendMessage(payload.text)
 }
 
-// 鈹€鈹€ 鎶ュ憡 鈹€鈹€
+// ── 报告 ──
 const loadReports = async () => {
   reportsLoading.value = true
   try {
@@ -737,7 +740,7 @@ const generateReport = async (type: string) => {
     reportPage.value = 1
     await loadReports()
   } catch {
-    reportMsg.value = '鐢熸垚澶辫触'
+    reportMsg.value = '生成失败'
     reportMsgOk.value = false
   } finally {
     reportGenerating.value = false
@@ -772,9 +775,9 @@ const exportReportPdf = () => {
   const el = previewContentRef.value
   if (!el) return
   const reportType = previewReport.value?.report_type ?? 'report'
-  const title = reportType === 'daily' ? '姣忔棩瀹夊叏鎶ュ憡'
-    : reportType === 'weekly' ? '姣忓懆瀹夊叏鎶ュ憡'
-    : reportType === 'scan' ? '瀹夊叏鎵弿鎶ュ憡' : '瀹夊叏鎶ュ憡'
+  const title = reportType === 'daily' ? '每日安全报告'
+    : reportType === 'weekly' ? '每周安全报告'
+    : reportType === 'scan' ? '安全扫描报告' : '安全报告'
   const titleEn = reportType === 'daily' ? 'Daily Security Report'
     : reportType === 'weekly' ? 'Weekly Security Report'
     : reportType === 'scan' ? 'Scan Report' : 'Security Report'
@@ -808,7 +811,7 @@ const exportReportPdf = () => {
     print-color-adjust: exact;
   }
 
-  /* 鈹€鈹€ 灏侀潰澶撮儴 鈹€鈹€ */
+  /* ── 封面头部 ── */
   .cover-header {
     position: relative;
     z-index: 1;
@@ -888,7 +891,7 @@ const exportReportPdf = () => {
     background: none;
   }
 
-  /* 鈹€鈹€ 姝ｆ枃瀹瑰櫒 鈹€鈹€ */
+  /* ── 正文容器 ── */
   .content-wrap {
     position: relative;
     z-index: 1;
@@ -900,7 +903,7 @@ const exportReportPdf = () => {
     overflow: hidden;
   }
 
-  /* 鈹€鈹€ 鍒嗙被鏍囩 鈹€鈹€ */
+  /* ── 分类标签 ── */
   .report-badge {
     display: inline-flex;
     align-items: center;
@@ -917,7 +920,7 @@ const exportReportPdf = () => {
     letter-spacing: 1.2px;
   }
 
-  /* 鈹€鈹€ Markdown 鍐呭鏍峰紡 鈹€鈹€ */
+  /* ── Markdown 内容样式 ── */
   .content-wrap h1 {
     font-size: 20px;
     font-weight: 800;
@@ -1027,7 +1030,7 @@ const exportReportPdf = () => {
     color: #111111;
   }
 
-  /* 鈹€鈹€ 椤佃剼 鈹€鈹€ */
+  /* ── 页脚 ── */
   .page-footer {
     border-top: 1px solid #d1d5db;
     padding: 14px 0 0;
@@ -1053,7 +1056,7 @@ const exportReportPdf = () => {
     color: #444444;
   }
 
-  /* 鈹€鈹€ 姘村嵃 (SVG background, 鎵撳嵃鍏煎) 鈹€鈹€ */
+  /* ── 水印 (SVG background, 打印兼容) ── */
   .watermark-bg {
     position: relative;
   }
@@ -1074,7 +1077,7 @@ const exportReportPdf = () => {
   }
   .watermark-bg > * { position: relative; z-index: 1; }
 
-  /* 鈹€鈹€ 鎵撳嵃浼樺寲 鈹€鈹€ */
+  /* ── 打印优化 ── */
   @media print {
     html, body { background: #fff; }
     .cover-header,
@@ -1089,42 +1092,42 @@ const exportReportPdf = () => {
 </style>
 </head><body>
 
-<!-- 灏侀潰澶撮儴 -->
+<!-- 封面头部 -->
 <div class="cover-header">
   <div class="brand">
     <div class="brand-icon">AI</div>
-    <div class="brand-text">AiMiGuan \u00B7 瀹夊叏鎬佸娍鎰熺煡骞冲彴</div>
+    <div class="brand-text">AiMiGuan \u00B7 安全态势感知平台</div>
   </div>
   <div class="report-title">${title}</div>
   <div class="report-title-en">${titleEn}</div>
   <div class="meta-row">
     <div class="meta-item">
-      <span class="meta-label">鏃ユ湡</span>
+      <span class="meta-label">日期</span>
       <span>${dateStr}</span>
     </div>
-    ${timeStr ? `<div class="meta-item"><span class="meta-label">鏃堕棿</span><span>${timeStr}</span></div>` : ''}
-    ${fileSize ? `<div class="meta-item"><span class="meta-label">澶у皬</span><span>${fileSize}</span></div>` : ''}
+    ${timeStr ? `<div class="meta-item"><span class="meta-label">时间</span><span>${timeStr}</span></div>` : ''}
+    ${fileSize ? `<div class="meta-item"><span class="meta-label">大小</span><span>${fileSize}</span></div>` : ''}
     <div class="meta-item">
-      <span class="meta-label">绫诲瀷</span>
+      <span class="meta-label">类型</span>
       <span>${reportType.toUpperCase()}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-label">瀵嗙骇</span>
-      <span>鍐呴儴</span>
+      <span class="meta-label">密级</span>
+      <span>内部</span>
     </div>
   </div>
   <div class="accent-bar"></div>
 </div>
 
-<!-- 姝ｆ枃鍐呭 (甯︽按鍗拌儗鏅? -->
+<!-- 正文内容 (带水印背景)  -->
 <div class="content-wrap watermark-bg">
   <div class="report-badge">${reportType} report</div>
   ${el.innerHTML}
 </div>
 
-<!-- 椤佃剼 -->
+<!-- 页脚 -->
 <div class="page-footer">
-  <div class="confidential">鍐呴儴璧勬枡 \u00B7 璇峰嬁澶栦紶</div>
+  <div class="confidential">内部资料 \u00B7 请勿外传</div>
   <div class="gen-info">
     Generated by AiMiGuan &middot; ${dateStr} ${timeStr}
   </div>
@@ -1135,7 +1138,7 @@ const exportReportPdf = () => {
   setTimeout(() => { printWin.focus(); printWin.print() }, 400)
 }
 
-// 鈹€鈹€ TTS 褰曢煶鎸夐挳 鈹€鈹€
+// ── TTS 录音按钮 ──
 const startRecording = (stream: MediaStream) => {
   micStream = stream
   ttsRecording.value = true
@@ -1158,7 +1161,7 @@ const toggleTTSRecording = async () => {
       return
     }
   } catch {
-    // permissions API 涓嶆敮鎸佹椂鐩存帴灏濊瘯鑾峰彇
+    // permissions API 不支持时直接尝试获取
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1178,7 +1181,7 @@ const retryMicPermission = async () => {
   }
 }
 
-// 鈹€鈹€ 鏍煎紡鍖?鈹€鈹€
+// ── 格式化 ──
 const formatTime = (t: string) =>
   t ? new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 
@@ -1192,7 +1195,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 娑堟伅鍏ュ満鍔ㄧ敾 */
+/* 消息入场动画 */
 .msg-enter-active {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1217,7 +1220,7 @@ onMounted(() => {
   transform: translateY(-4px);
 }
 
-/* 娣″叆娣″嚭 */
+/* 淡入淡出 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.25s ease;
@@ -1227,7 +1230,7 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* 灞曞紑鏀惰捣 */
+/* 展开收起 */
 .expand-enter-active,
 .expand-leave-active {
   transition: all 0.2s ease;
@@ -1244,7 +1247,7 @@ onMounted(() => {
   max-height: 4rem;
 }
 
-/* 瑙ｉ櫎 InputGroup overflow-hidden 瑁佸壀锛岃姘旀场鍙互婧㈠嚭 */
+/* 解除 InputGroup overflow-hidden 裁剪，让气泡可以溢出 */
 :deep([data-slot="input-group"]) {
   overflow: visible !important;
 }
@@ -1259,7 +1262,7 @@ onMounted(() => {
   transition: height 0.08s ease-out;
 }
 
-/* TTS 姘旀场涓尝褰㈡潯 */
+/* TTS 气泡中波形条 */
 .tts-wave-bar-pop {
   display: inline-block;
   width: 3px;
@@ -1269,7 +1272,7 @@ onMounted(() => {
   transition: height 0.08s ease-out;
 }
 
-/* 姘旀场寮瑰嚭鍔ㄧ敾 */
+/* 气泡弹出动画 */
 .tts-bubble-enter-active {
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1285,7 +1288,7 @@ onMounted(() => {
   transform: translate(-50%, 4px) scale(0.9);
 }
 
-/* 鎶ュ憡棰勮 Markdown 缇庡寲 */
+/* 报告预览 Markdown 美化 */
 .report-markdown :deep(h1) {
   font-size: 1.35rem;
   font-weight: 700;
