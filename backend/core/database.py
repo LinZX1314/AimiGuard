@@ -390,6 +390,9 @@ class PluginRegistry(Base):
     endpoint = Column(String)
     config_json = Column(Text)
     enabled = Column(Integer, default=1)
+    declared_permissions = Column(Text)  # S2-02: JSON array e.g. ["read_only","network_access"]
+    actual_calls_json = Column(Text)  # S2-02: 运行时调用记录
+    risk_score = Column(Integer, default=0)  # S2-02: 风险评分
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -751,6 +754,11 @@ def init_db():
         _ensure_sqlite_column("scan_finding", "epss_score", "REAL")
         _ensure_sqlite_column("scan_finding", "patch_url", "TEXT")
         _ensure_sqlite_column("scan_finding", "enriched_at", "TEXT")
+
+        # plugin_registry: S2-02 权限声明
+        _ensure_sqlite_column("plugin_registry", "declared_permissions", "TEXT")
+        _ensure_sqlite_column("plugin_registry", "actual_calls_json", "TEXT")
+        _ensure_sqlite_column("plugin_registry", "risk_score", "INTEGER")
 
         # fix_ticket: A2-01 修复工单
         _ensure_sqlite_column("fix_ticket", "finding_id", "INTEGER")

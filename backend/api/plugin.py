@@ -232,6 +232,72 @@ async def verify_plugin_security(
     })
 
 
+@router.get("/{plugin_id}/permissions")
+async def get_plugin_permissions(
+    plugin_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_plugins")),
+):
+    """S2-02: 查看插件权限声明与风险评分"""
+    import json as _json
+    from services.plugin_sandbox import parse_permissions, compute_risk_score
+
+    plugin = db.query(PluginRegistry).filter(PluginRegistry.id == plugin_id).first()
+    if not plugin:
+        raise HTTPException(404, "插件不存在")
+
+    perms = parse_permissions(plugin.declared_permissions)
+    return APIResponse.success({
+        "plugin_id": plugin.id,
+        "plugin_name": plugin.plugin_name,
+        "declared_permissions": sorted(perms),
+        "risk_score": plugin.risk_score or compute_risk_score(list(perms)),
+        "valid_permissions": sorted(["read_only", "execute", "network_access", "file_system"]),
+    })
+
+
+@router.put("/{plugin_id}/permissions")
+async def update_plugin_permissions(
+    plugin_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("manage_plugins")),
+):
+    """S2-02: 更新插件权限声明"""
+    import json as _json
+    from services.plugin_sandbox import validate_declared_permissions, compute_risk_score
+
+    plugin = db.query(PluginRegistry).filter(PluginRegistry.id == plugin_id).first()
+    if not plugin:
+        raise HTTPException(404, "插件不存在")
+
+    body = await request.json()
+    permissions = body.get("permissions", [])
+
+    valid, reason = validate_declared_permissions(permissions)
+    if not valid:
+        raise HTTPException(400, f"权限声明无效: {reason}")
+
+    plugin.declared_permissions = _json.dumps(permissions)
+    plugin.risk_score = compute_risk_score(permissions)
+    plugin.updated_at = _utc_now()
+    db.commit()
+
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
+    AuditService.log(
+        db=db, actor=str(current_user.username),
+        action="update_plugin_permissions", target=plugin.plugin_name,
+        target_type="plugin", reason=str(permissions),
+        trace_id=trace_id,
+    )
+
+    return APIResponse.success({
+        "plugin_id": plugin.id,
+        "declared_permissions": permissions,
+        "risk_score": plugin.risk_score,
+    }, message="插件权限已更新")
+
+
 @router.get("/blacklist")
 async def get_blacklist(
     current_user: User = Depends(require_permissions("manage_plugins")),
