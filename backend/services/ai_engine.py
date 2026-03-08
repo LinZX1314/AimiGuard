@@ -434,5 +434,77 @@ class AIEngine:
         return result.as_dict() if with_meta else result.text
 
 
+    async def assess_exploitability(
+        self,
+        vuln_id: str,
+        service_info: Dict[str, Any],
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """A1-01: 评估漏洞可利用性"""
+        fallback = {
+            "is_exploitable": False,
+            "exploit_source": None,
+            "exploitation_complexity": "high",
+            "attack_prerequisites": [],
+            "degraded": True,
+            "fallback_reason": "rule_based_default",
+        }
+
+        severity = str(service_info.get("severity", "")).upper()
+        if severity in ("CRITICAL", "HIGH"):
+            fallback["is_exploitable"] = True
+            fallback["exploitation_complexity"] = "medium" if severity == "HIGH" else "low"
+
+        prompt = (
+            "你是漏洞可利用性评估专家。请评估以下漏洞并严格输出 JSON:\n"
+            "{\n"
+            '  "is_exploitable": true/false,\n'
+            '  "exploit_source": "Exploit-DB/MetaSploit/GitHub/None",\n'
+            '  "exploitation_complexity": "low/medium/high",\n'
+            '  "attack_prerequisites": ["前置条件1", "前置条件2"]\n'
+            "}\n\n"
+            f"vuln_id={vuln_id}\n"
+            f"service={service_info.get('service', 'unknown')}\n"
+            f"port={service_info.get('port', 'unknown')}\n"
+            f"severity={severity}\n"
+            f"cve={service_info.get('cve', 'N/A')}\n"
+            f"evidence={_truncate(str(service_info.get('evidence', '')), 500)}\n"
+        )
+
+        try:
+            result = await self.llm_client.generate_json(
+                prompt,
+                system="你是漏洞可利用性分析模型，只输出 JSON，不输出多余文本。",
+            )
+            is_exploitable = bool(result.get("is_exploitable", False))
+            exploit_source = str(result.get("exploit_source") or "") or None
+            complexity = str(result.get("exploitation_complexity", "high")).lower()
+            if complexity not in ("low", "medium", "high"):
+                complexity = "high"
+            prerequisites = result.get("attack_prerequisites", [])
+            if not isinstance(prerequisites, list):
+                prerequisites = []
+
+            return {
+                "is_exploitable": is_exploitable,
+                "exploit_source": exploit_source,
+                "exploitation_complexity": complexity,
+                "attack_prerequisites": prerequisites,
+                "degraded": False,
+                "fallback_reason": None,
+                "provider": self.llm_client.provider,
+                "model": self.llm_client.model,
+                "trace_id": trace_id,
+            }
+        except Exception as exc:
+            return {
+                **fallback,
+                "fallback_reason": f"llm_exploit_assess_failed:{exc.__class__.__name__}",
+                "provider": self.llm_client.provider,
+                "model": self.llm_client.model,
+                "trace_id": trace_id,
+            }
+
+
 ai_engine = AIEngine()
 

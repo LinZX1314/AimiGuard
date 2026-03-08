@@ -9,10 +9,11 @@ import json
 import re
 import time
 
-from core.database import get_db, ScanTask, ScanFinding, Asset
+from core.database import get_db, ScanTask, ScanFinding, Asset, User
 from core.response import APIResponse
 from services.scanner import scanner
 from services.audit_service import AuditService
+from services.ai_engine import ai_engine
 from services.event_broadcaster import SCAN_TASKS_CHANNEL, event_broadcaster
 from api.auth import get_current_user, require_role
 
@@ -820,6 +821,52 @@ async def update_finding_status(
     )
 
     return APIResponse.success(message="Finding status updated")
+
+
+@router.post("/findings/{finding_id}/assess-exploitability")
+async def assess_finding_exploitability(
+    finding_id: int,
+    db: Session = Depends(get_db),
+    current_user: object = Depends(require_role(["operator", "admin"])),
+):
+    """A1-01: 评估漏洞可利用性"""
+    import uuid as _uuid
+
+    finding = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+
+    trace_id = str(_uuid.uuid4())
+    service_info = {
+        "service": finding.service,
+        "port": finding.port,
+        "severity": finding.severity,
+        "cve": finding.cve,
+        "evidence": finding.evidence,
+    }
+
+    result = await ai_engine.assess_exploitability(
+        vuln_id=finding.vuln_id or finding.cve or f"finding-{finding_id}",
+        service_info=service_info,
+        trace_id=trace_id,
+    )
+
+    exploit_data = {
+        "is_exploitable": result.get("is_exploitable", False),
+        "exploit_source": result.get("exploit_source"),
+        "exploitation_complexity": result.get("exploitation_complexity", "high"),
+        "attack_prerequisites": result.get("attack_prerequisites", []),
+        "degraded": result.get("degraded", True),
+    }
+
+    finding.exploitability_json = json.dumps(exploit_data, ensure_ascii=False)
+    db.commit()
+
+    return APIResponse.success({
+        **exploit_data,
+        "finding_id": finding_id,
+        "trace_id": trace_id,
+    })
 
 
 # ===== Nmap 配置和扫描 =====

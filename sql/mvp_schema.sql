@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS scan_finding (
   cve TEXT,
   severity TEXT CHECK(severity IN ('CRITICAL','HIGH','MEDIUM','LOW','INFO')),
   evidence TEXT,
+  exploitability_json TEXT,
   status TEXT NOT NULL CHECK(status IN ('NEW','CONFIRMED','FALSE_POSITIVE','FIXED','IGNORED')) DEFAULT 'NEW',
   trace_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

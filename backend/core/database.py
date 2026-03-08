@@ -215,6 +215,7 @@ class ScanFinding(Base):
     state = Column(String)  # 主机状态 (up/down)
     os_type = Column(String)  # 操作系统类型
     os_accuracy = Column(String)  # OS识别精确度
+    exploitability_json = Column(Text)
     status = Column(String, nullable=False, default="NEW")
     trace_id = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -691,6 +692,9 @@ def init_db():
         # audit_log: 审计哈希链字段（日报/周报等写审计时依赖）
         _ensure_sqlite_column("audit_log", "integrity_hash", "VARCHAR")
         _ensure_sqlite_column("audit_log", "prev_hash", "VARCHAR")
+
+        # scan_finding: A1-01 可利用性评估
+        _ensure_sqlite_column("scan_finding", "exploitability_json", "TEXT")
 
         # fix_ticket: A2-01 修复工单
         _ensure_sqlite_column("fix_ticket", "finding_id", "INTEGER")
