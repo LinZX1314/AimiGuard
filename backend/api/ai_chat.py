@@ -196,6 +196,23 @@ async def chat(
     if not response_content:
         response_content = "模型返回为空，请稍后重试。"
 
+    # S1-02: AI 输出内容安全校验
+    from services.output_guard import check_output_safety, DEGRADED_RESPONSE
+    output_safe, violation_type = check_output_safety(response_content)
+    if not output_safe:
+        from services.audit_service import AuditService
+        AuditService.log(
+            db=db,
+            actor="ai_engine",
+            action="ai_output_safety_violation",
+            target="ai_chat",
+            target_type="ai_output",
+            reason=violation_type,
+            result="filtered",
+            trace_id=trace_id,
+        )
+        response_content = DEGRADED_RESPONSE
+
     try:
         from services.metrics_service import metrics
 
