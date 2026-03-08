@@ -38,7 +38,7 @@
 
           <div class="flex items-center gap-2">
             <ShieldCheck class="size-5 text-primary" />
-            <span class="hidden text-sm font-semibold tracking-tight text-foreground sm:inline">AI Guardian</span>
+            <span class="hidden text-sm font-semibold tracking-tight text-foreground sm:inline">玄枢·AI攻防指挥官</span>
           </div>
         </div>
 
