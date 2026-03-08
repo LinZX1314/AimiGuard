@@ -298,6 +298,74 @@ async def update_plugin_permissions(
     }, message="插件权限已更新")
 
 
+@router.get("/{plugin_id}/call-logs")
+async def get_plugin_call_logs(
+    plugin_id: int,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_plugins")),
+):
+    """S2-03: 查看插件调用日志"""
+    from core.database import PluginCallLog
+
+    plugin = db.query(PluginRegistry).filter(PluginRegistry.id == plugin_id).first()
+    if not plugin:
+        raise HTTPException(404, "插件不存在")
+
+    query = db.query(PluginCallLog).filter(PluginCallLog.plugin_id == plugin_id)
+    total = query.count()
+    logs = (
+        query.order_by(PluginCallLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return APIResponse.success({
+        "total": total,
+        "page": page,
+        "items": [
+            {
+                "id": l.id,
+                "tool_name": l.tool_name,
+                "args_hash": l.args_hash,
+                "result_hash": l.result_hash,
+                "latency_ms": l.latency_ms,
+                "success": bool(l.success),
+                "error_message": l.error_message,
+                "trace_id": l.trace_id,
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+            }
+            for l in logs
+        ],
+    })
+
+
+@router.get("/{plugin_id}/anomalies")
+async def get_plugin_anomalies(
+    plugin_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_plugins")),
+):
+    """S2-03: 检测插件异常行为"""
+    from services.plugin_monitor import detect_anomalies, get_call_stats
+
+    plugin = db.query(PluginRegistry).filter(PluginRegistry.id == plugin_id).first()
+    if not plugin:
+        raise HTTPException(404, "插件不存在")
+
+    anomalies = detect_anomalies(db, plugin_id)
+    stats = get_call_stats(db, plugin_id)
+
+    return APIResponse.success({
+        "plugin_id": plugin_id,
+        "plugin_name": plugin.plugin_name,
+        "anomalies": anomalies,
+        "stats": stats,
+    })
+
+
 @router.get("/blacklist")
 async def get_blacklist(
     current_user: User = Depends(require_permissions("manage_plugins")),

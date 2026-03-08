@@ -791,3 +791,21 @@ CREATE TABLE IF NOT EXISTS honeytoken (
 
 CREATE INDEX IF NOT EXISTS idx_honeytoken_status ON honeytoken(status);
 CREATE INDEX IF NOT EXISTS idx_honeytoken_type ON honeytoken(token_type);
+
+-- S2-03: MCP 插件调用日志
+CREATE TABLE IF NOT EXISTS plugin_call_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plugin_id INTEGER NOT NULL,
+  plugin_name TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  args_hash TEXT,
+  result_hash TEXT,
+  latency_ms REAL,
+  success INTEGER NOT NULL DEFAULT 1,
+  error_message TEXT,
+  trace_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_plugin_call_log_plugin ON plugin_call_log(plugin_id);
+CREATE INDEX IF NOT EXISTS idx_plugin_call_log_created ON plugin_call_log(created_at);

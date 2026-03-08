@@ -397,6 +397,21 @@ class PluginRegistry(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class PluginCallLog(Base):
+    __tablename__ = "plugin_call_log"
+    id = Column(Integer, primary_key=True, index=True)
+    plugin_id = Column(Integer, nullable=False, index=True)
+    plugin_name = Column(String, nullable=False)
+    tool_name = Column(String, nullable=False)
+    args_hash = Column(String)
+    result_hash = Column(String)
+    latency_ms = Column(Float)
+    success = Column(Integer, default=1)
+    error_message = Column(Text)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class PushChannel(Base):
     __tablename__ = "push_channel"
     id = Column(Integer, primary_key=True, index=True)
