@@ -1152,23 +1152,23 @@ sequenceDiagram
    - 验证外部防火墙 API 回执记录、失败重试、审计字段完整性。
 
 ## 第一版里程碑
-- [ ] 打通防御监控链路：API/蜜罐 -> SQLite -> Python 执行 -> 交换机封禁
-- [ ] 打通探测扫描链路：资产配置 -> Kali/MCP/漏洞工具 -> SQLite 入库
-- [ ] 完成 1 台交换机封禁闭环 + 1 套扫描工具闭环
-- [ ] 完成统一 `/api/` 路由规范与 `/api/v1` 版本化
-- [ ] 完成前后端分离部署与前端 Hash 路由
-- [ ] 完成 API 白名单与鉴权策略落地
-- [ ] 完成 `api/` 目录改造（后端 API Python 文件归一）
-- [ ] 扩展到多台交换机并按顺序执行
-- [ ] 增加凭据加密存储与读取审计
-- [ ] 增加面板登录、RBAC、高风险操作确认
-- [ ] 上线 AI 对话（基于任务上下文）
-- [ ] 上线 AI 分析（聚类、解释、修复建议）
-- [ ] 上线 AI 报告中心（日报/周报/专项报告）
-- [ ] 上线本地模型 TTS 语音播报（告警与报告摘要）
-- [ ] 接入 MCP 第三方插件（如 bot）与异常推送通道
-- [ ] 增加外部防火墙 API 同步封堵（含回执、重试、审计）
-- [ ] 实现本地模型默认 + 可切换模型路由
+- [x] 打通防御监控链路：API/蜜罐 -> SQLite -> Python 执行 -> 交换机封禁
+- [x] 打通探测扫描链路：资产配置 -> Kali/MCP/漏洞工具 -> SQLite 入库
+- [x] 完成 1 台交换机封禁闭环 + 1 套扫描工具闭环
+- [x] 完成统一 `/api/` 路由规范与 `/api/v1` 版本化
+- [x] 完成前后端分离部署与前端 Hash 路由
+- [x] 完成 API 白名单与鉴权策略落地
+- [x] 完成 `api/` 目录改造（后端 API Python 文件归一）
+- [x] 扩展到多台交换机并按顺序执行
+- [x] 增加凭据加密存储与读取审计
+- [x] 增加面板登录、RBAC、高风险操作确认
+- [x] 上线 AI 对话（基于任务上下文）
+- [x] 上线 AI 分析（聚类、解释、修复建议）
+- [x] 上线 AI 报告中心（日报/周报/专项报告）
+- [x] 上线本地模型 TTS 语音播报（告警与报告摘要）
+- [x] 接入 MCP 第三方插件（如 bot）与异常推送通道
+- [x] 增加外部防火墙 API 同步封堵（含回执、重试、审计）
+- [x] 实现本地模型默认 + 可切换模型路由
 
 ## 实施建议
 - 先做 MVP：`Python + SQLite + Vue` 固定架构，完成防御监控闭环 + 探测扫描闭环 + 最小审批流程
@@ -2287,13 +2287,13 @@ requirements.txt
 ## 分步 TODO 清单（可直接执行）
 > 使用方式：按顺序逐项勾选，不建议跳步。每完成一项需附最小验证结果（命令输出或页面截图说明）。
 
-### Step 0：项目初始化（先做）
-- [ ] 0.1 创建目录：`backend/`、`frontend/`、`scripts/`、`sql/`、`tests/`。
-- [ ] 0.2 创建环境模板：`backend/.env.example`、`frontend/.env.example`。
-- [ ] 0.3 创建后端入口：`backend/main.py`，包含 `/health`。
-- [ ] 0.4 创建前端壳：`frontend` 初始化并配置 Hash 路由。
-- [ ] 0.5 创建一键启动脚本：`scripts/dev.ps1`（初始化 DB + 启动前后端）。
-- [ ] 0.6 验证：本地可访问前端页面且 `/api/health` 返回成功。
+### Step 0：项目初始化（先做）✅
+- [x] 0.1 创建目录：`backend/`、`frontend/`、`scripts/`、`sql/`、`tests/`。
+- [x] 0.2 创建环境模板：`backend/.env.example`、`frontend/.env.example`。
+- [x] 0.3 创建后端入口：`backend/main.py`，包含 `/health`。
+- [x] 0.4 创建前端壳：`frontend` 初始化并配置 Hash 路由。
+- [x] 0.5 创建一键启动脚本：`scripts/dev.ps1`（初始化 DB + 启动前后端）。
+- [x] 0.6 验证：本地可访问前端页面且 `/api/health` 返回成功。
 
 ### Step 1：数据库与迁移（基础底座）✅
 - [x] 1.1 落地首版建表 SQL：`sql/mvp_schema.sql`。
@@ -4377,7 +4377,7 @@ grep "DEGRADED" backend/logs/ai.log
 
 #### S1：Prompt 注入与越狱防护（紧急）
 
-- [ ] **S1-01** 输入净化中间件
+- [x] **S1-01** 输入净化中间件
   - 在 `ai_engine.py` 和 `ai_chat.py` 前置输入校验层。
   - 检测并拦截：`ignore previous instructions`、角色扮演指令、XML/JSON/INI 伪装格式（Policy Puppetry 攻击模式）。
   - 过滤 Base64、Unicode 混淆字符串（参考文章 76.2% Base64 攻击成功率）。
@@ -4385,22 +4385,22 @@ grep "DEGRADED" backend/logs/ai.log
   - 被拦截请求写 `audit_log(action='prompt_injection_blocked')`，不返回详细原因给用户。
   - 最小测试：构造典型注入 payload，验证拦截率 >= 90%；合法对话不误拦。
 
-- [ ] **S1-02** AI 输出内容安全校验
+- [x] **S1-02** AI 输出内容安全校验
   - 对 `ai_engine` 返回的评分理由、对话回复、报告内容做输出审查。
   - 检测：是否包含不应出现的内部系统信息、凭据片段、恶意指令。
   - 超出安全边界的回复替换为标准降级响应，并写告警 `alert_event(type='ai_output_safety_violation')`。
 
-- [ ] **S1-03** 对话上下文隔离
+- [x] **S1-03** 对话上下文隔离
   - AI 对话会话（`ai_chat_session`）严格按 `session_id` 隔离上下文，禁止跨用户/跨会话上下文泄漏。
   - 会话过期后强制清除上下文缓存。
   - 接口：`GET /api/v1/ai/chat/{session_id}/context` 仅允许 session 归属用户访问（RBAC 校验）。
 
-- [ ] **S1-04** Prompt 模板版本管理与审计
+- [x] **S1-04** Prompt 模板版本管理与审计
   - 所有 Prompt 模板（风险评估/扫描分析/报告生成）版本化存储，变更需 `admin` 审批并记录 `audit_log`。
   - 提供 `GET /api/v1/ai/prompt-templates`、`PUT /api/v1/ai/prompt-templates/{id}` 接口。
   - 模板变更差异（Diff）可在审计中心查看。
 
-- [ ] **S1-05** AI 降级安全边界
+- [x] **S1-05** AI 降级安全边界
   - 当检测到潜在越狱/注入时，切换到最严格的规则引擎兜底模式（不调用 LLM）。
   - 降级状态在 Topbar 显示安全提示，并触发通知推送。
 
@@ -4409,19 +4409,19 @@ grep "DEGRADED" backend/logs/ai.log
 > 参考文章：「2025年9月，npm 上发现首个专门针对 Agentic AI 系统的恶意 MCP 服务器」；「Malwarebytes 预测基于 MCP 的攻击框架将成为2026年网络犯罪决定性能力」。
 > 当前 `plugin_registry` 仅做注册，无安全校验。
 
-- [ ] **S2-01** MCP 插件来源验证与签名校验
+- [x] **S2-01** MCP 插件来源验证与签名校验
   - 插件注册时强制提供：来源 URL、发布者签名、哈希校验值。
   - 实现 `services/plugin_security.py`：`verify_plugin(registry_entry) -> (bool, risk_level, reason)`。
   - 对接公开已知恶意 MCP 服务器黑名单（可集成 GitHub 社区维护的列表）。
   - 签名校验失败时拒绝注册，写 `alert_event(type='malicious_plugin_blocked', level='critical')`。
 
-- [ ] **S2-02** MCP 插件权限最小化（OWASP 最小 Agency 原则）
+- [x] **S2-02** MCP 插件权限最小化（OWASP 最小 Agency 原则）
   - 每个插件注册时声明权限范围（`read_only/execute/network_access/file_system`）。
   - 运行时按声明权限做沙箱隔离，超出声明权限的调用立即终止并告警。
   - 数据表扩展 `plugin_registry`：增加 `declared_permissions TEXT, actual_calls_json TEXT, risk_score INTEGER`。
   - 提供权限矩阵查看页面 `#/integrations/plugins/{id}/permissions`。
 
-- [ ] **S2-03** MCP 插件行为监控与异常检测
+- [x] **S2-03** MCP 插件行为监控与异常检测
   - 记录每次 MCP 工具调用：`plugin_id/tool_name/args_hash/result_hash/latency_ms/trace_id`（表 `plugin_call_log`）。
   - 异常检测规则：
     - 单插件调用频率突增 > 5x 正常基线 → `warning` 告警。
@@ -4429,7 +4429,7 @@ grep "DEGRADED" backend/logs/ai.log
     - 插件返回数据体积超出预期阈值 → `warning` 告警（防数据外泄）。
   - 接口：`GET /api/v1/plugins/{id}/call-logs`、`GET /api/v1/plugins/{id}/anomalies`。
 
-- [ ] **S2-04** 插件隔离沙箱
+- [x] **S2-04** 插件隔离沙箱
   - MCP stdio 子进程使用受限系统权限运行（非 root/admin）。
   - 限制子进程网络访问范围（仅允许声明的目标域名/IP 段）。
   - 超时强制终止，避免长期占用资源。
@@ -4439,12 +4439,12 @@ grep "DEGRADED" backend/logs/ai.log
 > 参考文章：「只需5个精心构造的文档，就能通过 RAG 投毒使 AI 响应被操控90%的时间——向量嵌入层正在成为新的攻击入口」。
 > 当前 AI 引擎接受扫描结果、告警数据作为上下文输入，存在相同风险。
 
-- [ ] **S3-01** 上下文输入来源可信度校验
+- [x] **S3-01** 上下文输入来源可信度校验
   - 对进入 AI Prompt 的外部数据（扫描结果/告警原始载荷/用户提供的 IP 说明）做可信度标记。
   - 外部来源数据在 Prompt 中以明确边界隔离（XML 标签/分隔符），防止注入主指令区。
   - 实现 `services/context_sanitizer.py`：为每类上下文数据定义最大长度、允许字符集、危险模式过滤。
 
-- [ ] **S3-02** AI 知识库/向量存储安全（若后续引入 RAG）
+- [x] **S3-02** AI 知识库/向量存储安全（若后续引入 RAG）
   - 知识库文档写入需经 `admin` 审批 + 内容安全扫描后方可入库。
   - 定期对知识库做完整性校验（内容哈希），发现篡改触发 `critical` 告警。
   - 接口：`GET /api/v1/ai/knowledge-base/integrity-check`。
@@ -4453,17 +4453,17 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 参考文章 Gartner 预测：到2026年40%企业应用嵌入 Agent；OWASP Agentic Security Initiative 提出「最小 Agency 原则」。
 
-- [ ] **S4-01** AI 决策行为审计强化
+- [x] **S4-01** AI 决策行为审计强化
   - 当前 `ai_decision_log` 记录决策结果，需补充：输入 Prompt 摘要哈希、模型调用参数、推理耗时、Token 消耗。
   - 支持按 `decision_type/model_name/confidence_range/time` 多维查询决策日志。
   - 前端 `#/ai-center` 新增「决策审计」标签页：可回放任意决策的输入/输出/置信度。
 
-- [ ] **S4-02** AI 自主动作边界控制
+- [x] **S4-02** AI 自主动作边界控制
   - 明确划定 AI 可自主执行的动作范围（仅限评分/建议/报告生成），禁止 AI 直接触发封禁/回滚/外部 API 调用。
   - 所有 `execution_task` 必须由人工审批创建，技术层面在执行器校验 `approved_by` 不为空。
   - 接口层校验：`ai_engine` 返回的 `action_suggest` 只允许 `BLOCK/MONITOR/IGNORE`，不允许包含具体命令。
 
-- [ ] **S4-03** 异常 AI 行为告警
+- [x] **S4-03** 异常 AI 行为告警
   - 监控规则：
     - 连续 N 次 AI 评分全为满分/零分（可能被操纵）→ `warning` 告警。
     - AI 建议动作分布突变（如95%突变为 BLOCK）→ `warning` 告警。
@@ -4478,23 +4478,23 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 文章背景：「2024年 CVE 数量突破4万条，人工评分极限已至，威胁情报自动化从锦上添花变成刚需」；GPT-5 在 CVE 评分维度准确率达89%。
 
-- [ ] **D1-01** CVE 数据库集成与自动关联
+- [x] **D1-01** CVE 数据库集成与自动关联
   - 扫描结果（`scan_finding`）存储 `vuln_id` 后，自动查询 NVD/CNNVD API 补充：`cvss_score/cvss_vector/epss_score/affected_versions/patch_available`。
   - 实现 `services/threat_intel.py`：`enrich_cve(vuln_id) -> CVEDetail`，支持本地缓存（TTL 24h）避免频繁请求。
   - 数据表扩展 `scan_finding`：增加 `cvss_score REAL, cvss_vector TEXT, epss_score REAL, patch_url TEXT, enriched_at TEXT`。
   - 接口：`POST /api/v1/scan/findings/{id}/enrich`（手动触发）、后台任务自动批量补充。
 
-- [ ] **D1-02** EPSS 评分驱动修复优先级
+- [x] **D1-02** EPSS 评分驱动修复优先级
   - EPSS（Exploit Prediction Scoring System）分数 >= 0.1 的漏洞标记为「优先修复」。
   - 前端漏洞列表新增「可利用性」列，显示 EPSS 分数与趋势（↑↓）。
   - 报告生成时按 CVSS × EPSS 综合评分排序，P0 项自动高亮。
 
-- [ ] **D1-03** 多源威胁情报聚合
+- [x] **D1-03** 多源威胁情报聚合
   - 支持接入额外情报源（可配置）：CISA KEV（已知被利用漏洞目录）、AlienVault OTX、自定义 TAXII/STIX 源。
   - `plugin_registry` 扩展情报源插件类型 `plugin_type='threat_intel'`，统一接入协议。
   - 情报命中的 IP/漏洞自动关联到对应 `threat_event/scan_finding`，提升 AI 评分上下文质量。
 
-- [ ] **D1-04** 威胁情报看板（`#/overview` 新模块）
+- [x] **D1-04** 威胁情报看板（`#/overview` 新模块）
   - 新增「情报视图」标签：今日新增 CVE 数、命中本地资产的 CVE、EPSS Top10、KEV 命中数。
   - 接口：`GET /api/v1/threat-intel/overview`。
 
@@ -4503,19 +4503,19 @@ grep "DEGRADED" backend/logs/ai.log
 > 文章背景：「AI 生成和管理动态蜜罐与蜜标，能实时响应攻击者探测行为，大幅提高诱捕成功率」。
 > 当前项目 HFish 仅作数据源，无蜜罐策略管理能力。
 
-- [ ] **D2-01** 蜜罐策略管理接口
+- [x] **D2-01** 蜜罐策略管理接口
   - HFish 对接升级：从仅读取告警，扩展为支持通过 HFish API 动态配置蜜罐服务。
   - 实现 `services/honeypot_manager.py`：`create_honeypot(config) / list_honeypots() / update_honeytoken()`。
   - 接口：`GET/POST /api/v1/honeypots`、`PUT /api/v1/honeypots/{id}`、`GET /api/v1/honeypots/{id}/alerts`。
   - 数据表：`honeypot_config(id, name, type, target_service, bait_data, status, created_at)`。
 
-- [ ] **D2-02** AI 驱动蜜罐自适应
+- [x] **D2-02** AI 驱动蜜罐自适应
   - 根据当前攻击趋势（高频攻击的服务类型）自动推荐蜜罐部署策略。
   - 例：近 24h SSH 爆破攻击激增 → 建议新增 SSH 蜜罐节点并生成诱饵凭据。
   - 实现：`ai_engine` 新增 `suggest_honeypot_strategy(attack_trend) -> HoneypotSuggestion` 方法。
   - 前端在 `#/integrations` 新增「蜜罐管理」标签页，展示建议并支持一键部署（需 `operator` 权限）。
 
-- [ ] **D2-03** Honeytoken 生命周期管理
+- [x] **D2-03** Honeytoken 生命周期管理
   - 生成可追踪的蜜标（假凭据/假API Key/假文档）并监控其被使用情况。
   - 数据表：`honeytoken(id, token_type, value_hash, deployed_location, triggered_at, attacker_ip, status)`。
   - 蜜标被触发时自动创建高置信度 `threat_event(ai_score=95, action_suggest=BLOCK)`，无需 AI 评分。
@@ -4525,19 +4525,19 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 文章背景：「多位开源软件维护者抱怨收到大量 AI 生成的幻觉漏洞报告」；「67%的安全专业人员认为市场上大量自主 SOC 产品不过是配了更好 LLM 摘要的 SOAR」。
 
-- [ ] **D3-01** 误报标记与反馈闭环
+- [x] **D3-01** 误报标记与反馈闭环
   - 审批界面新增「标记为误报」操作（仅 `operator/admin`），触发：
     - `threat_event.status=FALSE_POSITIVE`（新增状态）。
     - 自动写入白名单候选（需 `admin` 确认）。
     - 将误报样本写入 AI 反馈队列（用于后续模型调优参考）。
   - 数据表扩展 `threat_event`：增加 `false_positive_by TEXT, false_positive_reason TEXT, false_positive_at TEXT`。
 
-- [ ] **D3-02** 误报率统计看板
+- [x] **D3-02** 误报率统计看板
   - `#/overview` 新增误报率指标卡：周误报率、来源分布（HFish/黑名单/其他）、Top 误报 IP 段。
   - 接口：`GET /api/v1/overview/false-positive-stats`。
   - 目标：周误报率 <= 20%（当前验收 KPI），触发阈值时推送告警。
 
-- [ ] **D3-03** 告警聚类降噪
+- [x] **D3-03** 告警聚类降噪
   - 实现 `services/alert_cluster.py`：对同源/同类型/同时间窗告警做自动聚类，聚合为单条代表事件。
   - 聚类策略：`(attack_ip, attack_type, time_bucket_1h)` 相同则合并，合并后 `attack_count` 累加。
   - 前端展示聚类标识和包含告警数，支持展开查看明细。
@@ -4550,7 +4550,7 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 文章背景：AIxCC 自动检出率从37%跃升至86%；XBOW 跻身 HackerOne 榜首；漏洞可利用性评估是从「单点发现」到「威胁量化」的关键跨越。
 
-- [ ] **A1-01** 扫描结果可利用性评估
+- [x] **A1-01** 扫描结果可利用性评估
   - 扫描发现漏洞后，AI 引擎额外输出 `exploitability_assessment`：
     - `is_exploitable: bool`（是否已知公开 PoC）
     - `exploit_source: str`（Exploit-DB/MetaSploit/GitHub）
@@ -4560,7 +4560,7 @@ grep "DEGRADED" backend/logs/ai.log
   - 数据表扩展 `scan_finding`：增加 `exploitability_json TEXT`。
   - 前端漏洞详情卡新增「可利用性」区块，高可利用性漏洞加红色警示标记。
 
-- [ ] **A1-02** 攻击路径可视化（横向移动分析）
+- [x] **A1-02** 攻击路径可视化（横向移动分析）
   - 基于多资产扫描结果，分析潜在攻击横向移动路径：
     - 高危服务（SMB/RDP/SSH）+ 弱口令 → 标记横向移动风险节点。
     - 相同网段内服务互通关系图（ECharts 网络拓扑图增强）。
@@ -4568,7 +4568,7 @@ grep "DEGRADED" backend/logs/ai.log
   - 前端 `#/scan` 新增「攻击路径」视图标签（ECharts 有向图，节点颜色=风险等级）。
   - 接口：`GET /api/v1/scan/tasks/{id}/attack-path`。
 
-- [ ] **A1-03** 扫描工具扩展（Nuclei 集成）
+- [x] **A1-03** 扫描工具扩展（Nuclei 集成）
   - 在现有 Nmap 基础上集成 Nuclei（轻量级漏洞扫描框架，模板驱动）。
   - 实现 `services/scanner.py` 扩展：`scan_with_nuclei(target, template_tags) -> NucleiResult`。
   - 扫描参数模板新增 Nuclei 选项：`CVE/network/exposure/misconfiguration` 等模板分类。
@@ -4578,14 +4578,14 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 文章背景：CodeMender「主动重写存量代码以消除整类漏洞」；修复建议从「给建议」进化为「跟踪闭环」。
 
-- [ ] **A2-01** 漏洞修复工单（Fix Ticket）
+- [x] **A2-01** 漏洞修复工单（Fix Ticket）
   - 对高危/中危漏洞（CVSS >= 7.0）自动创建修复工单，支持手动触发。
   - 数据表：`fix_ticket(id, finding_id, priority, assignee, status, due_date, resolution_note, closed_at, trace_id, created_at)`。
   - 状态机：`OPEN → IN_PROGRESS → RESOLVED → VERIFIED → CLOSED`（或 `WONT_FIX`）。
   - 接口：`GET/POST /api/v1/fix-tickets`、`PUT /api/v1/fix-tickets/{id}`。
   - 前端 `#/scan` 新增「修复跟踪」标签页：工单列表、SLA 倒计时、逾期告警。
 
-- [ ] **A2-02** 复测触发（Retest）
+- [x] **A2-02** 复测触发（Retest）
   - 修复工单状态更新为 `RESOLVED` 后，可一键触发复测扫描（针对同资产、同漏洞端口）。
   - 复测结果自动关联原始工单，漏洞消失则工单自动推进至 `VERIFIED`。
   - 接口：`POST /api/v1/fix-tickets/{id}/retest`。
@@ -4598,13 +4598,13 @@ grep "DEGRADED" backend/logs/ai.log
 
 > 文章背景：「安全左移的窗口期正在关闭，AI 生成代码已成为开发主流」；Checkmarx Assist 代表「开发时嵌入」流派；Anthropic 验证 Claude Sonnet 4.5 在代码漏洞发现上超越更大的 Opus 4.1。
 
-- [ ] **E1-01** PR 安全审查集成
+- [x] **E1-01** PR 安全审查集成
   - 提供 GitHub Actions/GitLab CI 脚本模板（`scripts/ci_security_scan.yml`）。
   - 集成工具：`bandit`（Python 安全静态分析）+ `semgrep`（规则自定义扫描）。
   - 扫描结果写入 `security_scan_report` 表，通过 API 在后台查看。
   - 高危发现（CVSS 严重）阻断 PR 合并，中危生成警告评论。
 
-- [ ] **E1-02** 依赖漏洞定期扫描
+- [x] **E1-02** 依赖漏洞定期扫描
   - 增加 `pip-audit` 对 Python 依赖的定期扫描（建议每周），结果展示在 `#/settings` → 「安全报告」标签页。
   - 发现高危依赖漏洞时推送通知到已配置的推送通道。
 
@@ -4612,7 +4612,7 @@ grep "DEGRADED" backend/logs/ai.log
 
 ### 技术债务与现有 TODO 收敛
 
-- [ ] **TD-01** P-1：MCP 真实通信（已在计划中，补充安全要求）
+- [x] **TD-01** P-1：MCP 真实通信（已在计划中，补充安全要求）
   - 除 stdio/sse 通信实现外，**必须同步实现 S2-01 插件签名校验**，避免集成时引入恶意 MCP 服务器风险。
 
 - [x] **TD-02** P-4：时间实现收敛
@@ -4621,7 +4621,7 @@ grep "DEGRADED" backend/logs/ai.log
 - [x] **TD-03** Step 4.16 验证执行
   - 执行探测扫描链路端到端验证（真实 Nmap + XML 解析 + AI 报告生成 + 状态机完整流转）。
 
-- [ ] **TD-04** WebSocket 实时推送
+- [x] **TD-04** WebSocket 实时推送
   - 当前前端使用轮询，改为 WebSocket（`/ws/defense/events`、`/ws/scan/tasks`）实时推送状态变更。
   - 实现 `services/event_broadcaster.py`，事件状态变更时广播到订阅的前端连接。
 
