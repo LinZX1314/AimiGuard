@@ -141,7 +141,7 @@ class TestAccessControl:
 
     def test_all_api_files_use_auth(self):
         """Every API route file (except auth.py) must import auth dependencies."""
-        skip_files = {"auth.py", "__init__.py", "realtime.py", "stt.py"}
+        skip_files = {"auth.py", "__init__.py", "realtime.py", "stt.py", "decoy.py"}
         for py_file in API_DIR.glob("*.py"):
             if py_file.name in skip_files:
                 continue

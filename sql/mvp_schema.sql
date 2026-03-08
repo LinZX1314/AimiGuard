@@ -542,6 +542,24 @@ CREATE INDEX IF NOT EXISTS idx_access_audit_trace_id ON access_audit(trace_id);
 CREATE INDEX IF NOT EXISTS idx_access_audit_created_at ON access_audit(created_at);
 
 -- ============================================================
+-- IP 白名单管理
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS ip_whitelist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip_range TEXT NOT NULL,
+  description TEXT,
+  whitelist_type TEXT NOT NULL DEFAULT 'permanent' CHECK(whitelist_type IN ('permanent','temporary')),
+  expires_at TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ip_whitelist_type ON ip_whitelist(whitelist_type);
+CREATE INDEX IF NOT EXISTS idx_ip_whitelist_expires ON ip_whitelist(expires_at);
+
+-- ============================================================
 -- P0 备份与恢复
 -- ============================================================
 

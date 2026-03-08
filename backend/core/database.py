@@ -663,6 +663,18 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class IPWhitelist(Base):
+    __tablename__ = "ip_whitelist"
+    id = Column(Integer, primary_key=True, index=True)
+    ip_range = Column(String, nullable=False)
+    description = Column(Text)
+    whitelist_type = Column(String, nullable=False, default="permanent")
+    expires_at = Column(DateTime)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 def _ensure_default_rbac_data() -> None:
     """Backfill missing RBAC roles/permissions for existing databases."""
     db = SessionLocal()
