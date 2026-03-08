@@ -70,4 +70,9 @@ export const deviceApi = {
   async removeCredential(deviceId: number, credId: number) {
     return apiClient.delete(`/device/${deviceId}/credentials/${credId}`)
   },
+
+  async testConnection(deviceId: number): Promise<{ ok: boolean; message: string }> {
+    const res: any = await apiClient.post(`/device/${deviceId}/test`)
+    return res?.data ?? res
+  },
 }

@@ -102,4 +102,9 @@ export const defenseApi = {
     const res = await apiClient.get('/defense/hfish/stats')
     return res?.data ?? res
   },
+
+  async testHFishConnection(): Promise<{ ok: boolean; message: string }> {
+    const res: any = await apiClient.post('/defense/hfish/test')
+    return res?.data ?? res
+  },
 }

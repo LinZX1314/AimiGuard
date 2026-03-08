@@ -234,6 +234,33 @@ async def update_credential(
     return {"code": 0, "data": _credential_dict(cred), "message": "凭证已更新"}
 
 
+@router.post("/{device_id}/test")
+async def test_device_connection(
+    device_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions(["system:config"])),
+):
+    """测试交换机连接（TCP 端口可达性）"""
+    import socket
+
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(404, "设备不存在")
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((device.ip, device.port))
+        sock.close()
+        if result == 0:
+            return {"code": 0, "ok": True, "message": f"{device.ip}:{device.port} 连接成功"}
+        return {"code": 1, "ok": False, "message": f"{device.ip}:{device.port} 端口不可达"}
+    except socket.timeout:
+        return {"code": 1, "ok": False, "message": f"{device.ip}:{device.port} 连接超时"}
+    except Exception as e:
+        return {"code": 1, "ok": False, "message": str(e)}
+
+
 @router.delete("/{device_id}/credentials/{cred_id}")
 async def delete_credential(
     device_id: int,

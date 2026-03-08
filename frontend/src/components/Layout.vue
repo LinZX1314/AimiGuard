@@ -75,32 +75,92 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <!-- 状态指示器 -->
+          <!-- 蜜罐状态指示器 -->
           <div class="hidden items-center gap-2 mr-1 lg:flex">
-            <div
-              class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] cursor-default transition-colors"
-              :class="hfishConnected ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5' : 'border-red-500/30 text-red-400 bg-red-500/5'"
-              :title="hfishConnected ? '蜜罐已连接' : '蜜罐未连接'"
-            >
-              <span class="relative flex size-1.5">
-                <span
-                  v-if="hfishConnected"
-                  class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"
-                />
-                <span
-                  class="relative inline-flex size-1.5 rounded-full"
-                  :class="hfishConnected ? 'bg-emerald-500' : 'bg-red-400'"
-                />
-              </span>
-              蜜罐{{ hfishConnected ? '在线' : '离线' }}
-            </div>
-            <div
-              class="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground cursor-default"
-              title="已配置交换机数量"
-            >
-              <Network class="size-3" />
-              交换机 <span class="font-semibold text-foreground tabular-nums">{{ deviceCount }}</span>
-            </div>
+            <Popover>
+              <PopoverTrigger as-child>
+                <button
+                  class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] cursor-pointer transition-colors hover:opacity-80"
+                  :class="hfishConnected ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5' : 'border-red-500/30 text-red-400 bg-red-500/5'"
+                >
+                  <span class="relative flex size-1.5">
+                    <span
+                      v-if="hfishConnected"
+                      class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"
+                    />
+                    <span
+                      class="relative inline-flex size-1.5 rounded-full"
+                      :class="hfishConnected ? 'bg-emerald-500' : 'bg-red-400'"
+                    />
+                  </span>
+                  蜜罐{{ hfishConnected ? '在线' : '离线' }}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" class="w-64 p-3 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">HFish 蜜罐</span>
+                  <Badge
+                    :class="hfishConnected ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-red-500/15 text-red-400 border-red-500/30'"
+                    class="text-[10px] h-5"
+                  >
+                    {{ hfishConnected ? '已连接' : '未连接' }}
+                  </Badge>
+                </div>
+                <p v-if="hfishTestMsg" :class="hfishTestOk ? 'text-emerald-400' : 'text-red-400'" class="text-xs">{{ hfishTestMsg }}</p>
+                <div class="flex gap-2">
+                  <Button variant="outline" size="sm" class="cursor-pointer flex-1 h-7 text-xs gap-1" :disabled="hfishTesting" @click="testHFish">
+                    <Zap class="size-3" :class="hfishTesting ? 'animate-pulse' : ''" />
+                    {{ hfishTesting ? '测试中…' : '测试连接' }}
+                  </Button>
+                  <Button variant="ghost" size="sm" class="cursor-pointer h-7 text-xs gap-1" @click="router.push('/integrations')">
+                    <ExternalLink class="size-3" />
+                    配置
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <!-- 交换机状态指示器 -->
+            <Popover>
+              <PopoverTrigger as-child>
+                <button
+                  class="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground cursor-pointer transition-colors hover:opacity-80 hover:border-border"
+                >
+                  <Network class="size-3" />
+                  交换机 <span class="font-semibold text-foreground tabular-nums">{{ deviceCount }}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" class="w-72 p-3 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">交换机设备</span>
+                  <Badge variant="outline" class="text-[10px] h-5">{{ deviceCount }} 台</Badge>
+                </div>
+                <div v-if="deviceList.length === 0" class="text-xs text-muted-foreground text-center py-2">暂无设备</div>
+                <div v-else class="space-y-1.5 max-h-40 overflow-y-auto">
+                  <div
+                    v-for="d in deviceList"
+                    :key="d.id"
+                    class="flex items-center justify-between rounded-md border border-border/50 px-2.5 py-1.5 text-xs"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span
+                        class="inline-flex size-1.5 rounded-full shrink-0"
+                        :class="deviceTestResults[d.id] === true ? 'bg-emerald-500' : deviceTestResults[d.id] === false ? 'bg-red-400' : 'bg-muted-foreground/40'"
+                      />
+                      <span class="font-medium truncate">{{ d.name }}</span>
+                      <span class="text-muted-foreground font-mono">{{ d.ip }}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" class="cursor-pointer h-5 px-1.5 text-[10px]" :disabled="deviceTesting === d.id" @click="testDevice(d.id)">
+                      {{ deviceTesting === d.id ? '…' : '测试' }}
+                    </Button>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" class="cursor-pointer w-full h-7 text-xs gap-1" @click="router.push('/integrations')">
+                  <ExternalLink class="size-3" />
+                  设备管理
+                </Button>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Sheet>
@@ -412,7 +472,9 @@ import { useActiveMode } from '@/composables/useActiveMode'
 import { hasAnyPermission, parseStoredUserInfo } from '@/composables/useAuthz'
 import { authApi } from '../api/auth'
 import { overviewApi } from '@/api/overview'
-import { deviceApi } from '@/api/device'
+import { deviceApi, type DeviceInfo } from '@/api/device'
+import { defenseApi } from '@/api/defense'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -441,6 +503,7 @@ import {
   BrainCircuit,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight,
+  ExternalLink,
   FileSearch,
   LogOut,
   Moon,
@@ -453,6 +516,7 @@ import {
   ShieldCheck,
   Sun,
   UserRound,
+  Zap,
 } from 'lucide-vue-next'
 
 type ModeKey = 'defense' | 'probe'
@@ -465,7 +529,13 @@ const username = ref('user')
 const role = ref('viewer')
 
 const hfishConnected = ref(false)
+const hfishTesting = ref(false)
+const hfishTestMsg = ref('')
+const hfishTestOk = ref(false)
 const deviceCount = ref(0)
+const deviceList = ref<DeviceInfo[]>([])
+const deviceTesting = ref<number | null>(null)
+const deviceTestResults = ref<Record<number, boolean>>({})
 let statusPollTimer: ReturnType<typeof setInterval> | null = null
 
 const loadTopbarStatus = async () => {
@@ -479,9 +549,39 @@ const loadTopbarStatus = async () => {
       hfishConnected.value = hfish?.ok ?? false
     }
     if (devices.status === 'fulfilled') {
-      deviceCount.value = Array.isArray(devices.value) ? devices.value.length : 0
+      const list = Array.isArray(devices.value) ? devices.value : []
+      deviceList.value = list
+      deviceCount.value = list.length
     }
   } catch { /* ignore */ }
+}
+
+const testHFish = async () => {
+  hfishTesting.value = true
+  hfishTestMsg.value = ''
+  try {
+    const res = await defenseApi.testHFishConnection()
+    hfishTestOk.value = res.ok
+    hfishTestMsg.value = res.message
+    if (res.ok) hfishConnected.value = true
+  } catch {
+    hfishTestOk.value = false
+    hfishTestMsg.value = '请求失败'
+  } finally {
+    hfishTesting.value = false
+  }
+}
+
+const testDevice = async (deviceId: number) => {
+  deviceTesting.value = deviceId
+  try {
+    const res = await deviceApi.testConnection(deviceId)
+    deviceTestResults.value = { ...deviceTestResults.value, [deviceId]: res.ok }
+  } catch {
+    deviceTestResults.value = { ...deviceTestResults.value, [deviceId]: false }
+  } finally {
+    deviceTesting.value = null
+  }
 }
 const notifications = ref([
   { id: 'n-1', title: 'Workspace status', content: 'Page transitions do not interrupt backend tasks.', time: 'Just now', read: false },

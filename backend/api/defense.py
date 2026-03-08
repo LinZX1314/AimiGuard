@@ -1408,6 +1408,43 @@ async def trigger_hfish_sync(
         raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
 
 
+@router.post("/hfish/test")
+async def test_hfish_connection(
+    current_user: User = Depends(require_permissions(["system:config"])),
+):
+    """测试 HFish 连接"""
+    import requests as req_lib
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    from services.hfish_collector import hfish_collector
+
+    hfish_collector._ensure_config_loaded()
+
+    if not hfish_collector.api_key or (not hfish_collector.host_port and not hfish_collector.api_base_url):
+        return {"code": 1, "ok": False, "message": "HFish 未配置（缺少地址或 API Key）"}
+
+    base = (hfish_collector.api_base_url.rstrip("/")
+            if hfish_collector.api_base_url
+            else f"https://{hfish_collector.host_port}")
+    url = f"{base}/api/v1/attack/detail?api_key={hfish_collector.api_key}"
+    payload = {"start_time": 0, "end_time": 0, "page_no": 1, "page_size": 1,
+               "intranet": -1, "threat_label": [], "client_id": [],
+               "service_name": [], "info_confirm": "0"}
+    try:
+        resp = req_lib.post(url, json=payload, verify=False, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("code") == 200:
+            return {"code": 0, "ok": True, "message": "连接成功"}
+        return {"code": 1, "ok": False, "message": f"API 返回异常: {data.get('msg', '未知')}"}
+    except req_lib.exceptions.ConnectionError:
+        return {"code": 1, "ok": False, "message": f"无法连接到 {base}"}
+    except req_lib.exceptions.Timeout:
+        return {"code": 1, "ok": False, "message": "连接超时"}
+    except Exception as e:
+        return {"code": 1, "ok": False, "message": str(e)}
+
+
 # ── IP 关联查询：通过攻击 IP 查询 Nmap 扫描结果 ──
 
 # ── HFish 攻击日志查询 ──
