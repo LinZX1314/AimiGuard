@@ -528,6 +528,15 @@
             刷新
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            class="cursor-pointer gap-1.5"
+            @click="openNmapConfigDialog"
+          >
+            <SettingsIcon class="size-3.5" />
+            配置
+          </Button>
+          <Button
             size="sm"
             class="cursor-pointer gap-1.5"
             :disabled="nmapScanning"
@@ -759,6 +768,70 @@
       </div>
     </div>
 
+    <!-- Nmap 配置弹窗 -->
+    <Dialog v-model:open="showNmapConfig">
+      <DialogContent class="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2">
+            <SettingsIcon class="size-4 text-blue-400" />
+            Nmap 扫描配置
+          </DialogTitle>
+          <DialogDescription>配置 Nmap 可执行路径与扫描目标，启用定时探测</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4 py-2">
+          <div class="space-y-1.5">
+            <Label>Nmap 可执行路径</Label>
+            <Input v-model="nmapCfgForm.nmap_path" placeholder="C:\nmap\nmap.exe 或 /usr/bin/nmap" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>扫描 IP 范围（每行一个）</Label>
+            <textarea
+              v-model="nmapCfgIpText"
+              rows="3"
+              placeholder="192.168.1.0/24&#10;10.0.0.1-255"
+              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none font-mono"
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <Label>扫描间隔（秒）</Label>
+              <Input v-model.number="nmapCfgForm.scan_interval" type="number" :min="60" />
+            </div>
+            <div class="space-y-1.5">
+              <Label>定时扫描</Label>
+              <div class="flex items-center gap-2 h-9">
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="nmapCfgForm.enabled ? 'true' : 'false'"
+                  :class="[
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    nmapCfgForm.enabled ? 'bg-primary' : 'bg-input',
+                  ]"
+                  @click="nmapCfgForm.enabled = !nmapCfgForm.enabled"
+                >
+                  <span
+                    :class="[
+                      'pointer-events-none inline-block size-4 rounded-full bg-white shadow-lg ring-0 transition-transform',
+                      nmapCfgForm.enabled ? 'translate-x-4' : 'translate-x-0',
+                    ]"
+                  />
+                </button>
+                <span class="text-sm text-muted-foreground">{{ nmapCfgForm.enabled ? '已开启' : '已关闭' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="nmapCfgMsg" :class="nmapCfgMsgOk ? 'text-emerald-400' : 'text-destructive'" class="text-xs">{{ nmapCfgMsg }}</div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" class="cursor-pointer" @click="showNmapConfig = false">取消</Button>
+          <Button size="sm" class="cursor-pointer" :disabled="nmapCfgSaving" @click="saveNmapCfg">
+            {{ nmapCfgSaving ? '保存中…' : '保存配置' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <!-- Nmap 主机详情弹窗 -->
     <NmapHostDetailDialog
       v-model:open="nmapHostDetailOpen"
@@ -869,7 +942,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { scanApi, type Asset, type ScanTask, type ScanFinding, type ScanProfile, type NmapHost, type NmapScan, type NmapStats, type VulnStats, type DiscoveredAsset, type AssetIpHistory } from '@/api/scan'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -880,7 +953,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Monitor, Plus, RefreshCw, Scan, Search, Shield, ShieldCheck, Target, Trash2, Bug, X } from 'lucide-vue-next'
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Monitor, Plus, RefreshCw, Scan, Search, Settings as SettingsIcon, Shield, ShieldCheck, Target, Trash2, Bug, X } from 'lucide-vue-next'
 import NmapHostDetailDialog from '@/components/NmapHostDetailDialog.vue'
 
 // ===== Active Tab =====
@@ -1214,6 +1287,53 @@ const triggerNmapScan = async () => {
       nmapScanning.value = false
     }, 5000)
   } catch (e) { console.error(e); nmapScanning.value = false }
+}
+
+// ===== Nmap 配置弹窗 =====
+const showNmapConfig = ref(false)
+const nmapCfgForm = reactive({ nmap_path: '', scan_interval: 604800, enabled: false })
+const nmapCfgIpText = ref('')
+const nmapCfgSaving = ref(false)
+const nmapCfgMsg = ref('')
+const nmapCfgMsgOk = ref(true)
+
+const openNmapConfigDialog = async () => {
+  nmapCfgMsg.value = ''
+  try {
+    const cfg = await scanApi.getNmapConfig()
+    nmapCfgForm.nmap_path = cfg.nmap_path ?? ''
+    nmapCfgForm.scan_interval = cfg.scan_interval ?? 604800
+    nmapCfgForm.enabled = Boolean(cfg.enabled)
+    nmapCfgIpText.value = Array.isArray(cfg.ip_ranges) ? cfg.ip_ranges.join('\n') : ''
+  } catch { /* use defaults */ }
+  showNmapConfig.value = true
+}
+
+const saveNmapCfg = async () => {
+  if (!nmapCfgForm.nmap_path.trim()) {
+    nmapCfgMsg.value = '请填写 Nmap 路径'
+    nmapCfgMsgOk.value = false
+    return
+  }
+  nmapCfgSaving.value = true
+  nmapCfgMsg.value = ''
+  try {
+    const ipRanges = nmapCfgIpText.value.split('\n').map(s => s.trim()).filter(Boolean)
+    await scanApi.saveNmapConfig({
+      nmap_path: nmapCfgForm.nmap_path,
+      ip_ranges: ipRanges,
+      scan_interval: nmapCfgForm.scan_interval,
+      enabled: nmapCfgForm.enabled,
+    })
+    nmapCfgMsg.value = '保存成功'
+    nmapCfgMsgOk.value = true
+    setTimeout(() => { showNmapConfig.value = false }, 800)
+  } catch {
+    nmapCfgMsg.value = '保存失败'
+    nmapCfgMsgOk.value = false
+  } finally {
+    nmapCfgSaving.value = false
+  }
 }
 
 // ===== 发现资产 =====

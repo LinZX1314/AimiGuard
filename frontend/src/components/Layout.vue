@@ -75,6 +75,34 @@
         </div>
 
         <div class="flex items-center gap-2">
+          <!-- 状态指示器 -->
+          <div class="hidden items-center gap-2 mr-1 lg:flex">
+            <div
+              class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] cursor-default transition-colors"
+              :class="hfishConnected ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5' : 'border-red-500/30 text-red-400 bg-red-500/5'"
+              :title="hfishConnected ? '蜜罐已连接' : '蜜罐未连接'"
+            >
+              <span class="relative flex size-1.5">
+                <span
+                  v-if="hfishConnected"
+                  class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"
+                />
+                <span
+                  class="relative inline-flex size-1.5 rounded-full"
+                  :class="hfishConnected ? 'bg-emerald-500' : 'bg-red-400'"
+                />
+              </span>
+              蜜罐{{ hfishConnected ? '在线' : '离线' }}
+            </div>
+            <div
+              class="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground cursor-default"
+              title="已配置交换机数量"
+            >
+              <Network class="size-3" />
+              交换机 <span class="font-semibold text-foreground tabular-nums">{{ deviceCount }}</span>
+            </div>
+          </div>
+
           <Sheet>
             <SheetTrigger as-child>
               <Button
@@ -383,6 +411,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useActiveMode } from '@/composables/useActiveMode'
 import { hasAnyPermission, parseStoredUserInfo } from '@/composables/useAuthz'
 import { authApi } from '../api/auth'
+import { overviewApi } from '@/api/overview'
+import { deviceApi } from '@/api/device'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -414,6 +444,7 @@ import {
   FileSearch,
   LogOut,
   Moon,
+  Network,
   PanelLeft,
   Radar,
   ScanSearch,
@@ -432,6 +463,26 @@ const { activeMode } = useActiveMode()
 
 const username = ref('user')
 const role = ref('viewer')
+
+const hfishConnected = ref(false)
+const deviceCount = ref(0)
+let statusPollTimer: ReturnType<typeof setInterval> | null = null
+
+const loadTopbarStatus = async () => {
+  try {
+    const [chain, devices] = await Promise.allSettled([
+      overviewApi.getChainStatus(),
+      deviceApi.list(),
+    ])
+    if (chain.status === 'fulfilled') {
+      const hfish = chain.value.defense?.find((c: any) => c.key === 'hfish_ingest')
+      hfishConnected.value = hfish?.ok ?? false
+    }
+    if (devices.status === 'fulfilled') {
+      deviceCount.value = Array.isArray(devices.value) ? devices.value.length : 0
+    }
+  } catch { /* ignore */ }
+}
 const notifications = ref([
   { id: 'n-1', title: 'Workspace status', content: 'Page transitions do not interrupt backend tasks.', time: 'Just now', read: false },
   { id: 'n-2', title: 'Audit export done', content: 'Latest audit export task finished.', time: '5 min ago', read: false },
@@ -1082,6 +1133,9 @@ onMounted(() => {
   }
 
   resetAnimatedState()
+
+  loadTopbarStatus()
+  statusPollTimer = setInterval(loadTopbarStatus, 30000)
 })
 
 onUnmounted(() => {
@@ -1095,6 +1149,10 @@ onUnmounted(() => {
   }
   stopSidebarResize()
   stopSidebarWidthAnimation()
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
 })
 
 const handleLogout = async () => {
