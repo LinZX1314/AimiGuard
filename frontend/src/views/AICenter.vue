@@ -422,7 +422,7 @@
             <Skeleton class="h-4 w-2/3" />
           </div>
           <div v-else-if="previewContent" ref="previewContentRef" class="report-markdown prose prose-sm dark:prose-invert max-w-none">
-            <Markdown :content="previewContent" :cdn-options="{ mermaid: false, beautifulMermaid: false }" />
+            <pre class="whitespace-pre-wrap break-words text-sm leading-7 font-sans">{{ previewContent }}</pre>
           </div>
           <div v-else class="text-center text-muted-foreground py-12">
             <p class="text-sm">无法加载报告内容</p>
@@ -459,17 +459,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Conversation, ConversationEmptyState } from '@/components/ai-elements/conversation'
-import { Message, MessageContent, MessageAvatar } from '@/components/ai-elements/message'
-import {
-  PromptInput,
-  PromptInputTextarea,
-  PromptInputSubmit,
-  PromptInputFooter,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input'
-import { Markdown } from 'vue-stream-markdown'
-import 'vue-stream-markdown/index.css'
+import Conversation from '@/components/ai-elements/conversation/Conversation.vue'
+import ConversationEmptyState from '@/components/ai-elements/conversation/ConversationEmptyState.vue'
+import Message from '@/components/ai-elements/message/Message.vue'
+import MessageContent from '@/components/ai-elements/message/MessageContent.vue'
+import MessageAvatar from '@/components/ai-elements/message/MessageAvatar.vue'
+import PromptInput from '@/components/ai-elements/prompt-input/PromptInput.vue'
+import PromptInputTextarea from '@/components/ai-elements/prompt-input/PromptInputTextarea.vue'
+import PromptInputSubmit from '@/components/ai-elements/prompt-input/PromptInputSubmit.vue'
+import PromptInputFooter from '@/components/ai-elements/prompt-input/PromptInputFooter.vue'
+import type { PromptInputMessage } from '@/components/ai-elements/prompt-input/types'
 import {
   BrainCircuit,
   ChevronLeft,

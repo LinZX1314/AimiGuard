@@ -1,24 +1,25 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import Layout from '../components/Layout.vue'
-import DefenseDashboard from '../views/DefenseDashboard.vue'
-import ScanManager from '../views/ScanManager.vue'
-import AICenter from '../views/AICenter.vue'
-import Login from '../views/Login.vue'
-import DefenseRealtime from '../views/DefenseRealtime.vue'
-import ProbeRealtime from '../views/ProbeRealtime.vue'
-import SettingsPage from '../views/SettingsPage.vue'
-import ProfilePage from '../views/ProfilePage.vue'
-import OverviewPage from '../views/OverviewPage.vue'
-import ProbeDashboardPage from '../views/ProbeDashboardPage.vue'
-import IntegrationsPage from '../views/IntegrationsPage.vue'
-import AuditPage from '../views/AuditPage.vue'
-import ObservabilityPage from '../views/ObservabilityPage.vue'
-import ForbiddenPage from '../views/ForbiddenPage.vue'
-import WorkflowCatalogPage from '../views/WorkflowCatalogPage.vue'
-import WorkflowRunsPage from '../views/WorkflowRunsPage.vue'
-import WorkflowReadonlyGraphPage from '../views/WorkflowReadonlyGraphPage.vue'
-import WorkflowEditorPage from '../views/WorkflowEditorPage.vue'
 import { hasAnyPermission, parseStoredUserInfo } from '../composables/useAuthz'
+
+const Layout = () => import('../components/Layout.vue')
+const DefenseDashboard = () => import('../views/DefenseDashboard.vue')
+const ScanManager = () => import('../views/ScanManager.vue')
+const AICenter = () => import('../views/AICenter.vue')
+const Login = () => import('../views/Login.vue')
+const DefenseRealtime = () => import('../views/DefenseRealtime.vue')
+const ProbeRealtime = () => import('../views/ProbeRealtime.vue')
+const SettingsPage = () => import('../views/SettingsPage.vue')
+const ProfilePage = () => import('../views/ProfilePage.vue')
+const OverviewPage = () => import('../views/OverviewPage.vue')
+const ProbeDashboardPage = () => import('../views/ProbeDashboardPage.vue')
+const IntegrationsPage = () => import('../views/IntegrationsPage.vue')
+const AuditPage = () => import('../views/AuditPage.vue')
+const ObservabilityPage = () => import('../views/ObservabilityPage.vue')
+const ForbiddenPage = () => import('../views/ForbiddenPage.vue')
+const WorkflowCatalogPage = () => import('../views/WorkflowCatalogPage.vue')
+const WorkflowRunsPage = () => import('../views/WorkflowRunsPage.vue')
+const WorkflowReadonlyGraphPage = () => import('../views/WorkflowReadonlyGraphPage.vue')
+const WorkflowEditorPage = () => import('../views/WorkflowEditorPage.vue')
 
 type UserRole = 'admin' | 'operator' | 'viewer'
 
