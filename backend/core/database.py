@@ -397,6 +397,21 @@ class PluginRegistry(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class PromptTemplate(Base):
+    __tablename__ = "prompt_template"
+    id = Column(Integer, primary_key=True, index=True)
+    template_key = Column(String, nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    content = Column(Text, nullable=False)
+    description = Column(Text)
+    is_active = Column(Integer, default=1)
+    approved_by = Column(String)
+    approved_at = Column(DateTime)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class PluginCallLog(Base):
     __tablename__ = "plugin_call_log"
     id = Column(Integer, primary_key=True, index=True)

@@ -809,3 +809,21 @@ CREATE TABLE IF NOT EXISTS plugin_call_log (
 
 CREATE INDEX IF NOT EXISTS idx_plugin_call_log_plugin ON plugin_call_log(plugin_id);
 CREATE INDEX IF NOT EXISTS idx_plugin_call_log_created ON plugin_call_log(created_at);
+
+-- S1-04: Prompt 模板版本管理
+CREATE TABLE IF NOT EXISTS prompt_template (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_key TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  content TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  approved_by TEXT,
+  approved_at TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_template_key_ver ON prompt_template(template_key, version);
+CREATE INDEX IF NOT EXISTS idx_prompt_template_active ON prompt_template(template_key, is_active);
