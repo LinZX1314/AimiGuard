@@ -315,6 +315,21 @@ class AITTSTask(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class FixTicket(Base):
+    __tablename__ = "fix_ticket"
+    id = Column(Integer, primary_key=True, index=True)
+    finding_id = Column(Integer, ForeignKey("scan_finding.id"))
+    priority = Column(String, nullable=False, default="medium")
+    assignee = Column(String)
+    status = Column(String, nullable=False, default="OPEN")
+    due_date = Column(String)
+    resolution_note = Column(Text)
+    closed_at = Column(DateTime)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class PluginRegistry(Base):
     __tablename__ = "plugin_registry"
     id = Column(Integer, primary_key=True, index=True)
@@ -676,5 +691,14 @@ def init_db():
         # audit_log: 审计哈希链字段（日报/周报等写审计时依赖）
         _ensure_sqlite_column("audit_log", "integrity_hash", "VARCHAR")
         _ensure_sqlite_column("audit_log", "prev_hash", "VARCHAR")
+
+        # fix_ticket: A2-01 修复工单
+        _ensure_sqlite_column("fix_ticket", "finding_id", "INTEGER")
+        _ensure_sqlite_column("fix_ticket", "priority", "VARCHAR")
+        _ensure_sqlite_column("fix_ticket", "assignee", "VARCHAR")
+        _ensure_sqlite_column("fix_ticket", "status", "VARCHAR")
+        _ensure_sqlite_column("fix_ticket", "due_date", "VARCHAR")
+        _ensure_sqlite_column("fix_ticket", "resolution_note", "TEXT")
+        _ensure_sqlite_column("fix_ticket", "closed_at", "VARCHAR")
 
     _ensure_default_rbac_data()

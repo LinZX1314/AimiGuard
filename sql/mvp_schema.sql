@@ -709,3 +709,23 @@ CREATE TABLE IF NOT EXISTS audit_export_job (
 CREATE INDEX IF NOT EXISTS idx_audit_export_status ON audit_export_job(status);
 CREATE INDEX IF NOT EXISTS idx_audit_export_requested_by ON audit_export_job(requested_by);
 CREATE INDEX IF NOT EXISTS idx_audit_export_created_at ON audit_export_job(created_at);
+
+-- 修复工单表 (A2-01)
+CREATE TABLE IF NOT EXISTS fix_ticket (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  finding_id INTEGER,
+  priority TEXT NOT NULL CHECK(priority IN ('critical','high','medium','low')) DEFAULT 'medium',
+  assignee TEXT,
+  status TEXT NOT NULL CHECK(status IN ('OPEN','IN_PROGRESS','RESOLVED','VERIFIED','CLOSED','WONT_FIX')) DEFAULT 'OPEN',
+  due_date TEXT,
+  resolution_note TEXT,
+  closed_at TEXT,
+  trace_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (finding_id) REFERENCES scan_finding(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fix_ticket_status ON fix_ticket(status);
+CREATE INDEX IF NOT EXISTS idx_fix_ticket_finding_id ON fix_ticket(finding_id);
+CREATE INDEX IF NOT EXISTS idx_fix_ticket_priority ON fix_ticket(priority);
