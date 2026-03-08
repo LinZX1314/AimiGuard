@@ -773,6 +773,21 @@ def init_db():
         _ensure_sqlite_column("threat_event", "client_id", "VARCHAR")
         _ensure_sqlite_column("threat_event", "client_name", "VARCHAR")
 
+        # threat_event: 误报标记字段
+        _ensure_sqlite_column("threat_event", "false_positive_by", "VARCHAR")
+        _ensure_sqlite_column("threat_event", "false_positive_reason", "TEXT")
+        _ensure_sqlite_column("threat_event", "false_positive_at", "TEXT")
+
+        # execution_task: 审批人字段
+        _ensure_sqlite_column("execution_task", "approved_by", "VARCHAR")
+
+        # ai_decision_log: 新增字段
+        _ensure_sqlite_column("ai_decision_log", "prompt_hash", "VARCHAR")
+        _ensure_sqlite_column("ai_decision_log", "inference_ms", "REAL")
+        _ensure_sqlite_column("ai_decision_log", "model_params", "TEXT")
+        _ensure_sqlite_column("ai_decision_log", "prompt_tokens", "INTEGER")
+        _ensure_sqlite_column("ai_decision_log", "completion_tokens", "INTEGER")
+
         # audit_log: 审计哈希链字段（日报/周报等写审计时依赖）
         _ensure_sqlite_column("audit_log", "integrity_hash", "VARCHAR")
         _ensure_sqlite_column("audit_log", "prev_hash", "VARCHAR")
