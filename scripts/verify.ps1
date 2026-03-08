@@ -59,18 +59,23 @@ if (-not (Test-Path $frontendNodeModules) -and -not $SkipFrontend) {
 if (-not $SkipBackend) {
     Write-Section "Backend verification"
 
-    Invoke-Checked "Compile backend Python sources" {
-        & $pythonCmd -m compileall backend
-    }
-
-    $previousTesting = $env:TESTING
+    Push-Location $ProjectRoot
     try {
-        $env:TESTING = "1"
-        Invoke-Checked "Run backend regression and workflow suite" {
-            & $pythonCmd -m pytest tests/test_step8_9_full.py tests/test_td05_push.py tests/test_workflow_dsl.py tests/test_workflow_m1_02.py tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py tests/test_workflow_m4_01_scan_runtime.py tests/test_workflow_m4_02_monitoring_api.py tests/test_workflow_m4_03_replay_debug.py -v --tb=short
+        Invoke-Checked "Compile backend Python sources" {
+            & $pythonCmd -m compileall backend
+        }
+
+        $previousTesting = $env:TESTING
+        try {
+            $env:TESTING = "1"
+            Invoke-Checked "Run backend regression and workflow suite" {
+                & $pythonCmd -m pytest tests/test_step8_9_full.py tests/test_td05_push.py tests/test_workflow_dsl.py tests/test_workflow_m1_02.py tests/test_workflow_m1_03_api.py tests/test_workflow_m2_02_validator.py tests/test_workflow_m2_03_release_api.py tests/test_workflow_m2_04_rbac.py tests/test_workflow_m3_01_runtime.py tests/test_workflow_m3_02_defense_runtime.py tests/test_workflow_m3_03_rollout.py tests/test_workflow_m4_01_scan_runtime.py tests/test_workflow_m4_02_monitoring_api.py tests/test_workflow_m4_03_replay_debug.py -v --tb=short
+            }
+        } finally {
+            $env:TESTING = $previousTesting
         }
     } finally {
-        $env:TESTING = $previousTesting
+        Pop-Location
     }
 }
 

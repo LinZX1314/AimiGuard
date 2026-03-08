@@ -16,6 +16,8 @@ $FrontendPort = 3000
 $BackendUrl = "http://localhost:$BackendPort"
 $FrontendUrl = "http://localhost:$FrontendPort"
 $BackendHealthUrl = "$BackendUrl/api/health"
+$BackendRequirementsPath = Join-Path $BackendPath "requirements.txt"
+$BackendRequirementsStamp = Join-Path $BackendPath "venv\.requirements.sha256"
 
 function Test-PortListening {
     param([int]$Port)
@@ -92,14 +94,16 @@ try {
     exit 1
 }
 
-if (Test-PortListening -Port $BackendPort) {
-    Write-Host "✗ 端口 $BackendPort 已被占用，请先关闭现有后端服务" -ForegroundColor Red
-    exit 1
-}
+if (-not $PrepareOnly) {
+    if (Test-PortListening -Port $BackendPort) {
+        Write-Host "✗ 端口 $BackendPort 已被占用，请先关闭现有后端服务" -ForegroundColor Red
+        exit 1
+    }
 
-if (Test-PortListening -Port $FrontendPort) {
-    Write-Host "✗ 端口 $FrontendPort 已被占用，请先关闭现有前端服务" -ForegroundColor Red
-    exit 1
+    if (Test-PortListening -Port $FrontendPort) {
+        Write-Host "✗ 端口 $FrontendPort 已被占用，请先关闭现有前端服务" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # 初始化后端
@@ -118,19 +122,35 @@ if (-not (Test-Path ".\venv\Scripts\python.exe")) {
     $backendNeedsInstall = $true
 }
 
+$currentRequirementsHash = (Get-FileHash $BackendRequirementsPath -Algorithm SHA256).Hash
+$storedRequirementsHash = if (Test-Path $BackendRequirementsStamp) {
+    (Get-Content $BackendRequirementsStamp -Raw).Trim()
+} else {
+    ""
+}
+
+if (-not $backendNeedsInstall -and $currentRequirementsHash -ne $storedRequirementsHash) {
+    Write-Host "🔧 检测到后端依赖清单变化，重新同步依赖..." -ForegroundColor Yellow
+    $backendNeedsInstall = $true
+}
+
 Write-Host "🔧 激活虚拟环境..." -ForegroundColor Yellow
 & ".\venv\Scripts\Activate.ps1"
 
 if ($backendNeedsInstall) {
     Write-Host "🔧 安装/更新依赖..." -ForegroundColor Yellow
     pip install -r requirements.txt -q
+    Set-Content -Path $BackendRequirementsStamp -Value $currentRequirementsHash -NoNewline -Encoding utf8
 } else {
     Write-Host "✓ 后端依赖已安装" -ForegroundColor Green
 }
 
 # 初始化数据库
 Write-Host "🗄️  初始化数据库..." -ForegroundColor Yellow
-if (Test-Path "init_db.py") {
+$databasePath = Join-Path $BackendPath "aimiguard.db"
+if (Test-Path $databasePath) {
+    Write-Host "✓ 检测到现有数据库，跳过重建" -ForegroundColor Green
+} elseif (Test-Path "init_db.py") {
     python init_db.py
     Write-Host "✓ 数据库初始化完成" -ForegroundColor Green
 } else {
