@@ -68,6 +68,11 @@ export const defenseApi = {
     return apiClient.post(`/defense/events/${eventId}/false-positive`, { reason })
   },
 
+  async getEventClusters(hours: number = 24): Promise<any> {
+    const res = await apiClient.get('/defense/events/clusters', { params: { hours } })
+    return res?.data ?? res
+  },
+
   async submitAlert(alert: { ip: string; source: string; attack_type?: string }) {
     return apiClient.post('/defense/alerts', alert)
   },

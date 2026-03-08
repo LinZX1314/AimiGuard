@@ -1510,6 +1510,26 @@ async def mark_false_positive(
     return {"code": 0, "message": "Event marked as false positive"}
 
 
+@router.get("/events/clusters")
+@compat_router.get("/events/clusters", include_in_schema=False)
+async def get_event_clusters(
+    hours: int = 24,
+    current_user: User = Depends(require_permissions("view_events")),
+    db: Session = Depends(get_db),
+):
+    """D3-03: 告警聚类降噪 — 获取聚类列表"""
+    from services.alert_cluster import cluster_events
+
+    clusters = cluster_events(db, hours=hours)
+    return {
+        "code": 0,
+        "data": {
+            "total_clusters": len(clusters),
+            "clusters": clusters,
+        },
+    }
+
+
 # ===== HFish 配置和同步 =====
 
 
