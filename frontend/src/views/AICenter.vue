@@ -778,38 +778,353 @@ const formatFileSize = (bytes: number): string => {
 const exportReportPdf = () => {
   const el = previewContentRef.value
   if (!el) return
-  const title = previewReport.value?.report_type === 'daily' ? '日报'
-    : previewReport.value?.report_type === 'weekly' ? '周报'
-    : previewReport.value?.report_type === 'scan' ? '扫描报告' : '报告'
+  const reportType = previewReport.value?.report_type ?? 'report'
+  const title = reportType === 'daily' ? '每日安全报告'
+    : reportType === 'weekly' ? '每周安全报告'
+    : reportType === 'scan' ? '安全扫描报告' : '安全报告'
+  const titleEn = reportType === 'daily' ? 'Daily Security Report'
+    : reportType === 'weekly' ? 'Weekly Security Report'
+    : reportType === 'scan' ? 'Scan Report' : 'Security Report'
   const dateStr = previewReport.value?.created_at
-    ? new Date(previewReport.value.created_at).toLocaleDateString('zh-CN')
+    ? new Date(previewReport.value.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+    : new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+  const timeStr = previewReport.value?.created_at
+    ? new Date(previewReport.value.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     : ''
+  const fileSize = previewFileSize.value != null ? formatFileSize(previewFileSize.value) : ''
   const printWin = window.open('', '_blank')
   if (!printWin) return
   printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>${title} - ${dateStr}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.7; max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 22px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; }
-  h2 { font-size: 18px; margin-top: 24px; color: #374151; }
-  h3 { font-size: 15px; margin-top: 20px; color: #4b5563; }
-  p { margin: 8px 0; }
-  ul, ol { padding-left: 24px; }
-  li { margin: 4px 0; }
-  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-  pre { background: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
-  pre code { background: none; padding: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-  th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; font-size: 13px; }
-  th { background: #f9fafb; font-weight: 600; }
-  blockquote { border-left: 3px solid #d1d5db; margin: 12px 0; padding: 8px 16px; color: #6b7280; }
-  @media print { body { padding: 20px; } }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #1e293b;
+    line-height: 1.8;
+    font-size: 13px;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── 水印层 ── */
+  .watermark {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .watermark::before {
+    content: '${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL  ${title}  CONFIDENTIAL';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(148, 163, 184, 0.06);
+    letter-spacing: 8px;
+    line-height: 100px;
+    word-spacing: 60px;
+    white-space: pre-wrap;
+    transform: rotate(-25deg);
+    transform-origin: center center;
+  }
+
+  /* ── 封面头部 ── */
+  .cover-header {
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1e40af 100%);
+    color: #fff;
+    padding: 48px 56px 40px;
+    page-break-after: avoid;
+  }
+  .cover-header .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .cover-header .brand-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .cover-header .brand-text {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.9;
+  }
+  .cover-header .report-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .cover-header .report-title-en {
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 0.55;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .cover-header .meta-row {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .cover-header .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    opacity: 0.75;
+  }
+  .cover-header .meta-label {
+    font-weight: 600;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+  }
+  .cover-header .accent-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981);
+  }
+
+  /* ── 正文容器 ── */
+  .content-wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 100%;
+    padding: 36px 56px 80px;
+  }
+
+  /* ── 分类标签 ── */
+  .report-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid #bfdbfe;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── Markdown 内容样式 ── */
+  .content-wrap h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+    margin: 28px 0 16px;
+  }
+  .content-wrap h1:first-child { margin-top: 0; }
+  .content-wrap h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #1e40af;
+    margin: 24px 0 12px;
+    padding-left: 12px;
+    border-left: 3px solid #3b82f6;
+  }
+  .content-wrap h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #334155;
+    margin: 20px 0 8px;
+  }
+  .content-wrap p {
+    margin: 8px 0;
+    color: #334155;
+  }
+  .content-wrap ul, .content-wrap ol {
+    padding-left: 24px;
+    margin: 8px 0;
+  }
+  .content-wrap li {
+    margin: 5px 0;
+    color: #334155;
+  }
+  .content-wrap li::marker {
+    color: #3b82f6;
+  }
+  .content-wrap code {
+    background: #f1f5f9;
+    color: #be185d;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    border: 1px solid #e2e8f0;
+  }
+  .content-wrap pre {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-size: 12px;
+  }
+  .content-wrap pre code {
+    background: none;
+    padding: 0;
+    border: none;
+    color: #334155;
+  }
+  .content-wrap table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    font-size: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+  .content-wrap th {
+    background: #f1f5f9;
+    font-weight: 700;
+    color: #1e293b;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid #cbd5e1;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .content-wrap td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #475569;
+  }
+  .content-wrap tr:nth-child(even) td {
+    background: #fafbfd;
+  }
+  .content-wrap blockquote {
+    border-left: 4px solid #3b82f6;
+    margin: 16px 0;
+    padding: 12px 20px;
+    background: #f0f9ff;
+    border-radius: 0 8px 8px 0;
+    color: #1e40af;
+    font-size: 12.5px;
+  }
+  .content-wrap hr {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 24px 0;
+  }
+  .content-wrap strong {
+    color: #0f172a;
+  }
+
+  /* ── 页脚 ── */
+  .page-footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 2;
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    padding: 12px 56px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #94a3b8;
+  }
+  .page-footer .confidential {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .page-footer .gen-info {
+    text-align: right;
+  }
+
+  /* ── 打印优化 ── */
+  @media print {
+    body { background: #fff; }
+    .cover-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .watermark { position: fixed; }
+    .page-footer { position: fixed; bottom: 0; }
+    .content-wrap { padding-bottom: 60px; }
+  }
 </style>
-</head><body>`)
-  printWin.document.write(el.innerHTML)
-  printWin.document.write('</body></html>')
+</head><body>
+
+<!-- 水印 -->
+<div class="watermark"></div>
+
+<!-- 封面头部 -->
+<div class="cover-header">
+  <div class="brand">
+    <div class="brand-icon">\u{1F6E1}</div>
+    <div class="brand-text">AiMiGuan \u00B7 安全态势感知平台</div>
+  </div>
+  <div class="report-title">${title}</div>
+  <div class="report-title-en">${titleEn}</div>
+  <div class="meta-row">
+    <div class="meta-item">
+      <span class="meta-label">日期</span>
+      <span>${dateStr}</span>
+    </div>
+    ${timeStr ? `<div class="meta-item"><span class="meta-label">时间</span><span>${timeStr}</span></div>` : ''}
+    ${fileSize ? `<div class="meta-item"><span class="meta-label">大小</span><span>${fileSize}</span></div>` : ''}
+    <div class="meta-item">
+      <span class="meta-label">类型</span>
+      <span>${reportType.toUpperCase()}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">密级</span>
+      <span>内部</span>
+    </div>
+  </div>
+  <div class="accent-bar"></div>
+</div>
+
+<!-- 正文内容 -->
+<div class="content-wrap">
+  <div class="report-badge">\u{1F4CB} ${reportType} report</div>
+  ${el.innerHTML}
+</div>
+
+<!-- 页脚 -->
+<div class="page-footer">
+  <div class="confidential">\u{1F512} 内部资料 · 请勿外传</div>
+  <div class="gen-info">
+    Generated by AiMiGuan &middot; ${dateStr} ${timeStr}
+  </div>
+</div>
+
+</body></html>`)
   printWin.document.close()
-  setTimeout(() => { printWin.print() }, 300)
+  setTimeout(() => { printWin.print() }, 400)
 }
 
 // ── TTS 录音按钮 ──
