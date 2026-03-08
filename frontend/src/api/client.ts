@@ -24,8 +24,8 @@ const rawApiBaseUrl = typeof import.meta.env.VITE_API_BASE_URL === 'string'
   ? import.meta.env.VITE_API_BASE_URL.trim()
   : ''
 
-const apiHostRoot = rawApiBaseUrl ? resolveApiHostRoot(rawApiBaseUrl) : ''
-const apiBaseUrl = rawApiBaseUrl ? resolveApiBaseUrl(rawApiBaseUrl) : '/api/v1'
+const apiHostRoot = rawApiBaseUrl && !import.meta.env.DEV ? resolveApiHostRoot(rawApiBaseUrl) : ''
+const apiBaseUrl = rawApiBaseUrl && !import.meta.env.DEV ? resolveApiBaseUrl(rawApiBaseUrl) : '/api/v1'
 
 let isHandlingUnauthorized = false
 
