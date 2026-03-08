@@ -348,6 +348,20 @@ class SecurityScanReport(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class HoneypotConfig(Base):
+    __tablename__ = "honeypot_config"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    target_service = Column(String)
+    bait_data = Column(Text)
+    status = Column(String, nullable=False, default="INACTIVE")
+    hfish_node_id = Column(String)
+    trace_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class PluginRegistry(Base):
     __tablename__ = "plugin_registry"
     id = Column(Integer, primary_key=True, index=True)

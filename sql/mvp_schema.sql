@@ -751,3 +751,20 @@ CREATE TABLE IF NOT EXISTS security_scan_report (
 CREATE INDEX IF NOT EXISTS idx_security_scan_tool ON security_scan_report(scan_tool);
 CREATE INDEX IF NOT EXISTS idx_security_scan_passed ON security_scan_report(passed);
 CREATE INDEX IF NOT EXISTS idx_security_scan_created_at ON security_scan_report(created_at);
+
+-- 蜜罐配置表 (D2-01)
+CREATE TABLE IF NOT EXISTS honeypot_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('ssh','http','ftp','rdp','smb','telnet','mysql','redis','custom')),
+  target_service TEXT,
+  bait_data TEXT,
+  status TEXT NOT NULL CHECK(status IN ('ACTIVE','INACTIVE','DEPLOYING','FAILED')) DEFAULT 'INACTIVE',
+  hfish_node_id TEXT,
+  trace_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_honeypot_status ON honeypot_config(status);
+CREATE INDEX IF NOT EXISTS idx_honeypot_type ON honeypot_config(type);
