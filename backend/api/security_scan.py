@@ -108,6 +108,25 @@ async def submit_report(
     return APIResponse.success(_report_to_dict(report), message="扫描报告已提交")
 
 
+@router.post("/dep-audit")
+async def trigger_dep_audit(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("approve_event")),
+):
+    """E1-02: 手动触发 pip-audit 依赖漏洞扫描"""
+    from services.dep_audit import run_pip_audit, save_audit_report
+
+    result = run_pip_audit()
+    report = save_audit_report(db, result, trigger_type="manual")
+
+    return APIResponse.success({
+        **_report_to_dict(report),
+        "scan_success": result.get("success", False),
+        "error": result.get("error"),
+    }, message="依赖扫描已完成")
+
+
 @router.get("/reports/{report_id}")
 async def get_report(
     report_id: int,
