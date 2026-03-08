@@ -349,26 +349,91 @@
             v-for="r in reports"
             :key="r.id"
             class="rounded-lg border border-border/50 p-2.5 space-y-1.5 cursor-pointer hover:border-primary/30 hover:bg-muted/30 transition-all"
-            @click="selectedReport = selectedReport?.id === r.id ? null : r"
+            @click="openReportPreview(r)"
           >
             <div class="flex items-center justify-between gap-1">
               <Badge variant="outline" class="text-[9px] h-4 capitalize px-1.5">{{ r.report_type }}</Badge>
               <span class="text-[10px] text-muted-foreground tabular-nums">{{ formatDate(r.created_at) }}</span>
             </div>
             <p class="text-[11px] text-muted-foreground/80 line-clamp-2 leading-relaxed">{{ r.summary }}</p>
-            <Transition name="expand">
-              <div
-                v-if="selectedReport?.id === r.id"
-                class="text-[10px] text-muted-foreground/60 pt-1.5 border-t border-border/50 space-y-1 font-mono"
-              >
-                <p>trace: {{ r.trace_id?.slice(0, 16) }}</p>
-                <p class="truncate">path: {{ r.detail_path }}</p>
-              </div>
-            </Transition>
+            <div class="flex items-center justify-between text-[10px] text-muted-foreground/50">
+              <span v-if="r.file_size != null">{{ formatFileSize(r.file_size) }}</span>
+              <span v-else>—</span>
+              <Eye class="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
           </div>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="reportTotal > reportPageSize" class="shrink-0 border-t border-border/60 px-2 py-2 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6 cursor-pointer"
+            :disabled="reportPage <= 1"
+            @click="reportPage--; loadReports()"
+          >
+            <ChevronLeft class="size-3.5" />
+          </Button>
+          <span class="text-[10px] text-muted-foreground tabular-nums">{{ reportPage }} / {{ Math.ceil(reportTotal / reportPageSize) }}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-6 cursor-pointer"
+            :disabled="reportPage >= Math.ceil(reportTotal / reportPageSize)"
+            @click="reportPage++; loadReports()"
+          >
+            <ChevronRight class="size-3.5" />
+          </Button>
         </div>
       </div>
     </aside>
+
+    <!-- ── 报告预览弹窗 ── -->
+    <Dialog v-model:open="showReportPreview">
+      <DialogContent class="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader class="shrink-0 px-6 pt-5 pb-3 border-b border-border/60">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <FileText class="size-4 text-primary" />
+              <DialogTitle class="text-base">
+                {{ previewReport?.report_type === 'daily' ? '日报' : previewReport?.report_type === 'weekly' ? '周报' : previewReport?.report_type === 'scan' ? '扫描报告' : '报告' }}
+              </DialogTitle>
+              <Badge variant="outline" class="text-[10px] h-5 capitalize">{{ previewReport?.report_type }}</Badge>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span v-if="previewFileSize != null">{{ formatFileSize(previewFileSize) }}</span>
+              <span class="tabular-nums">{{ previewReport ? formatTime(previewReport.created_at) : '' }}</span>
+            </div>
+          </div>
+          <DialogDescription class="sr-only">报告预览</DialogDescription>
+        </DialogHeader>
+        <div class="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+          <div v-if="previewLoading" class="space-y-3 py-8">
+            <Skeleton class="h-6 w-3/4" />
+            <Skeleton class="h-4 w-full" />
+            <Skeleton class="h-4 w-5/6" />
+            <Skeleton class="h-4 w-full" />
+            <Skeleton class="h-4 w-2/3" />
+          </div>
+          <div v-else-if="previewContent" ref="previewContentRef" class="report-markdown prose prose-sm dark:prose-invert max-w-none">
+            <Markdown :content="previewContent" />
+          </div>
+          <div v-else class="text-center text-muted-foreground py-12">
+            <p class="text-sm">无法加载报告内容</p>
+          </div>
+        </div>
+        <div class="shrink-0 border-t border-border/60 px-6 py-3 flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 text-xs" @click="exportReportPdf">
+            <Download class="size-3.5" />
+            导出 PDF
+          </Button>
+          <Button variant="outline" size="sm" class="cursor-pointer text-xs" @click="showReportPreview = false">
+            关闭
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -376,6 +441,7 @@
 import { onMounted, onUnmounted, ref, reactive } from 'vue'
 import { aiApi } from '@/api/ai'
 import { reportApi } from '@/api/report'
+import type { ReportItem } from '@/api/report'
 import { STTStream } from '@/api/stt'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -397,8 +463,14 @@ import {
   PromptInputFooter,
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
+import { Markdown } from 'vue-stream-markdown'
+import 'vue-stream-markdown/index.css'
 import {
   BrainCircuit,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Eye,
   FileText,
   MessageCircle,
   MessagesSquare,
@@ -420,14 +492,7 @@ interface Session {
   expires_at: string | null
 }
 
-interface Report {
-  id: number
-  report_type: string
-  summary: string
-  detail_path: string | null
-  trace_id: string | null
-  created_at: string
-}
+type Report = ReportItem
 
 const quickHints = [
   '分析最近告警',
@@ -449,7 +514,16 @@ const reportsLoading = ref(false)
 const reportGenerating = ref(false)
 const reportMsg = ref('')
 const reportMsgOk = ref(true)
-const selectedReport = ref<Report | null>(null)
+const reportPage = ref(1)
+const reportPageSize = 10
+const reportTotal = ref(0)
+
+const showReportPreview = ref(false)
+const previewReport = ref<Report | null>(null)
+const previewContent = ref('')
+const previewFileSize = ref<number | null>(null)
+const previewLoading = ref(false)
+const previewContentRef = ref<HTMLElement | null>(null)
 
 const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
@@ -630,9 +704,10 @@ const handlePromptSubmit = (payload: PromptInputMessage) => {
 const loadReports = async () => {
   reportsLoading.value = true
   try {
-    const data: any = await reportApi.getReports()
+    const data: any = await reportApi.getReports(reportPage.value, reportPageSize)
     const list = data?.items ?? (Array.isArray(data) ? data : (data?.data ?? []))
     reports.value = Array.isArray(list) ? list : []
+    reportTotal.value = typeof data?.total === 'number' ? data.total : reports.value.length
   } catch {
     reports.value = []
   } finally {
@@ -647,6 +722,7 @@ const generateReport = async (type: string) => {
     await reportApi.generate(type)
     reportMsg.value = '报告已生成'
     reportMsgOk.value = true
+    reportPage.value = 1
     await loadReports()
   } catch {
     reportMsg.value = '生成失败'
@@ -655,6 +731,66 @@ const generateReport = async (type: string) => {
     reportGenerating.value = false
     setTimeout(() => { reportMsg.value = '' }, 3000)
   }
+}
+
+const openReportPreview = async (r: Report) => {
+  previewReport.value = r
+  previewContent.value = ''
+  previewFileSize.value = r.file_size ?? null
+  previewLoading.value = true
+  showReportPreview.value = true
+  try {
+    const data: any = await reportApi.getReportContent(r.id)
+    previewContent.value = data?.content ?? ''
+    previewFileSize.value = data?.file_size ?? r.file_size ?? null
+  } catch {
+    previewContent.value = ''
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
+const exportReportPdf = () => {
+  const el = previewContentRef.value
+  if (!el) return
+  const title = previewReport.value?.report_type === 'daily' ? '日报'
+    : previewReport.value?.report_type === 'weekly' ? '周报'
+    : previewReport.value?.report_type === 'scan' ? '扫描报告' : '报告'
+  const dateStr = previewReport.value?.created_at
+    ? new Date(previewReport.value.created_at).toLocaleDateString('zh-CN')
+    : ''
+  const printWin = window.open('', '_blank')
+  if (!printWin) return
+  printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>${title} - ${dateStr}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.7; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 22px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; }
+  h2 { font-size: 18px; margin-top: 24px; color: #374151; }
+  h3 { font-size: 15px; margin-top: 20px; color: #4b5563; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 4px 0; }
+  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  pre { background: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; font-size: 13px; }
+  th { background: #f9fafb; font-weight: 600; }
+  blockquote { border-left: 3px solid #d1d5db; margin: 12px 0; padding: 8px 16px; color: #6b7280; }
+  @media print { body { padding: 20px; } }
+</style>
+</head><body>`)
+  printWin.document.write(el.innerHTML)
+  printWin.document.write('</body></html>')
+  printWin.document.close()
+  setTimeout(() => { printWin.print() }, 300)
 }
 
 // ── TTS 录音按钮 ──
@@ -805,5 +941,87 @@ onMounted(() => {
 .tts-bubble-leave-to {
   opacity: 0;
   transform: translate(-50%, 4px) scale(0.9);
+}
+
+/* 报告预览 Markdown 美化 */
+.report-markdown :deep(h1) {
+  font-size: 1.35rem;
+  font-weight: 700;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+  margin-top: 0;
+}
+.report-markdown :deep(h2) {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--foreground);
+}
+.report-markdown :deep(h3) {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+.report-markdown :deep(p) {
+  margin: 0.5rem 0;
+  line-height: 1.75;
+}
+.report-markdown :deep(ul),
+.report-markdown :deep(ol) {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.report-markdown :deep(li) {
+  margin: 0.25rem 0;
+  line-height: 1.7;
+}
+.report-markdown :deep(code) {
+  background: var(--muted);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.report-markdown :deep(pre) {
+  background: var(--muted);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+.report-markdown :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+.report-markdown :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+}
+.report-markdown :deep(th),
+.report-markdown :deep(td) {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.report-markdown :deep(th) {
+  background: var(--muted);
+  font-weight: 600;
+}
+.report-markdown :deep(blockquote) {
+  border-left: 3px solid var(--primary);
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: 0 6px 6px 0;
+}
+.report-markdown :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
 }
 </style>

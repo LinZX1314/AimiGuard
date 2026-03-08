@@ -99,6 +99,23 @@ def _write_report_to_disk(report_type: str, content: str, now: datetime) -> str:
     return f"/generated_reports/{filename}"
 
 
+def _resolve_report_path(detail_path: str | None) -> Path | None:
+    if not detail_path:
+        return None
+    repo_root = Path(__file__).resolve().parents[2]
+    rel = detail_path.lstrip("/")
+    full = repo_root / "backend" / rel
+    if full.is_file():
+        return full
+    full2 = repo_root / rel
+    return full2 if full2.is_file() else None
+
+
+def _get_file_size(detail_path: str | None) -> int | None:
+    p = _resolve_report_path(detail_path)
+    return p.stat().st_size if p else None
+
+
 class GenerateReportRequest(BaseModel):
     report_type: str  # daily, weekly, event, scan
     scope: Optional[str] = None
@@ -215,6 +232,7 @@ async def get_reports(
                     "detail_path": item.detail_path,
                     "format": item.format,
                     "trace_id": item.trace_id,
+                    "file_size": _get_file_size(item.detail_path),
                     "created_at": item.created_at.isoformat() if item.created_at else None,
                 }
                 for item in reports
@@ -238,6 +256,27 @@ async def get_report(report_id: int, db: Session = Depends(get_db)):
             "detail_path": report.detail_path,
             "format": report.format,
             "trace_id": report.trace_id,
+            "file_size": _get_file_size(report.detail_path),
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+        }
+    )
+
+
+@router.get("/reports/{report_id}/content")
+async def get_report_content(report_id: int, db: Session = Depends(get_db)):
+    report = db.query(AIReport).filter(AIReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    path = _resolve_report_path(report.detail_path)
+    if not path:
+        raise HTTPException(status_code=404, detail="Report file not found on disk")
+    content = path.read_text(encoding="utf-8")
+    return APIResponse.success(
+        {
+            "id": report.id,
+            "report_type": report.report_type,
+            "content": content,
+            "file_size": path.stat().st_size,
             "created_at": report.created_at.isoformat() if report.created_at else None,
         }
     )
