@@ -211,6 +211,12 @@ body.theme-transitioning * {
     background-attachment: fixed;
   }
 
+  body.login-page {
+    background-image:
+      radial-gradient(circle at top right, rgba(52, 211, 153, 0.16), transparent 28%),
+      radial-gradient(circle at left bottom, rgba(16, 185, 129, 0.1), transparent 24%);
+  }
+
   *::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -247,6 +253,13 @@ body.theme-transitioning * {
   background-image:
     radial-gradient(circle at top right, rgba(255, 157, 66, 0.14), transparent 26%),
     radial-gradient(circle at 0% 100%, rgba(82, 214, 205, 0.09), transparent 22%),
+    linear-gradient(180deg, rgba(5, 8, 12, 0.98), rgba(8, 11, 15, 1));
+}
+
+.dark body.login-page {
+  background-image:
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.18), transparent 26%),
+    radial-gradient(circle at 0% 100%, rgba(16, 185, 129, 0.12), transparent 22%),
     linear-gradient(180deg, rgba(5, 8, 12, 0.98), rgba(8, 11, 15, 1));
 }
 

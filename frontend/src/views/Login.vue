@@ -34,6 +34,7 @@
               type="text"
               required
               autocomplete="username"
+              class="!border-emerald-500/15 hover:!border-emerald-400/45 focus-visible:!border-emerald-400 focus-visible:!ring-emerald-500/25"
               placeholder="请输入用户名"
             />
           </div>
@@ -46,6 +47,7 @@
               type="password"
               required
               autocomplete="current-password"
+              class="!border-emerald-500/15 hover:!border-emerald-400/45 focus-visible:!border-emerald-400 focus-visible:!ring-emerald-500/25"
               placeholder="请输入密码"
             />
           </div>
@@ -69,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi } from '../api/auth'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -170,6 +172,11 @@ const handleLogin = async () => {
 }
 
 onMounted(() => {
+  document.body.classList.add('login-page')
   initTheme()
+})
+
+onUnmounted(() => {
+  document.body.classList.remove('login-page')
 })
 </script>

@@ -4,15 +4,18 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useActiveMode } from '@/composables/useActiveMode'
 
 const { activeMode } = useActiveMode()
+const route = useRoute()
 const canvas = ref<HTMLCanvasElement>()
 let ctx: CanvasRenderingContext2D | null = null
 let particles: Particle[] = []
 let animationId: number
 
 const isProbeMode = computed(() => activeMode.value === 'probe')
+const isLoginRoute = computed(() => route.path === '/login')
 
 interface Particle {
   x: number
@@ -50,8 +53,16 @@ function animate() {
   
   ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
   
-  const particleColor = isProbeMode.value ? 'rgba(249, 115, 22, 0.6)' : 'rgba(59, 130, 246, 0.6)'
-  const lineColor = isProbeMode.value ? 'rgba(249, 115, 22, 0.15)' : 'rgba(59, 130, 246, 0.15)'
+  const particleColor = isLoginRoute.value
+    ? 'rgba(52, 211, 153, 0.56)'
+    : isProbeMode.value
+      ? 'rgba(249, 115, 22, 0.6)'
+      : 'rgba(59, 130, 246, 0.6)'
+  const lineColor = isLoginRoute.value
+    ? 'rgba(16, 185, 129, 0.18)'
+    : isProbeMode.value
+      ? 'rgba(249, 115, 22, 0.15)'
+      : 'rgba(59, 130, 246, 0.15)'
   
   particles.forEach((p, i) => {
     p.x += p.vx
