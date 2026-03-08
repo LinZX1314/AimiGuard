@@ -225,7 +225,8 @@
                 <Transition name="tts-bubble">
                   <div
                     v-if="ttsRecording"
-                    class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-36 rounded-xl bg-popover border border-border/60 shadow-lg px-3 py-2.5 flex flex-col items-center gap-2 z-50"
+                    class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 rounded-xl bg-popover border border-border/60 shadow-lg px-3 py-2.5 flex flex-col items-center gap-2 z-50"
+                    :class="sttText ? 'w-52' : 'w-36'"
                   >
                     <!-- 实时波形 -->
                     <div class="flex items-center gap-[3px] h-6">
@@ -236,8 +237,9 @@
                         :style="{ height: Math.max(4, v * 24) + 'px' }"
                       />
                     </div>
-                    <p class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
-                    <p class="text-[9px] text-muted-foreground/40 leading-none">点击麦克风停止</p>
+                    <p v-if="sttText" class="text-[10px] text-foreground leading-tight text-center max-w-full truncate">{{ sttText }}</p>
+                    <p v-else class="text-[10px] text-muted-foreground leading-none">正在聆听…</p>
+                    <p class="text-[9px] text-muted-foreground/40 leading-none">点击停止并发送</p>
                     <!-- 小三角箭头 -->
                     <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 size-2 rotate-45 bg-popover border-r border-b border-border/60" />
                   </div>
@@ -374,6 +376,7 @@
 import { onMounted, onUnmounted, ref, reactive } from 'vue'
 import { aiApi } from '@/api/ai'
 import { reportApi } from '@/api/report'
+import { STTStream } from '@/api/stt'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -450,6 +453,7 @@ const selectedReport = ref<Report | null>(null)
 
 const ttsRecording = ref(false)
 const showMicPermissionDialog = ref(false)
+const sttText = ref('')
 
 // 实时音频波形状态
 const waveBars = reactive([0, 0, 0, 0, 0])
@@ -457,6 +461,8 @@ let audioCtx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let micStream: MediaStream | null = null
 let animFrameId: number | null = null
+let sttStream: STTStream | null = null
+let mediaRecorder: MediaRecorder | null = null
 
 const startAudioVisualizer = (stream: MediaStream) => {
   audioCtx = new AudioContext()
@@ -489,8 +495,58 @@ const stopAudioVisualizer = () => {
   for (let i = 0; i < 5; i++) waveBars[i] = 0
 }
 
+const stopSTTStream = () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop()
+  }
+  mediaRecorder = null
+  if (sttStream) {
+    sttStream.stop()
+    setTimeout(() => { sttStream?.close(); sttStream = null }, 500)
+  }
+}
+
+const startSTTStream = (stream: MediaStream) => {
+  sttText.value = ''
+  sttStream = new STTStream((event) => {
+    if (event.type === 'partial' || event.type === 'final') {
+      sttText.value = event.text || ''
+    }
+    if (event.type === 'final' && event.text) {
+      // 录音结束后自动发送转写文字
+      const finalText = event.text
+      setTimeout(() => {
+        if (finalText.trim()) sendMessage(finalText.trim())
+        sttText.value = ''
+      }, 300)
+    }
+  })
+
+  sttStream.connect().then(() => {
+    // 启动 MediaRecorder 流式发送音频块
+    try {
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm',
+      })
+    } catch {
+      mediaRecorder = new MediaRecorder(stream)
+    }
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0 && sttStream?.connected) {
+        e.data.arrayBuffer().then((buf) => sttStream?.sendAudio(buf))
+      }
+    }
+    mediaRecorder.start(250) // 每 250ms 发送一个音频块
+  }).catch(() => {
+    // WebSocket 连接失败时仍然允许录音（只是没有转写）
+  })
+}
+
 onUnmounted(() => {
   stopAudioVisualizer()
+  stopSTTStream()
 })
 
 // ── 快捷提示 ──
@@ -606,10 +662,12 @@ const startRecording = (stream: MediaStream) => {
   micStream = stream
   ttsRecording.value = true
   startAudioVisualizer(stream)
+  startSTTStream(stream)
 }
 
 const toggleTTSRecording = async () => {
   if (ttsRecording.value) {
+    stopSTTStream()
     ttsRecording.value = false
     stopAudioVisualizer()
     return
@@ -706,6 +764,11 @@ onMounted(() => {
 .expand-leave-from {
   opacity: 1;
   max-height: 4rem;
+}
+
+/* 解除 InputGroup overflow-hidden 裁剪，让气泡可以溢出 */
+:deep([data-slot="input-group"]) {
+  overflow: visible !important;
 }
 
 /* TTS 按钮内小波形条 */

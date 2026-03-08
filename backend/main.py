@@ -13,7 +13,7 @@ from core.response import (
     general_exception_handler,
 )
 from core.middleware import TraceIDMiddleware, RateLimitMiddleware
-from api import auth, defense, scan, report, ai_chat, tts, firewall, system, push, overview, plugin, device, workflow
+from api import auth, defense, scan, report, ai_chat, tts, stt, firewall, system, push, overview, plugin, device, workflow
 from services.scheduler_service import scheduler_service
 
 
@@ -106,6 +106,7 @@ app.include_router(scan.router)
 app.include_router(report.router)
 app.include_router(ai_chat.router)
 app.include_router(tts.router)
+app.include_router(stt.router)
 app.include_router(firewall.router)
 app.include_router(push.router)
 app.include_router(overview.router)
