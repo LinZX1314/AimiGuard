@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen grid place-items-center bg-background px-4">
-    <Card class="relative w-full max-w-[400px] border-border shadow-sm">
+    <Card class="relative w-full max-w-[400px] border-white shadow-sm">
       <div class="absolute right-4 top-4">
         <Button
           type="button"
