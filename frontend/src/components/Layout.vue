@@ -4,7 +4,7 @@
   </Transition>
   <div ref="shellRef" class="flex h-screen flex-col bg-background/50 text-foreground">
     <header class="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div class="flex h-14 items-center px-4 sm:px-6">
+      <div class="relative flex h-14 items-center px-4 sm:px-6">
         <div class="flex items-center gap-3">
           <Sheet>
             <SheetTrigger as-child>
@@ -42,10 +42,10 @@
           </div>
         </div>
 
-        <div class="flex flex-1 justify-center">
+        <!-- 模式切换：绝对居中于整个页面 -->
+        <div class="absolute left-1/2 -translate-x-1/2 hidden md:flex">
           <Tabs
             :model-value="activeMode"
-            class="hidden md:flex"
             @update:model-value="onModeChange"
           >
             <TabsList class="relative h-10 w-[180px] bg-muted/50 p-1 rounded-full grid grid-cols-2 items-center overflow-hidden border border-border/20 z-0">
@@ -73,6 +73,8 @@
             </TabsList>
           </Tabs>
         </div>
+
+        <div class="flex-1" />
 
         <div class="flex items-center gap-2">
           <!-- 蜜罐状态指示器 -->
@@ -112,7 +114,7 @@
                     <Zap class="size-3" :class="hfishTesting ? 'animate-pulse' : ''" />
                     {{ hfishTesting ? '测试中…' : '测试连接' }}
                   </Button>
-                  <Button variant="ghost" size="sm" class="cursor-pointer h-7 text-xs gap-1" @click="router.push('/integrations')">
+                  <Button variant="ghost" size="sm" class="cursor-pointer h-7 text-xs gap-1" @click="router.push('/integrations?tab=hfish')">
                     <ExternalLink class="size-3" />
                     配置
                   </Button>
@@ -155,7 +157,7 @@
                     </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" class="cursor-pointer w-full h-7 text-xs gap-1" @click="router.push('/integrations')">
+                <Button variant="ghost" size="sm" class="cursor-pointer w-full h-7 text-xs gap-1" @click="router.push('/integrations?tab=device')">
                   <ExternalLink class="size-3" />
                   设备管理
                 </Button>

@@ -6,7 +6,7 @@
         <p class="text-sm text-muted-foreground">管理 AI API、TTS、HFish、Nmap、推送通道与防火墙联动配置</p>
       </div>
 
-      <Tabs default-value="hfish" class="space-y-6">
+      <Tabs :default-value="initialTab" class="space-y-6">
         <TabsList class="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl p-1.5 sm:flex-wrap sm:overflow-visible">
           <TabsTrigger value="hfish" class="flex shrink-0 items-center gap-1.5 px-4 py-2">
             <Bug class="size-3.5" />
@@ -851,6 +851,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { BellRing, BrainCircuit, Bug, Plus, RefreshCw, Server, Shield, Volume2, Zap } from 'lucide-vue-next'
 import { apiClient, getRequestErrorMessage, hasAccessToken } from '@/api/client'
 import { defenseApi, type HFishConfig } from '@/api/defense'
@@ -864,6 +865,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+
+const route = useRoute()
+const validTabs = ['hfish', 'nmap', 'push', 'device', 'ai', 'firewall']
+const initialTab = computed(() => {
+  const t = (route.query.tab as string) || ''
+  return validTabs.includes(t) ? t : 'hfish'
+})
 
 // ── HFish 状态 ──
 const hfishConfig = ref<HFishConfig>({ host_port: null, api_base_url: null, sync_interval: 60, enabled: false })
