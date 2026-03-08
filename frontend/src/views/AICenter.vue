@@ -113,7 +113,7 @@
         </ConversationEmptyState>
 
         <!-- 消息流：使用 AI Elements Message / MessageContent / MessageAvatar -->
-        <div v-if="messages.length > 0 || aiThinking" class="space-y-5 pb-2">
+        <div v-if="messages.length > 0 || aiThinking" class="space-y-5 py-2">
           <TransitionGroup name="msg" tag="div" class="space-y-5">
             <Message
               v-for="(msg, idx) in messages"
@@ -744,7 +744,7 @@ const openReportPreview = async (r: Report) => {
     previewContent.value = data?.content ?? ''
     previewFileSize.value = data?.file_size ?? r.file_size ?? null
   } catch {
-    previewContent.value = ''
+    previewContent.value = r.summary ? `> ${r.summary}\n\n*报告原始文件不可用*` : ''
   } finally {
     previewLoading.value = false
   }
