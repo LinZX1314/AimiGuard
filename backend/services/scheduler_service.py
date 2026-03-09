@@ -15,7 +15,8 @@ from typing import Optional
 
 from services.hfish_collector import hfish_collector
 from services.nmap_scanner import nmap_scanner
-from core.database import AuditLog, SessionLocal
+from core.database import SessionLocal
+from services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,10 @@ SCHEDULER_ACTOR = "scheduler"
 def _write_audit(db, action: str, target: str, result: str,
                  trace_id: str, error_message: Optional[str] = None,
                  target_type: str = "auto_task") -> None:
-    """将调度器执行结果写入审计日志"""
+    """将调度器执行结果写入审计日志（通过 AuditService 维护哈希链完整性）"""
     try:
-        entry = AuditLog(
+        AuditService.log(
+            db=db,
             actor=SCHEDULER_ACTOR,
             action=action,
             target=target,
@@ -35,10 +37,7 @@ def _write_audit(db, action: str, target: str, result: str,
             result=result,
             error_message=error_message,
             trace_id=trace_id,
-            created_at=datetime.now(timezone.utc),
         )
-        db.add(entry)
-        db.commit()
     except Exception as e:
         logger.warning(f"审计日志写入失败: {e}")
         try:
