@@ -74,6 +74,10 @@ def insert_sample_data(conn: sqlite3.Connection):
         ("set_system_mode", "system", "set_mode", "设置系统模式"),
         ("system_rollback", "system", "rollback", "系统回滚"),
         ("generate_report", "report", "generate", "生成报告"),
+        ("workflow_view", "workflow", "view", "查看工作流"),
+        ("workflow_edit", "workflow", "edit", "编辑工作流"),
+        ("workflow_publish", "workflow", "publish", "发布工作流"),
+        ("workflow_rollback", "workflow", "rollback", "回滚工作流"),
     ]
     cursor.executemany(
         "INSERT INTO permission (name, resource, action, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -107,7 +111,8 @@ def insert_sample_data(conn: sqlite3.Connection):
           'create_tts_task', 'view_tts_tasks',
           'view_audit', 'view_system_mode',
           'system:config', 'defense:manage',
-          'generate_report'
+          'generate_report',
+          'workflow_view', 'workflow_edit'
         )
     """)
     operator_permission_ids = [row[0] for row in cursor.fetchall()]
@@ -130,7 +135,8 @@ def insert_sample_data(conn: sqlite3.Connection):
           'view_plugins',
           'view_tts_tasks',
           'view_firewall_tasks',
-          'view_system_mode'
+          'view_system_mode',
+          'workflow_view'
         )
     """)
     viewer_permission_ids = [row[0] for row in cursor.fetchall()]
