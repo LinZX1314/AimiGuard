@@ -31,7 +31,7 @@ def _bool_env(name: str, default: bool) -> bool:
 class PushService:
     @staticmethod
     def sandbox_mode() -> bool:
-        return _bool_env("PUSH_SANDBOX_MODE", True)
+        return _bool_env("PUSH_SANDBOX_MODE", False)
 
     @staticmethod
     def _parse_config(channel: PushChannel) -> Dict[str, Any]:
@@ -305,7 +305,13 @@ class PushService:
         return await asyncio.to_thread(PushService._send_email_sync, channel, message, trace_id)
 
     @staticmethod
-    async def send_test(channel: PushChannel, message: str, trace_id: str) -> Dict[str, Any]:
+    async def _dispatch_channel(
+        channel: PushChannel,
+        message: str,
+        trace_id: str,
+        *,
+        allow_sandbox: bool,
+    ) -> Dict[str, Any]:
         if not channel.enabled:
             return {
                 "success": False,
@@ -319,7 +325,7 @@ class PushService:
                 "trace_id": trace_id,
             }
 
-        if PushService.sandbox_mode():
+        if allow_sandbox and PushService.sandbox_mode():
             return {
                 "success": True,
                 "status": "simulated_success",
@@ -370,6 +376,24 @@ class PushService:
             "target": channel.target,
             "trace_id": trace_id,
         }
+
+    @staticmethod
+    async def send(channel: PushChannel, message: str, trace_id: str) -> Dict[str, Any]:
+        return await PushService._dispatch_channel(
+            channel,
+            message,
+            trace_id,
+            allow_sandbox=False,
+        )
+
+    @staticmethod
+    async def send_test(channel: PushChannel, message: str, trace_id: str) -> Dict[str, Any]:
+        return await PushService._dispatch_channel(
+            channel,
+            message,
+            trace_id,
+            allow_sandbox=True,
+        )
 
     # ── event-driven alert push ──
 
@@ -448,7 +472,7 @@ class PushService:
 
             for channel in channels:
                 try:
-                    result = await PushService.send_test(channel, message, trace_id)
+                    result = await PushService.send(channel, message, trace_id)
                     results.append(result)
                     if not result.get("success"):
                         logger.warning(

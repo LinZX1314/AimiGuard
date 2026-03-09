@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import text
 
 
@@ -83,6 +84,101 @@ def test_push_test_channel_uses_sandbox_mode(client, admin_token, monkeypatch):
     assert body["code"] == 0
     assert body["data"]["simulated"] is True
     assert body["data"]["status"] == "simulated_success"
+
+
+@pytest.mark.asyncio
+async def test_push_send_alert_bypasses_sandbox_mode(db, monkeypatch):
+    from core.database import PushChannel
+    from services.push_service import PushService
+
+    monkeypatch.setenv("PUSH_SANDBOX_MODE", "1")
+
+    channel = PushChannel(
+        channel_type="webhook",
+        channel_name="f12_real_alert",
+        target="http://127.0.0.1:65534/webhook",
+        enabled=1,
+    )
+    db.add(channel)
+    db.commit()
+    db.refresh(channel)
+
+    called = {"value": False}
+
+    async def fake_send_webhook(channel_obj, message, trace_id):
+        called["value"] = True
+        return {
+            "success": True,
+            "status": "success",
+            "detail": "ok",
+            "response_status": 200,
+            "simulated": False,
+        }
+
+    monkeypatch.setattr(PushService, "_send_webhook", staticmethod(fake_send_webhook))
+
+    def _session_factory():
+        return db.__class__(bind=db.get_bind())
+
+    results = await PushService.send_alert(
+        _session_factory,
+        title="真实告警",
+        severity="HIGH",
+        ip="1.2.3.4",
+        source="unit_test",
+        summary="sandbox should be bypassed",
+        event_id=1,
+        trace_id="trace-real-alert",
+    )
+
+    assert called["value"] is True
+    assert len(results) == 1
+    assert results[0]["success"] is True
+    assert results[0]["simulated"] is False
+
+
+def test_defense_alert_schedules_push_for_high_ai_score(client, monkeypatch):
+    from api import defense as defense_api
+
+    scheduled = {"called": False}
+
+    async def fake_assess_threat(ip, attack_type, attack_count, history=None):
+        return {
+            "score": 95,
+            "reason": "high_risk",
+            "action_suggest": "BLOCK",
+        }
+
+    def fake_ensure_future(coro):
+        scheduled["called"] = True
+        coro.close()
+        return None
+
+    monkeypatch.setattr(defense_api.ai_engine, "assess_threat", fake_assess_threat)
+    monkeypatch.setattr(defense_api.asyncio, "ensure_future", fake_ensure_future)
+
+    response = client.post(
+        "/api/v1/defense/alerts",
+        json={
+            "response_code": 0,
+            "response_message": "ok",
+            "list_infos": [
+                {
+                    "client_id": "push-trigger-high-score",
+                    "service_name": "ssh-honeypot",
+                    "service_type": "ssh",
+                    "attack_ip": "5.6.7.8",
+                    "attack_count": 5,
+                    "labels": "ssh-brute",
+                }
+            ],
+            "attack_infos": [],
+            "attack_trend": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert scheduled["called"] is True
 
 
 def test_tts_process_uses_sandbox_mode(client, admin_token, monkeypatch):

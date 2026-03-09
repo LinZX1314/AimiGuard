@@ -289,6 +289,17 @@ def _clamp_score(value: Any, default: int) -> int:
     return max(0, min(100, score))
 
 
+def _severity_from_ai_score(value: Any) -> str:
+    score = _clamp_score(value, 0)
+    if score >= 90:
+        return "CRITICAL"
+    if score >= 80:
+        return "HIGH"
+    if score >= 60:
+        return "MEDIUM"
+    return "LOW"
+
+
 async def _enrich_with_ai_assessment(event_payload: Dict[str, Any]) -> Dict[str, Any]:
     attack_ip = event_payload.get("ip") or "unknown"
     attack_count = max(1, _safe_int(event_payload.get("attack_count"), 1))
@@ -1122,16 +1133,17 @@ async def receive_alert(
         )
 
     high_severity_events = [
-        ep for ep in normalized_events
-        if str(ep.get("severity", "")).upper() in ("CRITICAL", "HIGH")
+        (ep, _severity_from_ai_score(ep.get("ai_score")))
+        for ep in normalized_events
+        if _severity_from_ai_score(ep.get("ai_score")) in ("CRITICAL", "HIGH")
     ]
     if high_severity_events and ingested_event_ids:
-        sample = high_severity_events[0]
+        sample, sample_severity = high_severity_events[0]
         asyncio.ensure_future(
             PushService.send_alert(
                 SessionLocal,
                 title=f"新增 {len(ingested_event_ids)} 条威胁事件",
-                severity=str(sample.get("severity", "HIGH")),
+                severity=sample_severity,
                 ip=str(sample.get("ip", "")),
                 source=str(sample.get("source_vendor", "hfish")),
                 summary=str(sample.get("threat_label", "")),
