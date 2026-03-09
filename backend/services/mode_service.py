@@ -20,7 +20,9 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _utc_iso(ts: Optional[datetime] = None) -> str:
+def _utc_iso(ts=None) -> str:
+    if isinstance(ts, str):
+        return ts
     current = ts or _utc_now()
     return current.isoformat().replace("+00:00", "Z")
 
