@@ -309,7 +309,7 @@
                   <BellRing class="size-4 text-purple-400" />
                   推送通道
                 </CardTitle>
-                <p class="text-xs text-muted-foreground">管理 Webhook / 企微 / 钉钉 / 邮件通知通道</p>
+                <p class="text-xs text-muted-foreground">管理 Webhook / 企微 / 钉钉 / 飞书 / 邮件通知通道</p>
               </div>
               <Button variant="outline" size="sm" class="cursor-pointer gap-1.5" @click="showAddChannel = !showAddChannel">
                 <Plus class="size-3.5" />
@@ -328,6 +328,7 @@
                       <option value="webhook">Webhook</option>
                       <option value="wecom">企业微信</option>
                       <option value="dingtalk">钉钉</option>
+                      <option value="feishu">飞书</option>
                       <option value="email">邮件</option>
                     </select>
                   </div>
@@ -343,9 +344,10 @@
                     <label class="text-sm font-medium">目标地址（Webhook URL / 邮箱）</label>
                     <input
                       v-model="channelForm.target"
-                      placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                      :placeholder="channelTargetPlaceholder"
                       class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                     />
+                    <p class="text-xs text-muted-foreground">{{ channelTargetHint }}</p>
                   </div>
                 </div>
                 <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -1615,6 +1617,28 @@ const channelForm = reactive({
   channel_type: 'webhook',
   channel_name: '',
   target: '',
+})
+
+const channelTargetPlaceholder = computed(() => {
+  const map: Record<string, string> = {
+    webhook: 'https://example.com/webhook/callback',
+    wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...',
+    dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=...',
+    feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+    email: 'admin@example.com',
+  }
+  return map[channelForm.channel_type] || 'https://...'
+})
+
+const channelTargetHint = computed(() => {
+  const map: Record<string, string> = {
+    webhook: '通用 HTTP 回调地址，POST JSON 格式推送',
+    wecom: '企业微信群机器人 Webhook 地址',
+    dingtalk: '钉钉自定义机器人 Webhook 地址（支持 Markdown 富文本）',
+    feishu: '飞书自定义机器人 Webhook 地址（支持卡片消息）',
+    email: '收件人邮箱地址，需在 .env 配置 SMTP 参数',
+  }
+  return map[channelForm.channel_type] || ''
 })
 
 const isRenderablePushChannel = (value: unknown): value is PushChannel => {

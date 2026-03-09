@@ -1,17 +1,20 @@
-"""Push delivery service for webhook/wecom/dingtalk/email channels."""
+"""Push delivery service for webhook/wecom/dingtalk/feishu/email channels."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import smtplib
 from email.message import EmailMessage
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from core.database import PushChannel
+
+logger = logging.getLogger(__name__)
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -96,10 +99,21 @@ class PushService:
 
     @staticmethod
     async def _send_dingtalk(channel: PushChannel, message: str) -> Dict[str, Any]:
-        payload = {
-            "msgtype": "text",
-            "text": {"content": message},
-        }
+        config = PushService._parse_config(channel)
+        use_markdown = config.get("markdown", True)
+        if use_markdown:
+            payload = {
+                "msgtype": "markdown",
+                "markdown": {
+                    "title": "Aimiguan 安全通知",
+                    "text": message,
+                },
+            }
+        else:
+            payload = {
+                "msgtype": "text",
+                "text": {"content": message},
+            }
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(channel.target, json=payload)
         success = response.status_code < 400
@@ -112,6 +126,50 @@ class PushService:
                     if errcode is not None:
                         success = str(errcode) in {"0", "ok"}
                         detail = f"dingtalk_errcode={errcode}"
+            except Exception:
+                pass
+        return {
+            "success": success,
+            "status": "success" if success else "failed",
+            "detail": detail,
+            "response_status": response.status_code,
+            "simulated": False,
+        }
+
+    @staticmethod
+    async def _send_feishu(channel: PushChannel, message: str) -> Dict[str, Any]:
+        config = PushService._parse_config(channel)
+        use_rich = config.get("rich", True)
+        if use_rich:
+            payload = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {
+                        "title": {"tag": "plain_text", "content": "Aimiguan 安全通知"},
+                        "template": "red",
+                    },
+                    "elements": [
+                        {"tag": "markdown", "content": message},
+                    ],
+                },
+            }
+        else:
+            payload = {
+                "msg_type": "text",
+                "content": {"text": message},
+            }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(channel.target, json=payload)
+        success = response.status_code < 400
+        detail = f"feishu_status={response.status_code}"
+        if success:
+            try:
+                body = response.json()
+                if isinstance(body, dict):
+                    code = body.get("code") or body.get("StatusCode")
+                    if code is not None:
+                        success = int(code) == 0
+                        detail = f"feishu_code={code}"
             except Exception:
                 pass
         return {
@@ -223,6 +281,8 @@ class PushService:
                 result = await PushService._send_wecom(channel, message)
             elif channel_type == "dingtalk":
                 result = await PushService._send_dingtalk(channel, message)
+            elif channel_type == "feishu":
+                result = await PushService._send_feishu(channel, message)
             elif channel_type == "email":
                 result = await PushService._send_email(channel, message, trace_id)
             else:
@@ -250,4 +310,105 @@ class PushService:
             "target": channel.target,
             "trace_id": trace_id,
         }
+
+    # ── event-driven alert push ──
+
+    @staticmethod
+    def format_alert_message(
+        *,
+        title: str = "安全告警",
+        severity: str = "HIGH",
+        ip: str = "",
+        source: str = "",
+        summary: str = "",
+        event_id: Optional[int] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        severity_emoji = {
+            "CRITICAL": "🔴",
+            "HIGH": "🟠",
+            "MEDIUM": "🟡",
+            "LOW": "🟢",
+        }.get(severity.upper(), "⚪")
+        lines = [
+            f"### {severity_emoji} {title}",
+            "",
+            f"**严重等级**: {severity}",
+        ]
+        if ip:
+            lines.append(f"**攻击 IP**: `{ip}`")
+        if source:
+            lines.append(f"**数据来源**: {source}")
+        if summary:
+            lines.append(f"**摘要**: {summary}")
+        if event_id:
+            lines.append(f"**事件 ID**: {event_id}")
+        if extra:
+            for k, v in extra.items():
+                lines.append(f"**{k}**: {v}")
+        lines.append("")
+        lines.append(f"---")
+        lines.append(f"*Aimiguan 安全运营平台*")
+        return "\n".join(lines)
+
+    @staticmethod
+    async def send_alert(
+        db_session_factory: Any,
+        *,
+        title: str = "安全告警",
+        severity: str = "HIGH",
+        ip: str = "",
+        source: str = "",
+        summary: str = "",
+        event_id: Optional[int] = None,
+        trace_id: str = "",
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Send alert to ALL enabled push channels. Runs in background."""
+        message = PushService.format_alert_message(
+            title=title,
+            severity=severity,
+            ip=ip,
+            source=source,
+            summary=summary,
+            event_id=event_id,
+            extra=extra,
+        )
+
+        db = db_session_factory()
+        results: List[Dict[str, Any]] = []
+        try:
+            channels: List[PushChannel] = (
+                db.query(PushChannel)
+                .filter(PushChannel.enabled == 1)
+                .all()
+            )
+            if not channels:
+                return results
+
+            for channel in channels:
+                try:
+                    result = await PushService.send_test(channel, message, trace_id)
+                    results.append(result)
+                    if not result.get("success"):
+                        logger.warning(
+                            "push_alert_failed channel=%s detail=%s",
+                            channel.channel_name,
+                            result.get("detail"),
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "push_alert_exception channel=%s error=%s",
+                        channel.channel_name,
+                        str(exc),
+                    )
+                    results.append({
+                        "success": False,
+                        "channel_name": channel.channel_name,
+                        "detail": str(exc),
+                    })
+        finally:
+            db.close()
+
+        return results
 

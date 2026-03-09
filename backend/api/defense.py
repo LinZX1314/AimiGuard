@@ -23,6 +23,7 @@ from services.workflow_rollout import (
 )
 from services.workflow_runtime import run_published_workflow
 from services.event_broadcaster import DEFENSE_EVENTS_CHANNEL, event_broadcaster
+from services.push_service import PushService
 
 router = APIRouter(prefix="/api/v1/defense", tags=["defense"])
 compat_router = APIRouter(tags=["defense"])
@@ -1118,6 +1119,26 @@ async def receive_alert(
                 "deduped_event_ids": deduped_event_ids,
                 "invalid_reasons": invalid_reasons,
             },
+        )
+
+    high_severity_events = [
+        ep for ep in normalized_events
+        if str(ep.get("severity", "")).upper() in ("CRITICAL", "HIGH")
+    ]
+    if high_severity_events and ingested_event_ids:
+        sample = high_severity_events[0]
+        asyncio.ensure_future(
+            PushService.send_alert(
+                SessionLocal,
+                title=f"新增 {len(ingested_event_ids)} 条威胁事件",
+                severity=str(sample.get("severity", "HIGH")),
+                ip=str(sample.get("ip", "")),
+                source=str(sample.get("source_vendor", "hfish")),
+                summary=str(sample.get("threat_label", "")),
+                event_id=ingested_event_ids[0],
+                trace_id=trace_id,
+                extra={"入库数": len(ingested_event_ids), "去重数": len(deduped_event_ids)},
+            )
         )
 
     first_id: Optional[int] = None

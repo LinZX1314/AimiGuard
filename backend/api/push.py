@@ -18,7 +18,7 @@ from services.push_service import PushService
 
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
-SUPPORTED_TYPES = ["webhook", "wecom", "email", "dingtalk"]
+SUPPORTED_TYPES = ["webhook", "wecom", "dingtalk", "feishu", "email"]
 
 
 def _utc_now() -> datetime:
