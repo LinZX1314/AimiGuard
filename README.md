@@ -2056,31 +2056,57 @@ CREATE INDEX IF NOT EXISTS idx_audit_export_created_at ON audit_export_job(creat
 ## 建议目录结构（目标）
 ```text
 backend/
-  main.py
+  main.py                      # 后端入口 (CLI: --dev/--port/--host/--workers)
   core/
-    database.py
-  api/
-    auth.py
-    defense.py
-    scan.py
-    report.py
-    ai_chat.py
-    tts.py
-    firewall.py
-  services/
-    ai_engine.py
-    mcp_client.py
-    scanner.py
+    database.py                # ORM 模型 (47张表)
+    middleware.py              # TraceID / 限流中间件
+    response.py                # 统一响应封装
+  api/                         # 24 个 API 路由模块
+    auth.py                    # 鉴权 (登录/注册/刷新)
+    defense.py                 # 防御 (告警接收/AI评分/执行审批)
+    scan.py                    # 扫描 (任务/发现/CVE enrichment)
+    report.py                  # 报告生成
+    ai_chat.py                 # AI 对话
+    tts.py / stt.py            # 语音合成/识别
+    firewall.py                # 防火墙同步
+    system.py                  # 系统管理 (告警/备份/指标/导出)
+    push.py                    # 推送通道管理
+    notification.py            # 站内通知
+    device.py                  # 设备与凭证管理
+    overview.py                # 仪表盘概览
+    plugin.py                  # MCP 插件管理
+    prompt_template.py         # Prompt 模板管理
+    honeypot.py / honeytoken.py  # 蜜罐/蜜标
+    fix_ticket.py              # 修复工单
+    threat_intel.py            # 威胁情报
+    security_scan.py           # CI 安全扫描
+    security_whitelist.py      # 安全白名单
+    decoy.py                   # SPA 诱饵
+    workflow.py                # 工作流引擎
+    realtime.py                # WebSocket 实时推送
+  services/                    # 业务服务层
+    ai_engine.py               # AI 评分/可利用性评估
+    push_service.py            # 5通道推送 (webhook/wecom/dingtalk/feishu/email)
+    notification_service.py    # 站内通知服务
+    scanner.py                 # Nmap 扫描引擎
+    executor.py                # 封禁执行器
+    audit_service.py           # 审计服务 (哈希链)
+    mcp_client.py              # MCP 插件客户端
+    event_broadcaster.py       # WebSocket 广播
+    threat_intel.py            # CVE/EPSS/KEV 情报
+    crypto_service.py          # AES-GCM 凭证加密
+    scheduler_service.py       # 定时任务
 frontend/
   src/
-    router/
-      index.ts
-    views/
-      DefenseDashboard.vue
-      ScanManager.vue
-      AICenter.vue
-    components/
-requirements.txt
+    api/                       # 19 个 API 模块
+    views/                     # 14 个页面组件
+    components/                # UI 组件库
+    composables/               # 组合式函数
+    router/index.ts            # 路由配置
+  package.json
+sql/mvp_schema.sql             # 47张表 DDL
+scripts/dev.ps1                # 一键启动脚本
+tests/                         # 68+ 测试文件, 697+ 测试用例
 ```
 
 ## 配置与环境变量建议
@@ -4733,35 +4759,50 @@ CREATE INDEX IF NOT EXISTS idx_fix_ticket_finding_id ON fix_ticket(finding_id);
 ### 环境变量速查表
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `APP_ENV` | 是 | dev | 运行环境 |
 | `DATABASE_URL` | 是 | sqlite:///aimiguard.db | 数据库连接 |
 | `JWT_SECRET` | 是 | - | JWT 签名密钥 |
+| `JWT_EXPIRE_MINUTES` | 否 | 60 | Token 过期时长 |
 | `LLM_PROVIDER` | 是 | ollama | AI 模型供应商 |
 | `LLM_BASE_URL` | 是 | http://localhost:11434 | 模型服务地址 |
-| `TTS_PROVIDER` | 否 | - | TTS 引擎类型 |
+| `LLM_MODEL` | 否 | llama2 | 模型名称 |
+| `HOST` | 否 | 0.0.0.0 | 后端监听地址 |
+| `PORT` | 否 | 8000 | 后端监听端口 |
 | `MCP_MODE` | 否 | stdio | MCP 通信模式 |
+| `MCP_SERVER_NAME` | 否 | switch-controller | MCP 服务标识 |
+| `SCANNER_MAX_CONCURRENT` | 否 | 3 | 扫描并发上限 |
+| `PUSH_SANDBOX_MODE` | 否 | 0 | 推送沙箱模式 |
+| `PUSH_SMTP_HOST` | 否 | - | 邮件 SMTP 服务器 |
+| `PUSH_SMTP_PORT` | 否 | 587 | SMTP 端口 |
+| `PUSH_SMTP_USER` | 否 | - | SMTP 用户名 |
+| `PUSH_SMTP_PASSWORD` | 否 | - | SMTP 密码 |
+| `TTS_PROVIDER` | 否 | local | TTS 引擎类型 |
+| `TTS_ENDPOINT` | 否 | - | TTS 服务地址 |
+| `STT_PROVIDER` | 否 | local | STT 引擎类型 |
+| `STT_ENDPOINT` | 否 | - | STT 服务地址 |
 | `FIREWALL_API_URL` | 否 | - | 外部防火墙 API |
 
 ### 关键文件路径
 ```
 backend/
-├── main.py                 # 后端入口
-├── api/                    # API 路由
-│   ├── auth.py            # 鉴权接口
-│   ├── defense.py         # 防御接口
-│   └── scan.py            # 扫描接口
-├── services/              # 业务服务
-│   ├── ai_engine.py       # AI 评分
-│   ├── executor.py        # 执行器
-│   └── audit_service.py   # 审计服务
-└── models/                # 数据模型
+├── main.py                 # 后端入口 (argparse: --dev/--port/--host/--workers)
+├── core/database.py        # 47张ORM模型 + 轻量迁移 + RBAC初始化
+├── api/                    # 24个API路由模块 (auth/defense/scan/push/device/...)
+├── services/               # 业务服务 (ai_engine/push_service/scanner/executor/...)
+├── .env.example            # 环境变量模板 (含PUSH/TTS/STT等)
+└── requirements.txt        # Python依赖
 
 frontend/
 ├── src/
-│   ├── views/             # 页面组件
-│   ├── router/            # 路由配置
-│   └── stores/            # 状态管理
+│   ├── api/               # 19个API模块
+│   ├── views/             # 14个页面组件
+│   ├── components/        # UI组件库 (shadcn-vue + ai-elements)
+│   ├── composables/       # 组合式函数 (useAuthz等)
+│   └── router/index.ts    # Hash路由 + RBAC守卫
 └── package.json
+
+sql/mvp_schema.sql          # 47张表DDL (与ORM完全对齐)
+scripts/dev.ps1             # 一键启动 (自动.env/venv/依赖/初始化/启动)
+tests/                      # 68+测试文件, 697+用例
 ```
 
 ### 版本历史
