@@ -24,7 +24,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.auth import get_current_user, require_permissions
+from api.auth import require_permissions
 from core.database import get_db, User
 from services.audit_service import AuditService
 

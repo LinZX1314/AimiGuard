@@ -863,7 +863,7 @@
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <template v-for="(node, ni) in path.nodes" :key="ni">
                       <code class="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{{ node }}</code>
-                      <span v-if="ni < path.nodes.length - 1" class="text-muted-foreground text-xs">→</span>
+                      <span v-if="Number(ni) < path.nodes.length - 1" class="text-muted-foreground text-xs">→</span>
                     </template>
                   </div>
                 </div>
@@ -1313,7 +1313,7 @@ const openFindingDetail = (f: ScanFinding) => {
 }
 
 // ===== Helpers =====
-const formatTime = (t?: string) => {
+const formatTime = (t?: string | null) => {
   if (!t) return '—'
   return new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }

@@ -2,7 +2,6 @@
 Nmap 网络扫描服务
 执行 Nmap 扫描并将结果存储到 ScanTask 和 ScanFinding
 """
-import asyncio
 import json
 import logging
 import os

@@ -6,7 +6,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Optional
 
 
 class MetricsCollector:

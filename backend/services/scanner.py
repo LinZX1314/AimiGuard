@@ -5,12 +5,11 @@ import asyncio
 import json
 import xml.etree.ElementTree as ET
 import subprocess
-import tempfile
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.database import SessionLocal, ScanTask, ScanFinding, Asset
+from core.database import SessionLocal, ScanTask, ScanFinding
 from services.ai_engine import ai_engine
 from services.audit_service import AuditService
 from services.event_broadcaster import SCAN_TASKS_CHANNEL, event_broadcaster

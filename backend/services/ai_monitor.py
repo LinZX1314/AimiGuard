@@ -7,11 +7,10 @@ S4-03 异常 AI 行为告警
 """
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import AIDecisionLog, ThreatEvent

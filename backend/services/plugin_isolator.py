@@ -6,7 +6,6 @@ S2-04 MCP 插件隔离沙箱
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess

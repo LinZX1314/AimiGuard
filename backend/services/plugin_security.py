@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Optional, Set, Tuple
 
 # 已知恶意 MCP 服务器黑名单（可从远程更新）
 _MALICIOUS_BLACKLIST: Set[str] = {

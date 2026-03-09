@@ -10,7 +10,6 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
 from services.hfish_collector import hfish_collector

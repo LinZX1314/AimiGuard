@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
-import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from api.auth import require_permissions, get_current_user
+from api.auth import get_current_user
 from core.database import User, get_db
 from core.response import APIResponse
 from services.notification_service import NotificationService

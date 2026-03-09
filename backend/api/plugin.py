@@ -239,7 +239,6 @@ async def get_plugin_permissions(
     current_user: User = Depends(require_permissions("view_plugins")),
 ):
     """S2-02: 查看插件权限声明与风险评分"""
-    import json as _json
     from services.plugin_sandbox import parse_permissions, compute_risk_score
 
     plugin = db.query(PluginRegistry).filter(PluginRegistry.id == plugin_id).first()

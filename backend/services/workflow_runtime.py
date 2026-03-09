@@ -17,7 +17,7 @@ from services.ai_engine import ai_engine
 from services.audit_service import AuditService
 from services.mcp_client import mcp_client
 from services.scanner import scanner
-from services.workflow_dsl import WorkflowDSL, WorkflowNode, WorkflowRunState, validate_workflow_dsl
+from services.workflow_dsl import WorkflowDSL, WorkflowRunState, validate_workflow_dsl
 
 WorkflowAdapter = Callable[["WorkflowAdapterInput"], Awaitable["NodeExecutionResult"]]
 
@@ -976,7 +976,7 @@ async def _execute_node(
             step.updated_at = _utc_now()
             db.commit()
             return result
-        except asyncio.TimeoutError as exc:
+        except asyncio.TimeoutError:
             error = WorkflowRuntimeError(f"node timeout: {node.id}", retryable=True)
         except WorkflowRuntimeError as exc:
             error = exc

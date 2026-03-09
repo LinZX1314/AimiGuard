@@ -9,7 +9,7 @@ import json
 import re
 import time
 
-from core.database import get_db, ScanTask, ScanFinding, Asset, User
+from core.database import get_db, ScanTask, ScanFinding, Asset
 from core.response import APIResponse
 from services.scanner import scanner
 from services.audit_service import AuditService
@@ -535,9 +535,9 @@ async def create_scan_task(
 
     required_role = SCAN_PROFILES[profile].get("required_role")
     if required_role == "admin" and user_role != "admin":
-        raise HTTPException(status_code=403, detail=f"该扫描配置需要 admin 权限")
+        raise HTTPException(status_code=403, detail="该扫描配置需要 admin 权限")
     if required_role == "operator" and user_role not in ("operator", "admin"):
-        raise HTTPException(status_code=403, detail=f"该扫描配置需要 operator 权限")
+        raise HTTPException(status_code=403, detail="该扫描配置需要 operator 权限")
 
     # 验证资产ID（如果提供）
     if req.asset_id:
@@ -951,7 +951,6 @@ async def enrich_finding(
     current_user: object = Depends(require_role(["operator", "admin"])),
 ):
     """D1-01: 手动触发 CVE 详情补充（NVD + EPSS）"""
-    import uuid as _uuid
     from services.threat_intel import enrich_cve, fetch_epss
 
     finding = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
@@ -1492,7 +1491,7 @@ async def trigger_vuln_scan(
                     db=db,
                     trace_id=trace_id,
                 )
-            except Exception as e:
+            except Exception:
                 pass  # 继续扫描其他目标
 
     import asyncio
@@ -1520,7 +1519,6 @@ async def get_nmap_assets(
     Nmap 自动发现资产列表（按 IP 去重，返回每个 IP 最新的主机发现记录）
     模拟参考实现的 GET /api/nmap/assets 语义
     """
-    from sqlalchemy import distinct
 
     # 找出每个 IP 最新的 host-discovery ScanFinding
     subq = (

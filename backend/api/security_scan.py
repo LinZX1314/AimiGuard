@@ -1,9 +1,7 @@
 """E1-01 CI/CD 安全扫描报告 API"""
 from __future__ import annotations
 
-import json
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request

@@ -145,7 +145,6 @@ class HoneypotManager:
     @staticmethod
     def decommission_expired(db: Session) -> int:
         """将过期的临时蜜罐标记为停用"""
-        now = datetime.now(timezone.utc)
         count = (
             db.query(HoneypotConfig)
             .filter(

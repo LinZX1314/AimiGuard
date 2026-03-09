@@ -1246,7 +1246,7 @@ import { defenseApi, type HFishConfig } from '@/api/defense'
 import { scanApi } from '@/api/scan'
 import { deviceApi, type DeviceInfo, type DeviceCredential } from '@/api/device'
 import { firewallApi, type FirewallConfig } from '@/api/firewall'
-import { honeypotApi } from '@/api/honeypots'
+import { honeypotApi, honeytokenApi } from '@/api/honeypots'
 import { pluginApi } from '@/api/plugins'
 import { systemApi, type AIAPIConfig, type TTSConfig } from '@/api/system'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -2317,7 +2317,7 @@ const loadHoneypots = async () => {
 const loadHoneytokens = async () => {
   honeytokenLoading.value = true
   try {
-    const res = await honeypotApi.listHoneytokens()
+    const res = await honeytokenApi.list()
     honeytokens.value = res?.items ?? (Array.isArray(res) ? res : [])
   } catch { honeytokens.value = [] } finally { honeytokenLoading.value = false }
 }
@@ -2346,7 +2346,7 @@ const verifyPlugin = async () => {
 const loadBlacklist = async () => {
   try {
     const res = await pluginApi.getBlacklist()
-    blacklist.value = res?.items ?? (Array.isArray(res) ? res : [])
+    blacklist.value = Array.isArray(res) ? res : []
   } catch { blacklist.value = [] }
 }
 

@@ -2,7 +2,6 @@
 HFish 蜜罐数据采集服务
 从 HFish API 拉取攻击日志并转换为 ThreatEvent
 """
-import asyncio
 import hashlib
 import json
 import logging

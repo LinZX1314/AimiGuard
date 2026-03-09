@@ -14,7 +14,6 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
-from datetime import datetime, timezone
 from typing import List, Optional, Set
 
 from starlette.middleware.base import BaseHTTPMiddleware

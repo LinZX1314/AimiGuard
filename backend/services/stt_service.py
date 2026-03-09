@@ -75,7 +75,7 @@ class STTService:
         session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Send a single audio chunk to a remote STT API."""
-        provider = os.getenv("STT_PROVIDER", "local").strip() or "local"
+        _provider = os.getenv("STT_PROVIDER", "local").strip() or "local"  # noqa: F841
         endpoint = (
             os.getenv("STT_ENDPOINT", "").strip()
             or os.getenv("STT_BASE_URL", "").strip()

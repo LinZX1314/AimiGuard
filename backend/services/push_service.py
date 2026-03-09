@@ -431,8 +431,8 @@ class PushService:
             for k, v in extra.items():
                 lines.append(f"**{k}**: {v}")
         lines.append("")
-        lines.append(f"---")
-        lines.append(f"*Aimiguan 安全运营平台*")
+        lines.append("---")
+        lines.append("*Aimiguan 安全运营平台*")
         return "\n".join(lines)
 
     MAX_RETRIES = 3

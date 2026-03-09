@@ -2,19 +2,17 @@
 from __future__ import annotations
 
 import json
-import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 
 from api.auth import require_permissions
-from core.database import PluginRegistry, ScanFinding, ThreatEvent, User, get_db
+from core.database import PluginRegistry, ScanFinding, User, get_db
 from core.response import APIResponse
 from services.threat_intel import (
-    ThreatIntelSource,
     check_kev,
     fetch_cisa_kev,
     load_intel_sources_from_plugins,

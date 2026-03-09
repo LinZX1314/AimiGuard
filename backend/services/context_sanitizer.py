@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 
 class TrustLevel(str, Enum):

@@ -3,11 +3,11 @@
 import os
 import json
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import httpx
 from datetime import datetime, timezone
 
-from core.database import SessionLocal, Device, Credential, ExecutionTask
+from core.database import SessionLocal, Device, Credential
 from services.audit_service import AuditService
 
 

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from sqlalchemy.orm import Session
 
-from core.database import get_db, User
 from services.stt_service import STTService
 
 router = APIRouter(prefix="/api/v1/stt", tags=["stt"])

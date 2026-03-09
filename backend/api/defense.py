@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import uuid
 from typing import Any, Callable, Dict, List, Optional, cast
@@ -25,6 +26,8 @@ from services.workflow_runtime import run_published_workflow
 from services.event_broadcaster import DEFENSE_EVENTS_CHANNEL, event_broadcaster
 from services.push_service import PushService
 from services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/defense", tags=["defense"])
 compat_router = APIRouter(tags=["defense"])
@@ -1753,7 +1756,6 @@ async def get_hfish_logs(
     db: Session = Depends(get_db),
 ):
     """分页查询 HFish 攻击日志（来源：ThreatEvent.source='hfish'）"""
-    from sqlalchemy import func as sqlfunc
     from datetime import timedelta
 
     query = db.query(ThreatEvent).filter(ThreatEvent.source_vendor == "hfish")
