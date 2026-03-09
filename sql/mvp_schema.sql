@@ -272,7 +272,7 @@ CREATE INDEX IF NOT EXISTS idx_plugin_enabled ON plugin_registry(enabled);
 -- 推送通道表
 CREATE TABLE IF NOT EXISTS push_channel (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  channel_type TEXT NOT NULL CHECK(channel_type IN ('dingtalk','wecom','email','webhook')),
+  channel_type TEXT NOT NULL CHECK(channel_type IN ('dingtalk','wecom','email','webhook','feishu')),
   channel_name TEXT NOT NULL UNIQUE,
   target TEXT NOT NULL,
   config_json TEXT,
@@ -845,6 +845,41 @@ CREATE TABLE IF NOT EXISTS prompt_template (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_template_key_ver ON prompt_template(template_key, version);
 CREATE INDEX IF NOT EXISTS idx_prompt_template_active ON prompt_template(template_key, is_active);
+
+-- 推送日志
+CREATE TABLE IF NOT EXISTS push_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id INTEGER,
+  channel_type TEXT NOT NULL,
+  channel_name TEXT NOT NULL,
+  target TEXT,
+  message_preview TEXT,
+  success INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  detail TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  max_retries INTEGER NOT NULL DEFAULT 3,
+  trace_id TEXT,
+  trigger_source TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_push_log_channel_id ON push_log(channel_id);
+CREATE INDEX IF NOT EXISTS idx_push_log_trace_id ON push_log(trace_id);
+
+-- 数据采集器配置
+CREATE TABLE IF NOT EXISTS collector_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collector_type TEXT NOT NULL,
+  config_key TEXT NOT NULL,
+  config_value TEXT,
+  is_sensitive INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  description TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_collector_config_type ON collector_config(collector_type);
 
 -- 站内通知
 CREATE TABLE IF NOT EXISTS notification (
