@@ -1,7 +1,6 @@
-"""SessionCleanupService tests — expired session cleanup and force end."""
+"""SessionCleanupService tests — delete session."""
 import pytest
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import text
+from datetime import datetime, timezone
 from core.database import SessionLocal, AIChatSession, AIChatMessage
 from services.session_cleanup import SessionCleanupService
 
@@ -16,18 +15,14 @@ def db():
         session.close()
 
 
-def _create_session(db, *, expired=False, ended=False, msg_count=3):
+def _create_session(db, *, msg_count=3):
     """Helper to create a chat session with messages."""
     now = datetime.now(timezone.utc)
-    expires = now - timedelta(hours=1) if expired else now + timedelta(hours=1)
-    ended_at = now if ended else None
 
     sess = AIChatSession(
         user_id=1,
         operator="test",
         context_type="test",
-        expires_at=expires,
-        ended_at=ended_at,
         created_at=now,
     )
     db.add(sess)
@@ -45,82 +40,36 @@ def _create_session(db, *, expired=False, ended=False, msg_count=3):
     return sess
 
 
-# ── Cleanup expired sessions ──
+# ── Delete session ──
 
-def test_cleanup_no_expired(db):
-    """No expired sessions → cleaned count is 0."""
-    _create_session(db, expired=False)
-    db.commit()
-    count = SessionCleanupService.cleanup_expired_sessions(db)
-    assert count == 0
-
-
-def test_cleanup_expired_session(db):
-    """Expired + not ended session should be cleaned."""
-    sess = _create_session(db, expired=True, ended=False, msg_count=5)
+def test_delete_session(db):
+    """Deleting a session removes it and its messages."""
+    sess = _create_session(db, msg_count=5)
     db.commit()
     sess_id = sess.id
 
-    count = SessionCleanupService.cleanup_expired_sessions(db)
-    assert count == 1
-
-    # Session should be marked as ended
-    refreshed = db.query(AIChatSession).filter(AIChatSession.id == sess_id).first()
-    assert refreshed.ended_at is not None
-
-    # Messages should be deleted
-    msg_count = db.query(AIChatMessage).filter(AIChatMessage.session_id == sess_id).count()
-    assert msg_count == 0
-
-
-def test_cleanup_already_ended_skipped(db):
-    """Expired but already ended sessions should not be re-cleaned."""
-    _create_session(db, expired=True, ended=True, msg_count=3)
-    db.commit()
-
-    count = SessionCleanupService.cleanup_expired_sessions(db)
-    assert count == 0
-
-
-def test_cleanup_multiple_expired(db):
-    """Multiple expired sessions cleaned in one call."""
-    _create_session(db, expired=True, ended=False, msg_count=2)
-    _create_session(db, expired=True, ended=False, msg_count=4)
-    _create_session(db, expired=False, ended=False, msg_count=1)
-    db.commit()
-
-    count = SessionCleanupService.cleanup_expired_sessions(db)
-    assert count == 2
-
-
-# ── Force end session ──
-
-def test_force_end_session(db):
-    """Force ending an active session."""
-    sess = _create_session(db, expired=False, ended=False, msg_count=3)
-    db.commit()
-    sess_id = sess.id
-
-    result = SessionCleanupService.force_end_session(db, sess_id)
+    result = SessionCleanupService.delete_session(db, sess_id)
     assert result is True
 
-    refreshed = db.query(AIChatSession).filter(AIChatSession.id == sess_id).first()
-    assert refreshed.ended_at is not None
+    # Session should be gone
+    assert db.query(AIChatSession).filter(AIChatSession.id == sess_id).first() is None
 
+    # Messages should be gone
     msg_count = db.query(AIChatMessage).filter(AIChatMessage.session_id == sess_id).count()
     assert msg_count == 0
 
 
-def test_force_end_nonexistent_session(db):
-    """Force ending a nonexistent session returns False."""
-    result = SessionCleanupService.force_end_session(db, 99999)
+def test_delete_nonexistent_session(db):
+    """Deleting a nonexistent session returns False."""
+    result = SessionCleanupService.delete_session(db, 99999)
     assert result is False
 
 
-def test_force_end_already_ended(db):
-    """Force ending an already-ended session still succeeds."""
-    sess = _create_session(db, expired=False, ended=True, msg_count=2)
+def test_delete_session_no_messages(db):
+    """Deleting a session with no messages still succeeds."""
+    sess = _create_session(db, msg_count=0)
     db.commit()
 
-    result = SessionCleanupService.force_end_session(db, sess.id)
+    result = SessionCleanupService.delete_session(db, sess.id)
     assert result is True
+    assert db.query(AIChatSession).filter(AIChatSession.id == sess.id).first() is None

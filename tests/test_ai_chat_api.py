@@ -1,6 +1,5 @@
 """api/ai_chat.py tests — _safe_int, verify_session_ownership."""
 import pytest
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from fastapi import HTTPException
 
@@ -30,7 +29,6 @@ def test_safe_int_float_string():
 def test_verify_ownership_ok():
     session = MagicMock()
     session.user_id = 1
-    session.expires_at = None
     user = MagicMock()
     user.id = 1
     verify_session_ownership(session, user)  # should not raise
@@ -44,35 +42,3 @@ def test_verify_ownership_wrong_user():
     with pytest.raises(HTTPException) as exc_info:
         verify_session_ownership(session, user)
     assert exc_info.value.status_code == 403
-
-
-def test_verify_ownership_expired():
-    session = MagicMock()
-    session.user_id = 1
-    session.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    user = MagicMock()
-    user.id = 1
-    with pytest.raises(HTTPException) as exc_info:
-        verify_session_ownership(session, user)
-    assert exc_info.value.status_code == 410
-
-
-def test_verify_ownership_not_expired():
-    session = MagicMock()
-    session.user_id = 1
-    session.expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    user = MagicMock()
-    user.id = 1
-    verify_session_ownership(session, user)  # should not raise
-
-
-def test_verify_ownership_naive_expires_at():
-    session = MagicMock()
-    session.user_id = 1
-    # naive datetime (no tzinfo) — treated as UTC by the code
-    session.expires_at = datetime(2020, 1, 1)
-    user = MagicMock()
-    user.id = 1
-    with pytest.raises(HTTPException) as exc_info:
-        verify_session_ownership(session, user)
-    assert exc_info.value.status_code == 410

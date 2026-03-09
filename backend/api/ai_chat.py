@@ -56,15 +56,6 @@ def verify_session_ownership(session: AIChatSession, user: User) -> None:
     if session.user_id != user.id:
         raise HTTPException(status_code=403, detail="无权访问此会话")
 
-    if session.expires_at:
-        expires_at_utc = (
-            session.expires_at.replace(tzinfo=timezone.utc)
-            if session.expires_at.tzinfo is None
-            else session.expires_at
-        )
-        if expires_at_utc < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="会话已过期")
-
 
 def _build_context_summary(db: Session, req: ChatRequest, session: AIChatSession) -> str:
     parts: List[str] = []
@@ -155,7 +146,6 @@ async def chat(
             operator=current_user.username,
             context_type=req.context_type,
             context_id=_safe_int(req.context_id),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
         db.add(session)
         db.flush()
@@ -289,7 +279,6 @@ async def get_sessions(
                 "context_id": s.context_id,
                 "operator": s.operator,
                 "started_at": s.started_at,
-                "expires_at": s.expires_at,
             }
             for s in sessions
         ]
@@ -360,7 +349,6 @@ async def get_session_context(
             "context_type": session.context_type,
             "context_id": session.context_id,
             "started_at": session.started_at,
-            "expires_at": session.expires_at,
             "messages": [
                 {
                     "role": msg.role,
@@ -372,36 +360,6 @@ async def get_session_context(
         }
     )
 
-
-@router.post("/sessions/cleanup-expired")
-async def cleanup_expired_sessions(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_permissions("approve_event")),
-):
-    """S1-03: 清理过期会话及其上下文消息"""
-    now = datetime.now(timezone.utc)
-    expired_sessions = (
-        db.query(AIChatSession)
-        .filter(
-            AIChatSession.expires_at.isnot(None),
-            AIChatSession.expires_at < now,
-        )
-        .all()
-    )
-    cleaned_count = 0
-    msg_count = 0
-    for s in expired_sessions:
-        msgs_deleted = db.query(AIChatMessage).filter(AIChatMessage.session_id == s.id).delete()
-        msg_count += msgs_deleted
-        s.ended_at = now
-        cleaned_count += 1
-
-    db.commit()
-
-    return APIResponse.success({
-        "cleaned_sessions": cleaned_count,
-        "cleaned_messages": msg_count,
-    }, message=f"已清理 {cleaned_count} 个过期会话")
 
 
 @router.get("/decisions")
