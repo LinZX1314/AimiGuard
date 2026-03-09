@@ -17,6 +17,54 @@ _cve_cache: Dict[str, Dict[str, Any]] = {}
 _CACHE_TTL = 86400  # 24h
 
 
+def _persist_to_db(db, cve_id: str, result: Dict[str, Any]) -> None:
+    """Persist CVE enrichment result to cve_intel_cache table"""
+    try:
+        from core.database import CVEIntelCache
+        existing = db.query(CVEIntelCache).filter(CVEIntelCache.vuln_id == cve_id).first()
+        now = datetime.now(timezone.utc)
+        if existing:
+            existing.cvss_score = result.get("cvss_score")
+            existing.cvss_vector = result.get("cvss_vector")
+            existing.epss_score = result.get("epss_score")
+            existing.patch_url = result.get("patch_url")
+            existing.affected_versions = json.dumps(result.get("affected_versions", []))
+            existing.raw_json = json.dumps(result, default=str)
+            existing.fetched_at = now
+            existing.updated_at = now
+        else:
+            entry = CVEIntelCache(
+                vuln_id=cve_id,
+                cvss_score=result.get("cvss_score"),
+                cvss_vector=result.get("cvss_vector"),
+                epss_score=result.get("epss_score"),
+                patch_url=result.get("patch_url"),
+                affected_versions=json.dumps(result.get("affected_versions", [])),
+                exploit_available=1 if result.get("patch_available") else 0,
+                raw_json=json.dumps(result, default=str),
+                fetched_at=now,
+            )
+            db.add(entry)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _load_from_db(db, cve_id: str) -> Optional[Dict[str, Any]]:
+    """Load CVE data from DB cache if still within TTL"""
+    try:
+        from core.database import CVEIntelCache
+        entry = db.query(CVEIntelCache).filter(CVEIntelCache.vuln_id == cve_id).first()
+        if not entry:
+            return None
+        age = (datetime.now(timezone.utc) - entry.fetched_at).total_seconds() if entry.fetched_at else _CACHE_TTL + 1
+        if age > _CACHE_TTL:
+            return None
+        return json.loads(entry.raw_json) if entry.raw_json else None
+    except Exception:
+        return None
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -32,22 +80,33 @@ def _cache_set(cve_id: str, data: Dict[str, Any]) -> None:
     _cve_cache[cve_id] = {"data": data, "ts": time.time()}
 
 
-async def enrich_cve(cve_id: str) -> Dict[str, Any]:
+async def enrich_cve(cve_id: str, db=None) -> Dict[str, Any]:
     """
     查询 NVD API 补充 CVE 详情。
     返回: {cvss_score, cvss_vector, epss_score, affected_versions, patch_available, patch_url, ...}
     降级：NVD 不可达时返回基于 CVE ID 的降级结果。
+    支持 DB 持久化缓存（传入 db session）。
     """
     if not cve_id:
         return _fallback_result(cve_id, "empty_cve_id")
 
+    # L1: in-memory cache
     cached = _cache_get(cve_id)
     if cached:
-        return {**cached, "from_cache": True}
+        return {**cached, "from_cache": True, "cache_layer": "memory"}
+
+    # L2: DB cache
+    if db:
+        db_cached = _load_from_db(db, cve_id)
+        if db_cached:
+            _cache_set(cve_id, db_cached)
+            return {**db_cached, "from_cache": True, "cache_layer": "db"}
 
     try:
         result = await _fetch_nvd(cve_id)
         _cache_set(cve_id, result)
+        if db:
+            _persist_to_db(db, cve_id, result)
         return {**result, "from_cache": False}
     except Exception as exc:
         fallback = _fallback_result(cve_id, f"nvd_fetch_failed:{exc.__class__.__name__}")

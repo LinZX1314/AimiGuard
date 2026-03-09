@@ -962,7 +962,7 @@ async def enrich_finding(
     if not cve_id or not cve_id.upper().startswith("CVE"):
         raise HTTPException(status_code=400, detail="Finding 无有效 CVE ID")
 
-    result = await enrich_cve(cve_id)
+    result = await enrich_cve(cve_id, db=db)
 
     epss = await fetch_epss(cve_id)
     if epss is not None:
