@@ -1624,7 +1624,7 @@ async def save_hfish_config(
             actor=current_user.username,
             action="SAVE_HFISH_CONFIG",
             target="hfish_config",
-            result="SUCCESS",
+            result="success",
             trace_id=str(uuid.uuid4())
         )
         
@@ -1636,7 +1636,7 @@ async def save_hfish_config(
             actor=current_user.username,
             action="SAVE_HFISH_CONFIG",
             target="hfish_config",
-            result="FAILED",
+            result="failed",
             error_message=str(e),
             trace_id=str(uuid.uuid4())
         )
@@ -1679,7 +1679,7 @@ async def trigger_hfish_sync(
             actor=current_user.username,
             action="TRIGGER_HFISH_SYNC",
             target="hfish_sync",
-            result="SUCCESS" if result["success"] else "FAILED",
+            result="success" if result["success"] else "failed",
             reason=result.get("message"),
             trace_id=trace_id
         )
@@ -1697,7 +1697,7 @@ async def trigger_hfish_sync(
             actor=current_user.username,
             action="TRIGGER_HFISH_SYNC",
             target="hfish_sync",
-            result="FAILED",
+            result="failed",
             error_message=str(e),
             trace_id=trace_id
         )

@@ -192,7 +192,7 @@ async def test_channel(
         target=str(channel_id),
         target_type="push_channel",
         reason=result.get("detail"),
-        result="success" if result.get("success") else "FAILED",
+        result="success" if result.get("success") else "failed",
         error_message=None if result.get("success") else str(result.get("detail")),
         trace_id=trace_id,
     )
@@ -263,7 +263,7 @@ async def retry_push_log(
         action="retry_push_log",
         target=str(log_id),
         target_type="push_log",
-        result="success" if result.get("success") else "FAILED",
+        result="success" if result.get("success") else "failed",
         trace_id=trace_id,
     )
 

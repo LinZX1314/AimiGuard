@@ -186,7 +186,7 @@ async def process_tts_task(
         action="process_tts_task",
         target=str(task.id),
         target_type="tts_task",
-        result="success" if success else "FAILED",
+        result="success" if success else "failed",
         reason=str(result.get("detail") or ""),
         error_message=None if success else str(result.get("detail") or ""),
         trace_id=trace_id,
