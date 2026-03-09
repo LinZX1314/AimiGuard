@@ -15,7 +15,16 @@
 - 当前仓库已从纯方案阶段进入“可运行 + 持续迭代”阶段。
 - 已完成：Step 1 基础底座、Step 2 后端核心能力、Step 3 防御链路主干（含 AI 评分降级标记与 block 重试到 `MANUAL_REQUIRED`）、**Step 4 探测扫描链路（含真实 Nmap 扫描、XML 解析、AI 分析、完整状态机）**、**P-1 MCP 客户端真实实现**。
 - 当前重点：补齐 Step 2 剩余项（2.5/2.6/2.17）并推进 Step 4 探测扫描链路。
-- 最新验证基线：`python -m pytest tests/test_step4_scan_assets.py tests/test_td05_push.py -q` 通过（13 passed），前端 `npm run build` 通过。
+- 最新验证基线见下方「测试与质量基线」。
+
+### 测试与质量基线
+- **后端测试**：`python -m pytest tests/ -q` — 106 个测试文件，1242 项测试全部通过
+  - 覆盖 71 个后端模块（38 services、24 API routes、4 core 模块、5 基础设施）
+- **前端测试**：`cd frontend && npx vitest run` — 2 个测试文件，25 项测试全部通过
+  - 覆盖 API 客户端错误提取、JWT 令牌校验、权限判断逻辑
+- **TypeScript 类型检查**：`cd frontend && npx vue-tsc --noEmit` — 0 错误
+- **后端静态分析**：`ruff check backend/` — 仅 2 项非关键警告（E741/F841）
+- **前端构建**：`cd frontend && npm run build` 通过
 
 ## 产品定位
 `Aimiguan` 是一个 AI 驱动的自动化安全运营产品，分为两大板块：`防御监控` 与 `探测扫描`。
