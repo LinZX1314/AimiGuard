@@ -231,8 +231,8 @@ class PushService:
 
     @staticmethod
     def _send_email_sync(channel: PushChannel, message: str, trace_id: str) -> Dict[str, Any]:
-        recipient = channel.target.replace("mailto:", "").strip()
-        if not recipient:
+        raw_target = channel.target.replace("mailto:", "").strip()
+        if not raw_target:
             return {
                 "success": False,
                 "status": "failed",
@@ -241,28 +241,39 @@ class PushService:
                 "simulated": False,
             }
 
-        host = os.getenv("PUSH_SMTP_HOST", "").strip()
-        if not host:
+        recipients = [r.strip() for r in raw_target.replace("；", ";").replace(";", ",").split(",") if r.strip()]
+        if not recipients:
             return {
                 "success": False,
                 "status": "failed",
-                "detail": "smtp_not_configured",
+                "detail": "email_target_empty",
                 "response_status": None,
                 "simulated": False,
             }
 
-        port = int(os.getenv("PUSH_SMTP_PORT", "587"))
-        user = os.getenv("PUSH_SMTP_USER", "").strip()
-        password = os.getenv("PUSH_SMTP_PASSWORD", "").strip()
-        use_tls = _bool_env("PUSH_SMTP_TLS", True)
-        sender = os.getenv("PUSH_SMTP_FROM", user or "aimiguan@localhost")
-
         config = PushService._parse_config(channel)
-        subject = str(config.get("subject") or f"[Aimiguan] Push test ({trace_id})")
+
+        host = str(config.get("smtp_host") or os.getenv("PUSH_SMTP_HOST", "")).strip()
+        if not host:
+            return {
+                "success": False,
+                "status": "failed",
+                "detail": "smtp_not_configured：请在通道配置中填写 SMTP 服务器地址",
+                "response_status": None,
+                "simulated": False,
+            }
+
+        port = int(config.get("smtp_port") or os.getenv("PUSH_SMTP_PORT", "587"))
+        user = str(config.get("smtp_user") or os.getenv("PUSH_SMTP_USER", "")).strip()
+        password = str(config.get("smtp_password") or os.getenv("PUSH_SMTP_PASSWORD", "")).strip()
+        use_tls = config.get("smtp_tls", True) if "smtp_tls" in config else _bool_env("PUSH_SMTP_TLS", True)
+        sender = str(config.get("smtp_from") or os.getenv("PUSH_SMTP_FROM", "") or user or "aimiguan@localhost").strip()
+
+        subject = str(config.get("subject") or f"[Aimiguan] 安全告警通知 ({trace_id})")
 
         mail = EmailMessage()
         mail["From"] = sender
-        mail["To"] = recipient
+        mail["To"] = ", ".join(recipients)
         mail["Subject"] = subject
         mail.set_content(message)
 
@@ -276,7 +287,7 @@ class PushService:
             return {
                 "success": True,
                 "status": "success",
-                "detail": "smtp_sent",
+                "detail": f"smtp_sent_to_{len(recipients)}_recipients",
                 "response_status": 250,
                 "simulated": False,
             }
@@ -284,7 +295,7 @@ class PushService:
             return {
                 "success": False,
                 "status": "failed",
-                "detail": f"smtp_error:{exc.__class__.__name__}",
+                "detail": f"smtp_error:{exc.__class__.__name__}:{exc}",
                 "response_status": None,
                 "simulated": False,
             }

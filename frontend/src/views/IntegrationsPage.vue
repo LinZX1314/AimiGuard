@@ -359,6 +359,73 @@
                     />
                     <p class="text-xs text-muted-foreground">用于 HMAC-SHA256 加签校验，在机器人安全设置中获取，留空则不启用签名</p>
                   </div>
+                  <template v-if="channelForm.channel_type === 'email'">
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 服务器</label>
+                      <input
+                        v-model="channelForm.smtp_host"
+                        placeholder="smtp.qq.com / smtp.163.com / smtp.gmail.com"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                      />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">端口</label>
+                      <input
+                        v-model.number="channelForm.smtp_port"
+                        type="number"
+                        placeholder="587"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 用户名</label>
+                      <input
+                        v-model="channelForm.smtp_user"
+                        placeholder="your@email.com"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                      />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 密码 / 授权码</label>
+                      <input
+                        v-model="channelForm.smtp_password"
+                        type="password"
+                        placeholder="邮箱授权码（非登录密码）"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                      />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">发件人地址（可选）</label>
+                      <input
+                        v-model="channelForm.smtp_from"
+                        placeholder="留空则使用 SMTP 用户名"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                      />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">启用 TLS</label>
+                      <div class="flex items-center gap-3 pt-1">
+                        <button
+                          type="button"
+                          role="switch"
+                          :aria-checked="channelForm.smtp_tls ? 'true' : 'false'"
+                          :class="[
+                            'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            channelForm.smtp_tls ? 'bg-primary' : 'bg-input',
+                          ]"
+                          @click="channelForm.smtp_tls = !channelForm.smtp_tls"
+                        >
+                          <span
+                            :class="[
+                              'pointer-events-none inline-block size-4 rounded-full bg-white shadow-lg ring-0 transition-transform',
+                              channelForm.smtp_tls ? 'translate-x-4' : 'translate-x-0',
+                            ]"
+                          />
+                        </button>
+                        <span class="text-xs text-muted-foreground">{{ channelForm.smtp_tls ? 'STARTTLS 已启用' : 'STARTTLS 已禁用' }}</span>
+                      </div>
+                    </div>
+                  </template>
                 </div>
                 <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="channelCreating" @click="createChannel">
@@ -1628,6 +1695,12 @@ const channelForm = reactive({
   channel_name: '',
   target: '',
   secret: '',
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_user: '',
+  smtp_password: '',
+  smtp_from: '',
+  smtp_tls: true,
 })
 
 const channelTargetPlaceholder = computed(() => {
@@ -1636,7 +1709,7 @@ const channelTargetPlaceholder = computed(() => {
     wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...',
     dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=...',
     feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
-    email: 'admin@example.com',
+    email: 'user1@example.com, user2@example.com',
   }
   return map[channelForm.channel_type] || 'https://...'
 })
@@ -1647,7 +1720,7 @@ const channelTargetHint = computed(() => {
     wecom: '企业微信群机器人 Webhook 地址（支持 Markdown 富文本）',
     dingtalk: '钉钉自定义机器人 Webhook 地址（支持 Markdown 富文本）',
     feishu: '飞书自定义机器人 Webhook 地址（支持卡片消息）',
-    email: '收件人邮箱地址，需在 .env 配置 SMTP 参数',
+    email: '收件人邮箱地址，多个邮箱用英文逗号分隔',
   }
   return map[channelForm.channel_type] || ''
 })
@@ -1709,8 +1782,20 @@ const createChannel = async () => {
       channel_name: channelForm.channel_name,
       target: channelForm.target,
     }
+    const configObj: Record<string, any> = {}
     if (channelForm.secret.trim()) {
-      payload.config_json = JSON.stringify({ secret: channelForm.secret.trim() })
+      configObj.secret = channelForm.secret.trim()
+    }
+    if (channelForm.channel_type === 'email') {
+      if (channelForm.smtp_host.trim()) configObj.smtp_host = channelForm.smtp_host.trim()
+      if (channelForm.smtp_port) configObj.smtp_port = channelForm.smtp_port
+      if (channelForm.smtp_user.trim()) configObj.smtp_user = channelForm.smtp_user.trim()
+      if (channelForm.smtp_password.trim()) configObj.smtp_password = channelForm.smtp_password.trim()
+      if (channelForm.smtp_from.trim()) configObj.smtp_from = channelForm.smtp_from.trim()
+      configObj.smtp_tls = channelForm.smtp_tls
+    }
+    if (Object.keys(configObj).length > 0) {
+      payload.config_json = JSON.stringify(configObj)
     }
     await apiClient.post('/push/channels', payload)
     channelMsgOk.value = true
@@ -1719,6 +1804,12 @@ const createChannel = async () => {
     channelForm.channel_name = ''
     channelForm.target = ''
     channelForm.secret = ''
+    channelForm.smtp_host = ''
+    channelForm.smtp_port = 587
+    channelForm.smtp_user = ''
+    channelForm.smtp_password = ''
+    channelForm.smtp_from = ''
+    channelForm.smtp_tls = true
     await loadChannels()
   } catch (e: any) {
     channelMsgOk.value = false
