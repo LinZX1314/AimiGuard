@@ -846,6 +846,23 @@ CREATE TABLE IF NOT EXISTS prompt_template (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_template_key_ver ON prompt_template(template_key, version);
 CREATE INDEX IF NOT EXISTS idx_prompt_template_active ON prompt_template(template_key, is_active);
 
+-- 站内通知
+CREATE TABLE IF NOT EXISTS notification (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT,
+  category TEXT NOT NULL DEFAULT 'system',
+  severity TEXT DEFAULT 'info',
+  link TEXT,
+  read INTEGER NOT NULL DEFAULT 0,
+  trace_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_read ON notification(user_id, read);
+CREATE INDEX IF NOT EXISTS idx_notification_trace_id ON notification(trace_id);
+
 -- D1: CVE 情报缓存
 CREATE TABLE IF NOT EXISTS cve_intel_cache (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
