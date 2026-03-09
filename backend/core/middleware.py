@@ -21,6 +21,8 @@ class TraceIDMiddleware(BaseHTTPMiddleware):
         elapsed_ms = (time.monotonic() - start) * 1000
 
         response.headers["X-Trace-ID"] = trace_id
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
 
         # 结构化日志
         status = response.status_code
