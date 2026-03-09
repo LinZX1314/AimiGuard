@@ -534,7 +534,7 @@
                 <div class="ops-highlight-tile">
                   <p class="ops-highlight-label">周误报率</p>
                   <p class="ops-highlight-value" :class="fpStats.weekly_rate > 20 ? 'text-red-400' : 'text-emerald-300'">
-                    {{ fpStats.weekly_rate.toFixed(1) }}%
+                    {{ (fpStats.weekly_rate ?? 0).toFixed(1) }}%
                   </p>
                   <p class="ops-highlight-note">{{ fpStats.weekly_rate > 20 ? '超过 20% KPI 阈值' : 'KPI 达标' }}</p>
                 </div>
@@ -545,7 +545,7 @@
                 </div>
                 <div class="ops-highlight-tile">
                   <p class="ops-highlight-label">误报率</p>
-                  <p class="ops-highlight-value text-foreground">{{ fpStats.false_positive_rate.toFixed(1) }}%</p>
+                  <p class="ops-highlight-value text-foreground">{{ (fpStats.false_positive_rate ?? 0).toFixed(1) }}%</p>
                 </div>
               </div>
               <div v-if="fpStats.by_source?.length" class="space-y-2">

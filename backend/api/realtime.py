@@ -32,6 +32,8 @@ async def _handle_channel(
     db = SessionLocal()
     client_id: str | None = None
     try:
+        await websocket.accept()
+
         if not token:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="missing_token")
             return

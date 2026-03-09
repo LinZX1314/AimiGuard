@@ -170,7 +170,15 @@ export const overviewApi = {
 
   async getFalsePositiveStats(range: TrendRange = '7d'): Promise<FalsePositiveStats> {
     const res = await apiClient.get('/overview/false-positive-stats', { params: { range } })
-    return res as unknown as FalsePositiveStats
+    const raw = res as unknown as Record<string, unknown>
+    return {
+      total_events: (raw.total_events as number) ?? 0,
+      false_positive_count: (raw.false_positive_count as number) ?? 0,
+      false_positive_rate: (raw.false_positive_rate as number) ?? 0,
+      weekly_rate: (raw.weekly_rate as number) ?? (raw.false_positive_rate as number) ?? 0,
+      by_source: (raw.by_source as FalsePositiveStats['by_source']) ?? (raw.source_distribution as FalsePositiveStats['by_source']) ?? [],
+      top_ips: (raw.top_ips as FalsePositiveStats['top_ips']) ?? (raw.top_false_positive_ips as FalsePositiveStats['top_ips']) ?? [],
+    }
   },
 
   async getChainStatus(): Promise<OverviewChainStatus> {
