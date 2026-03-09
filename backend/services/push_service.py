@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
 import smtplib
+import time
 from email.message import EmailMessage
 from typing import Any, Dict, List, Optional
 
@@ -72,10 +76,18 @@ class PushService:
 
     @staticmethod
     async def _send_wecom(channel: PushChannel, message: str) -> Dict[str, Any]:
-        payload = {
-            "msgtype": "text",
-            "text": {"content": message},
-        }
+        config = PushService._parse_config(channel)
+        use_markdown = config.get("markdown", True)
+        if use_markdown:
+            payload = {
+                "msgtype": "markdown",
+                "markdown": {"content": message},
+            }
+        else:
+            payload = {
+                "msgtype": "text",
+                "text": {"content": message},
+            }
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(channel.target, json=payload)
         success = response.status_code < 400
@@ -98,6 +110,19 @@ class PushService:
         }
 
     @staticmethod
+    def _dingtalk_sign(secret: str) -> tuple:
+        """Generate DingTalk HMAC-SHA256 signature. Returns (timestamp, sign)."""
+        timestamp = str(int(time.time() * 1000))
+        string_to_sign = f"{timestamp}\n{secret}"
+        hmac_code = hmac.new(
+            secret.encode("utf-8"),
+            string_to_sign.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).digest()
+        sign = base64.b64encode(hmac_code).decode("utf-8")
+        return timestamp, sign
+
+    @staticmethod
     async def _send_dingtalk(channel: PushChannel, message: str) -> Dict[str, Any]:
         config = PushService._parse_config(channel)
         use_markdown = config.get("markdown", True)
@@ -114,8 +139,14 @@ class PushService:
                 "msgtype": "text",
                 "text": {"content": message},
             }
+        url = channel.target
+        secret = config.get("secret", "").strip()
+        if secret:
+            ts, sign = PushService._dingtalk_sign(secret)
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}timestamp={ts}&sign={sign}"
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(channel.target, json=payload)
+            response = await client.post(url, json=payload)
         success = response.status_code < 400
         detail = f"dingtalk_status={response.status_code}"
         if success:
@@ -137,11 +168,24 @@ class PushService:
         }
 
     @staticmethod
+    def _feishu_sign(secret: str) -> tuple:
+        """Generate Feishu HMAC-SHA256 signature. Returns (timestamp, sign)."""
+        timestamp = str(int(time.time()))
+        string_to_sign = f"{timestamp}\n{secret}"
+        hmac_code = hmac.new(
+            string_to_sign.encode("utf-8"),
+            b"",
+            digestmod=hashlib.sha256,
+        ).digest()
+        sign = base64.b64encode(hmac_code).decode("utf-8")
+        return timestamp, sign
+
+    @staticmethod
     async def _send_feishu(channel: PushChannel, message: str) -> Dict[str, Any]:
         config = PushService._parse_config(channel)
         use_rich = config.get("rich", True)
         if use_rich:
-            payload = {
+            payload: Dict[str, Any] = {
                 "msg_type": "interactive",
                 "card": {
                     "header": {
@@ -158,6 +202,11 @@ class PushService:
                 "msg_type": "text",
                 "content": {"text": message},
             }
+        secret = config.get("secret", "").strip()
+        if secret:
+            ts, sign = PushService._feishu_sign(secret)
+            payload["timestamp"] = ts
+            payload["sign"] = sign
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(channel.target, json=payload)
         success = response.status_code < 400

@@ -349,6 +349,16 @@
                     />
                     <p class="text-xs text-muted-foreground">{{ channelTargetHint }}</p>
                   </div>
+                  <div v-if="channelNeedsSecret" class="space-y-1.5 sm:col-span-2">
+                    <label class="text-sm font-medium">签名密钥（可选）</label>
+                    <input
+                      v-model="channelForm.secret"
+                      type="password"
+                      :placeholder="channelSecretPlaceholder"
+                      class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                    />
+                    <p class="text-xs text-muted-foreground">用于 HMAC-SHA256 加签校验，在机器人安全设置中获取，留空则不启用签名</p>
+                  </div>
                 </div>
                 <div class="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Button size="sm" class="cursor-pointer" :disabled="channelCreating" @click="createChannel">
@@ -1617,6 +1627,7 @@ const channelForm = reactive({
   channel_type: 'webhook',
   channel_name: '',
   target: '',
+  secret: '',
 })
 
 const channelTargetPlaceholder = computed(() => {
@@ -1633,10 +1644,22 @@ const channelTargetPlaceholder = computed(() => {
 const channelTargetHint = computed(() => {
   const map: Record<string, string> = {
     webhook: '通用 HTTP 回调地址，POST JSON 格式推送',
-    wecom: '企业微信群机器人 Webhook 地址',
+    wecom: '企业微信群机器人 Webhook 地址（支持 Markdown 富文本）',
     dingtalk: '钉钉自定义机器人 Webhook 地址（支持 Markdown 富文本）',
     feishu: '飞书自定义机器人 Webhook 地址（支持卡片消息）',
     email: '收件人邮箱地址，需在 .env 配置 SMTP 参数',
+  }
+  return map[channelForm.channel_type] || ''
+})
+
+const channelNeedsSecret = computed(() => {
+  return ['dingtalk', 'feishu'].includes(channelForm.channel_type)
+})
+
+const channelSecretPlaceholder = computed(() => {
+  const map: Record<string, string> = {
+    dingtalk: 'SEC...（钉钉机器人加签密钥）',
+    feishu: '飞书机器人签名校验密钥',
   }
   return map[channelForm.channel_type] || ''
 })
@@ -1681,12 +1704,21 @@ const createChannel = async () => {
   channelCreating.value = true
   channelMsg.value = ''
   try {
-    await apiClient.post('/push/channels', { ...channelForm })
+    const payload: Record<string, any> = {
+      channel_type: channelForm.channel_type,
+      channel_name: channelForm.channel_name,
+      target: channelForm.target,
+    }
+    if (channelForm.secret.trim()) {
+      payload.config_json = JSON.stringify({ secret: channelForm.secret.trim() })
+    }
+    await apiClient.post('/push/channels', payload)
     channelMsgOk.value = true
     channelMsg.value = '创建成功'
     showAddChannel.value = false
     channelForm.channel_name = ''
     channelForm.target = ''
+    channelForm.secret = ''
     await loadChannels()
   } catch (e: any) {
     channelMsgOk.value = false
