@@ -22,7 +22,6 @@ class EventBroadcaster:
 
     async def connect(self, channel: str, websocket: WebSocket) -> str:
         client_id = uuid.uuid4().hex
-        await websocket.accept()
         async with self._lock:
             self._channels.setdefault(channel, {})[client_id] = websocket
         return client_id

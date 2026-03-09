@@ -2882,7 +2882,7 @@ Copy-Item .env.example .env
 # DATABASE_URL=sqlite:///aimiguard.db
 
 # 初始化数据库
-python scripts/init_db.py
+python init_db.py
 
 # 启动后端服务（开发模式）
 python main.py --dev
@@ -2920,10 +2920,10 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-前端默认运行在 `http://localhost:5173`
+前端默认运行在 `http://localhost:3000`
 
 #### 4. 验证安装
-- 访问前端：`http://localhost:5173`
+- 访问前端：`http://localhost:3000`
 - 检查后端健康：`http://localhost:8000/api/health`
 - 默认登录账号：`admin` / `admin123`（首次启动自动创建）
 
@@ -2931,98 +2931,45 @@ npm run dev
 
 #### main.py 启动入口
 ```python
-# backend/main.py
-import uvicorn
-import argparse
-from pathlib import Path
+# backend/main.py — 实际代码摘要
+if __name__ == "__main__":
+    import argparse
+    import uvicorn
 
-def main():
-    parser = argparse.ArgumentParser(description='AimiGuard 安全运营平台')
-    parser.add_argument('--host', default='127.0.0.1', help='监听地址')
-    parser.add_argument('--port', type=int, default=8000, help='监听端口')
-    parser.add_argument('--workers', type=int, default=1, help='工作进程数')
-    parser.add_argument('--dev', action='store_true', help='开发模式（热重载）')
+    parser = argparse.ArgumentParser(description="Aimiguan API Server")
+    parser.add_argument("--host", default="0.0.0.0", help="绑定主机地址 (默认: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8000, help="监听端口 (默认: 8000)")
+    parser.add_argument("--workers", type=int, default=1, help="工作进程数 (默认: 1, 生产建议 4)")
+    parser.add_argument("--dev", action="store_true", help="开发模式（热重载 + 详细日志）")
     args = parser.parse_args()
-    
-    # 检查前端构建产物
-    dist_path = Path(__file__).parent / "dist"
-    if not dist_path.exists() and not args.dev:
-        print("警告：未找到前端构建产物 (dist/)，请先运行 npm run build")
-    
+
     uvicorn.run(
-        "app:app",
+        "main:app" if args.dev else app,
         host=args.host,
         port=args.port,
-        workers=args.workers,
+        workers=args.workers if not args.dev else 1,
         reload=args.dev,
-        log_level="debug" if args.dev else "info"
+        log_level="debug" if args.dev else "info",
     )
-
-if __name__ == "__main__":
-    main()
 ```
 
-#### app.py 应用配置
+#### 应用配置（main.py 中）
 ```python
-# backend/app.py
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
+# FastAPI 应用实例 + 中间件 + 路由注册
+app = FastAPI(title="Aimiguan API", version="0.1.0", lifespan=lifespan)
 
-app = FastAPI(
-    title="AimiGuard API",
-    version="1.0.0",
-    docs_url="/api/docs" if DEBUG else None,  # 生产环境禁用文档
-    redoc_url=None,
-    openapi_url="/api/openapi.json" if DEBUG else None
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], ...)
+app.add_middleware(TraceIDMiddleware)
+app.add_middleware(RateLimitMiddleware, global_rpm=120, login_rpm=5)
 
-# CORS 配置（开发环境）
-if DEBUG:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# 25 个路由模块注册（auth, defense, scan, ai_chat, system, ...）
+app.include_router(auth.router)
+app.include_router(defense.router)
+# ... 共 25 个 router
 
-# 注册 API 路由
-from api import auth, defense, scan, ai_chat
-app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
-app.include_router(defense.router, prefix="/api/v1", tags=["defense"])
-app.include_router(scan.router, prefix="/api/v1", tags=["scan"])
-app.include_router(ai_chat.router, prefix="/api/v1", tags=["ai"])
-
-# 静态文件托管（生产模式）
-dist_path = Path(__file__).parent / "dist"
-if dist_path.exists():
-    # 托管静态资源
-    app.mount("/assets", StaticFiles(directory=str(dist_path / "assets")), name="assets")
-    
-    # SPA 路由支持（所有非 API 请求返回 index.html）
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        # API 请求返回 404
-        if full_path.startswith("api/"):
-            return {"detail": "Not Found"}, 404
-        
-        # 其他请求返回 index.html（Vue Router 处理）
-        index_file = dist_path / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
-        return {"detail": "Frontend not built"}, 404
-
-# 健康检查
 @app.get("/api/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "mode": "development" if DEBUG else "production"
-    }
+    return {"code": 0, "data": {"status": "healthy", ...}}
 ```
 
 ### 开发工作流
@@ -3391,8 +3338,8 @@ pip install -r requirements.txt
 Copy-Item .env.prod .env
 # 编辑 .env 填写生产配置
 
-# 初始化数据库
-python scripts/init_db.py --env production
+# 初始化数据库（从项目根目录或 backend/ 均可）
+python init_db.py
 
 # 创建 Windows 服务（使用 NSSM）
 nssm install AimiGuardBackend "C:\aimiguard\backend\venv\Scripts\python.exe" "C:\aimiguard\backend\main.py"
@@ -3459,7 +3406,6 @@ netstat -ano | findstr :8000
 #### 6. 可选：Nginx 反向代理（高并发场景）
 如需支持更高并发或添加 SSL，可在前面加 Nginx：
 
-```nginx
 ```nginx
 # C:\nginx\conf\aimiguard.conf
 server {

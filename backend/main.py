@@ -142,6 +142,21 @@ async def root():
 
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    parser = argparse.ArgumentParser(description="Aimiguan API Server")
+    parser.add_argument("--host", default="0.0.0.0", help="绑定主机地址 (默认: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8000, help="监听端口 (默认: 8000)")
+    parser.add_argument("--workers", type=int, default=1, help="工作进程数 (默认: 1, 生产建议 4)")
+    parser.add_argument("--dev", action="store_true", help="开发模式（热重载 + 详细日志）")
+    args = parser.parse_args()
+
+    uvicorn.run(
+        "main:app" if args.dev else app,
+        host=args.host,
+        port=args.port,
+        workers=args.workers if not args.dev else 1,
+        reload=args.dev,
+        log_level="debug" if args.dev else "info",
+    )

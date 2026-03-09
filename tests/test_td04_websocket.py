@@ -6,16 +6,16 @@ from starlette.websockets import WebSocketDisconnect
 
 def test_defense_ws_requires_token(client: TestClient):
     """连接 /ws/defense/events 不带 token 应被关闭"""
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/defense/events?token=") as ws:
-            ws.receive()
+    with client.websocket_connect("/ws/defense/events?token=") as ws:
+        msg = ws.receive()
+        assert msg.get("type") == "websocket.close" or msg.get("code", 0) >= 1000
 
 
 def test_defense_ws_invalid_token(client: TestClient):
     """连接 /ws/defense/events 带无效 token 应被关闭"""
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/defense/events?token=invalid_jwt") as ws:
-            ws.receive()
+    with client.websocket_connect("/ws/defense/events?token=invalid_jwt") as ws:
+        msg = ws.receive()
+        assert msg.get("type") == "websocket.close" or msg.get("code", 0) >= 1000
 
 
 def test_defense_ws_ready_event(client: TestClient, admin_token: str):
