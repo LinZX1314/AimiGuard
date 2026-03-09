@@ -4765,21 +4765,47 @@ CREATE INDEX IF NOT EXISTS idx_fix_ticket_finding_id ON fix_ticket(finding_id);
 | `LLM_PROVIDER` | 是 | ollama | AI 模型供应商 |
 | `LLM_BASE_URL` | 是 | http://localhost:11434 | 模型服务地址 |
 | `LLM_MODEL` | 否 | llama2 | 模型名称 |
+| `LLM_API_KEY` | 否 | - | LLM API 密钥 |
+| `LLM_TIMEOUT_SECONDS` | 否 | 30 | LLM 请求超时 |
 | `HOST` | 否 | 0.0.0.0 | 后端监听地址 |
 | `PORT` | 否 | 8000 | 后端监听端口 |
 | `MCP_MODE` | 否 | stdio | MCP 通信模式 |
 | `MCP_SERVER_NAME` | 否 | switch-controller | MCP 服务标识 |
+| `MCP_SERVER_URL` | 否 | - | MCP HTTP 服务地址 |
+| `MCP_STDIO_COMMAND` | 否 | - | MCP stdio 启动命令 |
+| `MCP_TIMEOUT` | 否 | 30 | MCP 请求超时(秒) |
 | `SCANNER_MAX_CONCURRENT` | 否 | 3 | 扫描并发上限 |
+| `SCAN_OUTPUT_DIR` | 否 | scan_outputs | 扫描结果输出目录 |
 | `PUSH_SANDBOX_MODE` | 否 | 0 | 推送沙箱模式 |
+| `PUSH_TIMEOUT_SECONDS` | 否 | 10 | 推送请求超时 |
 | `PUSH_SMTP_HOST` | 否 | - | 邮件 SMTP 服务器 |
 | `PUSH_SMTP_PORT` | 否 | 587 | SMTP 端口 |
 | `PUSH_SMTP_USER` | 否 | - | SMTP 用户名 |
 | `PUSH_SMTP_PASSWORD` | 否 | - | SMTP 密码 |
+| `PUSH_SMTP_TLS` | 否 | 1 | SMTP TLS 开关 |
+| `PUSH_SMTP_FROM` | 否 | - | 发件人地址 |
 | `TTS_PROVIDER` | 否 | local | TTS 引擎类型 |
 | `TTS_ENDPOINT` | 否 | - | TTS 服务地址 |
+| `TTS_BASE_URL` | 否 | - | TTS 备用地址 |
+| `TTS_MODEL` | 否 | local-tts-v1 | TTS 模型名称 |
+| `TTS_TIMEOUT_SECONDS` | 否 | 30 | TTS 请求超时 |
+| `TTS_API_KEY` | 否 | - | TTS API 密钥 |
+| `TTS_SANDBOX_MODE` | 否 | 0 | TTS 沙箱模式 |
 | `STT_PROVIDER` | 否 | local | STT 引擎类型 |
 | `STT_ENDPOINT` | 否 | - | STT 服务地址 |
+| `STT_BASE_URL` | 否 | - | STT 备用地址 |
+| `STT_TIMEOUT_SECONDS` | 否 | 10 | STT 请求超时 |
+| `STT_API_KEY` | 否 | - | STT API 密钥 |
+| `SPA_SECRET` | 否 | - | 单包授权 HMAC 密钥 |
+| `SPA_TOKEN_TTL` | 否 | 300 | SPA 令牌有效期(秒) |
+| `CREDENTIAL_KEY_V1` | 否 | 自动生成 | AES-256 凭据加密密钥 |
+| `CREDENTIAL_KEY_V2` | 否 | - | 密钥轮换时配置 |
 | `FIREWALL_API_URL` | 否 | - | 外部防火墙 API |
+| `FIREWALL_SIGN_SECRET` | 否 | - | 防火墙签名密钥 |
+| `IP_WHITELIST` | 否 | - | 逗号分隔的IP白名单 |
+| `DECOY_ENABLED` | 否 | 0 | 诱饵服务开关 |
+| `DEFENSE_RUNTIME_WORKFLOW_KEY` | 否 | - | 防御工作流密钥 |
+| `ROLLBACK_CANDIDATE_LIMIT` | 否 | 10 | 回滚候选上限 |
 
 ### 关键文件路径
 ```
