@@ -118,8 +118,8 @@ def _ensure_demo_device(db) -> Device:
         port=23,
         vendor="generic",
         device_type="switch",
-        enabled=1,
-        description="[demo] core switch for execution demo",
+        enabled=0,
+        description="[demo] core switch for execution demo (disabled)",
         created_at=_utc_now(),
         updated_at=_utc_now(),
     )

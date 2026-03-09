@@ -179,7 +179,7 @@ def insert_sample_data(conn: sqlite3.Connection):
     # 6. Add default device
     cursor.execute("""
         INSERT INTO device (name, ip, port, vendor, device_type, enabled, description, created_at, updated_at)
-        VALUES ('默认交换机', '192.168.1.1', 23, 'generic', 'switch', 1, '示例设备，请根据实际情况修改', ?, ?)
+        VALUES ('默认交换机', '192.168.1.1', 23, 'generic', 'switch', 0, '示例设备（已禁用），请修改为实际地址后启用', ?, ?)
     """, (now, now))
     print("✓ Added default device")
     

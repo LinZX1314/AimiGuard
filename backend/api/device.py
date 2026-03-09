@@ -240,25 +240,39 @@ async def test_device_connection(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions(["system:config"])),
 ):
-    """测试交换机连接（TCP 端口可达性）"""
-    import socket
+    """测试交换机连接（TCP 端口可达性 + 服务响应验证）"""
+    import asyncio
 
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(404, "设备不存在")
 
+    addr = f"{device.ip}:{device.port}"
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        result = sock.connect_ex((device.ip, device.port))
-        sock.close()
-        if result == 0:
-            return {"code": 0, "ok": True, "message": f"{device.ip}:{device.port} 连接成功"}
-        return {"code": 1, "ok": False, "message": f"{device.ip}:{device.port} 端口不可达"}
-    except socket.timeout:
-        return {"code": 1, "ok": False, "message": f"{device.ip}:{device.port} 连接超时"}
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(device.ip, device.port),
+            timeout=5,
+        )
+        # 尝试读取 banner/欢迎信息，验证远端确实有服务
+        try:
+            banner = await asyncio.wait_for(reader.read(256), timeout=3)
+        except asyncio.TimeoutError:
+            banner = b""
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+        if banner:
+            return {"code": 0, "ok": True, "message": f"{addr} 连接成功，服务有响应"}
+        return {"code": 0, "ok": True, "message": f"{addr} 端口可达，但未收到服务 banner"}
+    except asyncio.TimeoutError:
+        return {"code": 1, "ok": False, "message": f"{addr} 连接超时（5s）"}
+    except OSError as e:
+        return {"code": 1, "ok": False, "message": f"{addr} 不可达: {e.strerror or str(e)}"}
     except Exception as e:
-        return {"code": 1, "ok": False, "message": str(e)}
+        return {"code": 1, "ok": False, "message": f"{addr} 测试失败: {str(e)}"}
 
 
 @router.delete("/{device_id}/credentials/{cred_id}")
