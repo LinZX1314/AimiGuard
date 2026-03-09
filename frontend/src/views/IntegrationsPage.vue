@@ -460,6 +460,9 @@
                     <p class="text-xs text-muted-foreground truncate max-w-[360px] font-mono">{{ ch.target }}</p>
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">
+                    <Button variant="outline" size="sm" class="cursor-pointer text-xs h-7 gap-1" @click="openEditChannel(ch)">
+                      编辑
+                    </Button>
                     <Button variant="outline" size="sm" class="cursor-pointer text-xs h-7 gap-1" @click="toggleChannel(ch)">
                       {{ ch.enabled ? '禁用' : '启用' }}
                     </Button>
@@ -474,6 +477,158 @@
               </div>
             </CardContent>
           </Card>
+
+          <!-- 推送日志面板 -->
+          <Card class="mt-4">
+            <CardHeader class="flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="space-y-0.5">
+                <CardTitle class="text-base flex items-center gap-2">
+                  <RefreshCw class="size-4 text-blue-400" />
+                  推送历史记录
+                </CardTitle>
+                <p class="text-xs text-muted-foreground">查看所有推送通知的发送记录和状态</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <select
+                  v-model="pushLogFilter"
+                  class="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                  @change="pushLogPage = 1; loadPushLogs()"
+                >
+                  <option value="all">全部</option>
+                  <option value="success">成功</option>
+                  <option value="failed">失败</option>
+                </select>
+                <Button variant="outline" size="sm" class="cursor-pointer gap-1.5 h-8 text-xs" @click="loadPushLogs">
+                  <RefreshCw class="size-3" />
+                  刷新
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent class="space-y-2">
+              <div v-if="pushLogsLoading" class="space-y-2">
+                <Skeleton v-for="i in 3" :key="i" class="h-12 w-full rounded" />
+              </div>
+              <div v-else-if="pushLogs.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+                暂无推送记录
+              </div>
+              <div v-else class="space-y-1.5">
+                <div
+                  v-for="log in pushLogs"
+                  :key="log.id"
+                  class="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div class="space-y-1 min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <Badge
+                        :class="log.success ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-red-500/15 text-red-400 border-red-500/30'"
+                        class="text-[10px] h-4"
+                      >{{ log.success ? '成功' : '失败' }}</Badge>
+                      <Badge variant="outline" class="text-[10px] h-4 capitalize">{{ log.channel_type }}</Badge>
+                      <span class="text-xs font-medium">{{ log.channel_name }}</span>
+                      <span v-if="log.retry_count > 0" class="text-[10px] text-muted-foreground">第{{ log.retry_count + 1 }}次</span>
+                    </div>
+                    <p v-if="log.detail && !log.success" class="text-xs text-red-400/80 truncate max-w-[400px]">{{ log.detail }}</p>
+                    <p class="text-[11px] text-muted-foreground">
+                      {{ formatTime(log.created_at) }}
+                      <span v-if="log.trigger_source" class="ml-2 text-muted-foreground/60">来源: {{ log.trigger_source }}</span>
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      v-if="!log.success"
+                      variant="outline"
+                      size="sm"
+                      class="cursor-pointer text-xs h-7 gap-1"
+                      :disabled="pushLogRetrying === log.id"
+                      @click="retryPushLog(log.id)"
+                    >
+                      {{ pushLogRetrying === log.id ? '重试中…' : '重试' }}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <!-- 分页 -->
+              <div v-if="pushLogTotalPages > 1" class="flex items-center justify-center gap-2 pt-2">
+                <Button variant="outline" size="sm" class="cursor-pointer h-7 text-xs" :disabled="pushLogPage <= 1" @click="pushLogPage--; loadPushLogs()">上一页</Button>
+                <span class="text-xs text-muted-foreground tabular-nums">{{ pushLogPage }} / {{ pushLogTotalPages }}</span>
+                <Button variant="outline" size="sm" class="cursor-pointer h-7 text-xs" :disabled="pushLogPage >= pushLogTotalPages" @click="pushLogPage++; loadPushLogs()">下一页</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- 编辑通道弹窗 -->
+          <Dialog :open="showEditChannel" @update:open="showEditChannel = $event">
+            <DialogContent class="sm:max-w-[480px]">
+              <DialogHeader>
+                <DialogTitle>编辑推送通道</DialogTitle>
+                <DialogDescription>修改通道配置后点击保存</DialogDescription>
+              </DialogHeader>
+              <div class="space-y-3 py-2">
+                <div class="space-y-1.5">
+                  <label class="text-sm font-medium">通道类型</label>
+                  <input :value="editForm.channel_type" disabled class="h-9 w-full rounded-md border border-input bg-muted px-3 text-sm capitalize" />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-sm font-medium">通道名称</label>
+                  <input v-model="editForm.channel_name" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-sm font-medium">目标地址</label>
+                  <input v-model="editForm.target" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                </div>
+                <template v-if="['dingtalk', 'feishu'].includes(editForm.channel_type)">
+                  <div class="space-y-1.5">
+                    <label class="text-sm font-medium">签名密钥（留空不修改）</label>
+                    <input v-model="editForm.secret" type="password" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                </template>
+                <template v-if="editForm.channel_type === 'email'">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 主机</label>
+                      <input v-model="editForm.smtp_host" placeholder="smtp.example.com" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">端口</label>
+                      <input v-model.number="editForm.smtp_port" type="number" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 用户名</label>
+                      <input v-model="editForm.smtp_user" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">SMTP 密码</label>
+                      <input v-model="editForm.smtp_password" type="password" placeholder="留空不修改" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">发件人地址</label>
+                      <input v-model="editForm.smtp_from" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-sm font-medium">启用 TLS</label>
+                      <div class="flex items-center gap-3 pt-1">
+                        <button
+                          type="button"
+                          role="switch"
+                          :aria-checked="editForm.smtp_tls ? 'true' : 'false'"
+                          :class="['relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors', editForm.smtp_tls ? 'bg-primary' : 'bg-input']"
+                          @click="editForm.smtp_tls = !editForm.smtp_tls"
+                        >
+                          <span :class="['pointer-events-none inline-block size-4 rounded-full bg-white shadow-lg ring-0 transition-transform', editForm.smtp_tls ? 'translate-x-4' : 'translate-x-0']" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" size="sm" class="cursor-pointer" @click="showEditChannel = false">取消</Button>
+                <Button size="sm" class="cursor-pointer" :disabled="editSaving" @click="saveEditChannel">
+                  {{ editSaving ? '保存中…' : '保存' }}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <!-- ── 设备凭证 ── -->
@@ -1846,6 +2001,144 @@ const deleteChannel = async (id: number) => {
   } catch { /* ignore */ }
 }
 
+// ── 推送日志 ──
+interface PushLogItem {
+  id: number
+  channel_id: number
+  channel_type: string
+  channel_name: string
+  target: string
+  message_preview: string
+  success: boolean
+  status: string
+  detail: string
+  retry_count: number
+  max_retries: number
+  trace_id: string
+  trigger_source: string
+  created_at: string
+}
+const pushLogs = ref<PushLogItem[]>([])
+const pushLogsLoading = ref(false)
+const pushLogsTotal = ref(0)
+const pushLogPage = ref(1)
+const pushLogPageSize = 20
+const pushLogFilter = ref<'all' | 'success' | 'failed'>('all')
+const pushLogRetrying = ref<number | null>(null)
+
+const loadPushLogs = async () => {
+  pushLogsLoading.value = true
+  try {
+    const params: Record<string, any> = {
+      limit: pushLogPageSize,
+      offset: (pushLogPage.value - 1) * pushLogPageSize,
+    }
+    if (pushLogFilter.value === 'success') params.success = 1
+    else if (pushLogFilter.value === 'failed') params.success = 0
+    const res: any = await apiClient.get('/push/logs', { params })
+    const data = res?.data ?? res
+    pushLogs.value = data?.items ?? []
+    pushLogsTotal.value = data?.total ?? 0
+  } catch {
+    pushLogs.value = []
+    pushLogsTotal.value = 0
+  } finally {
+    pushLogsLoading.value = false
+  }
+}
+
+const retryPushLog = async (logId: number) => {
+  pushLogRetrying.value = logId
+  try {
+    await apiClient.post(`/push/logs/${logId}/retry`)
+    channelMsg.value = '重试成功'
+    channelMsgOk.value = true
+    await loadPushLogs()
+  } catch {
+    channelMsg.value = '重试失败'
+    channelMsgOk.value = false
+  } finally {
+    pushLogRetrying.value = null
+    setTimeout(() => { channelMsg.value = '' }, 3000)
+  }
+}
+
+const pushLogTotalPages = computed(() => Math.max(1, Math.ceil(pushLogsTotal.value / pushLogPageSize)))
+
+const formatTime = (iso: string) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+// ── 编辑通道 ──
+const showEditChannel = ref(false)
+const editChannelId = ref<number | null>(null)
+const editForm = reactive({
+  channel_type: '',
+  channel_name: '',
+  target: '',
+  enabled: 1,
+  secret: '',
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_user: '',
+  smtp_password: '',
+  smtp_from: '',
+  smtp_tls: true,
+})
+const editSaving = ref(false)
+
+const openEditChannel = (ch: PushChannel) => {
+  editChannelId.value = ch.id
+  editForm.channel_type = ch.channel_type
+  editForm.channel_name = ch.channel_name
+  editForm.target = ch.target
+  editForm.enabled = ch.enabled
+  editForm.secret = ''
+  editForm.smtp_host = ''
+  editForm.smtp_port = 587
+  editForm.smtp_user = ''
+  editForm.smtp_password = ''
+  editForm.smtp_from = ''
+  editForm.smtp_tls = true
+  showEditChannel.value = true
+}
+
+const saveEditChannel = async () => {
+  if (!editChannelId.value) return
+  editSaving.value = true
+  try {
+    const payload: Record<string, any> = {
+      channel_name: editForm.channel_name,
+      target: editForm.target,
+      enabled: editForm.enabled,
+    }
+    const configObj: Record<string, any> = {}
+    if (editForm.secret.trim()) configObj.secret = editForm.secret.trim()
+    if (editForm.channel_type === 'email') {
+      if (editForm.smtp_host.trim()) configObj.smtp_host = editForm.smtp_host.trim()
+      if (editForm.smtp_port) configObj.smtp_port = editForm.smtp_port
+      if (editForm.smtp_user.trim()) configObj.smtp_user = editForm.smtp_user.trim()
+      if (editForm.smtp_password.trim()) configObj.smtp_password = editForm.smtp_password.trim()
+      if (editForm.smtp_from.trim()) configObj.smtp_from = editForm.smtp_from.trim()
+      configObj.smtp_tls = editForm.smtp_tls
+    }
+    if (Object.keys(configObj).length > 0) payload.config_json = JSON.stringify(configObj)
+    await apiClient.put(`/push/channels/${editChannelId.value}`, payload)
+    channelMsg.value = '保存成功'
+    channelMsgOk.value = true
+    showEditChannel.value = false
+    await loadChannels()
+  } catch (e: any) {
+    channelMsg.value = e?.displayMessage || '保存失败'
+    channelMsgOk.value = false
+  } finally {
+    editSaving.value = false
+    setTimeout(() => { channelMsg.value = '' }, 3000)
+  }
+}
+
 // ── 设备凭证管理 ──
 const devices = ref<DeviceInfo[]>([])
 const devicesLoading = ref(false)
@@ -2067,6 +2360,7 @@ onMounted(() => {
   loadNmapConfig()
   loadFirewallConfig()
   loadChannels()
+  loadPushLogs()
   loadVulnScripts()
   loadDevices()
 })

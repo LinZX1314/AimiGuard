@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from core.database import PushChannel
+from core.database import PushChannel, PushLog
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ class PushService:
             try:
                 body = response.json()
                 if isinstance(body, dict):
-                    code = body.get("code") or body.get("StatusCode")
+                    code = body.get("code") if "code" in body else body.get("StatusCode")
                     if code is not None:
                         success = int(code) == 0
                         detail = f"feishu_code={code}"
@@ -435,6 +435,116 @@ class PushService:
         lines.append(f"*Aimiguan 安全运营平台*")
         return "\n".join(lines)
 
+    MAX_RETRIES = 3
+    RETRY_BASE_DELAY = 2  # seconds
+
+    @staticmethod
+    def _write_push_log(
+        db: Any,
+        *,
+        channel: PushChannel,
+        message: str,
+        result: Dict[str, Any],
+        trace_id: str,
+        trigger_source: str = "alert",
+        retry_count: int = 0,
+    ) -> Optional[int]:
+        try:
+            log = PushLog(
+                channel_id=channel.id,
+                channel_type=channel.channel_type,
+                channel_name=channel.channel_name,
+                target=channel.target,
+                message_preview=message[:500] if message else "",
+                success=1 if result.get("success") else 0,
+                status=result.get("status", "unknown"),
+                detail=str(result.get("detail", ""))[:1000],
+                retry_count=retry_count,
+                max_retries=PushService.MAX_RETRIES,
+                trace_id=trace_id,
+                trigger_source=trigger_source,
+            )
+            db.add(log)
+            db.commit()
+            return log.id
+        except Exception as exc:
+            logger.error("write_push_log error: %s", exc)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return None
+
+    @staticmethod
+    async def _send_with_retry(
+        channel: PushChannel,
+        message: str,
+        trace_id: str,
+        db: Any,
+        trigger_source: str = "alert",
+    ) -> Dict[str, Any]:
+        """Send with exponential-backoff retry. Logs every attempt."""
+        last_result: Dict[str, Any] = {}
+        for attempt in range(PushService.MAX_RETRIES + 1):
+            try:
+                last_result = await PushService.send(channel, message, trace_id)
+            except Exception as exc:
+                last_result = {
+                    "success": False,
+                    "status": "failed",
+                    "detail": f"exception:{exc.__class__.__name__}:{exc}",
+                }
+
+            PushService._write_push_log(
+                db,
+                channel=channel,
+                message=message,
+                result=last_result,
+                trace_id=trace_id,
+                trigger_source=trigger_source,
+                retry_count=attempt,
+            )
+
+            if last_result.get("success"):
+                return last_result
+
+            if attempt < PushService.MAX_RETRIES:
+                delay = PushService.RETRY_BASE_DELAY * (2 ** attempt)
+                logger.info(
+                    "push_retry channel=%s attempt=%d/%d delay=%.1fs",
+                    channel.channel_name, attempt + 1, PushService.MAX_RETRIES, delay,
+                )
+                await asyncio.sleep(delay)
+
+        return last_result
+
+    @staticmethod
+    async def retry_push_log(
+        db_session_factory: Any,
+        log_id: int,
+    ) -> Dict[str, Any]:
+        """Retry a failed push log entry."""
+        db = db_session_factory()
+        try:
+            log_entry = db.query(PushLog).filter(PushLog.id == log_id).first()
+            if not log_entry:
+                return {"success": False, "detail": "log_not_found"}
+            if log_entry.success:
+                return {"success": True, "detail": "already_succeeded"}
+
+            channel = db.query(PushChannel).filter(PushChannel.id == log_entry.channel_id).first()
+            if not channel:
+                return {"success": False, "detail": "channel_not_found"}
+
+            message = log_entry.message_preview or ""
+            trace_id = log_entry.trace_id or ""
+            result = await PushService._send_with_retry(
+                channel, message, trace_id, db, trigger_source="manual_retry",
+            )
+            return result
+        finally:
+            db.close()
+
     @staticmethod
     async def send_alert(
         db_session_factory: Any,
@@ -448,7 +558,7 @@ class PushService:
         trace_id: str = "",
         extra: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Send alert to ALL enabled push channels. Runs in background."""
+        """Send alert to ALL enabled push channels with retry + logging."""
         message = PushService.format_alert_message(
             title=title,
             severity=severity,
@@ -472,7 +582,9 @@ class PushService:
 
             for channel in channels:
                 try:
-                    result = await PushService.send(channel, message, trace_id)
+                    result = await PushService._send_with_retry(
+                        channel, message, trace_id, db, trigger_source="alert",
+                    )
                     results.append(result)
                     if not result.get("success"):
                         logger.warning(

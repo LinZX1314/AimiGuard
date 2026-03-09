@@ -190,19 +190,31 @@
                 <div
                   v-for="item in pagedNotifications"
                   :key="item.id"
-                  class="rounded-md border border-border bg-card px-3 py-2"
+                  class="rounded-md border border-border bg-card px-3 py-2 cursor-pointer transition-colors hover:bg-accent/40"
+                  :class="!item.read ? 'border-l-2 border-l-blue-500' : ''"
+                  @click="markNotificationRead(item)"
                 >
                   <div class="flex items-center justify-between gap-2">
-                    <p class="text-sm font-medium">{{ item.title }}</p>
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span
+                        v-if="item.severity === 'critical' || item.severity === 'high'"
+                        class="inline-flex size-1.5 rounded-full bg-red-500 shrink-0"
+                      />
+                      <span
+                        v-else-if="item.severity === 'medium'"
+                        class="inline-flex size-1.5 rounded-full bg-yellow-500 shrink-0"
+                      />
+                      <p class="text-sm font-medium truncate">{{ item.title }}</p>
+                    </div>
                     <span
                       v-if="!item.read"
-                      class="inline-flex h-1.5 w-1.5 rounded-full bg-blue-500"
+                      class="inline-flex h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0"
                     />
                   </div>
-                  <p class="mt-1 text-xs text-muted-foreground">{{ item.content }}</p>
+                  <p class="mt-1 text-xs text-muted-foreground line-clamp-2">{{ item.content }}</p>
                   <p class="mt-2 text-[11px] text-muted-foreground/80">{{ item.time }}</p>
                 </div>
-                <p v-if="notifications.length === 0" class="py-8 text-center text-xs text-muted-foreground">No notifications</p>
+                <p v-if="notifications.length === 0" class="py-8 text-center text-xs text-muted-foreground">暂无通知</p>
               </div>
               <!-- 通知面板 -->
               <div class="border-t border-border px-3 py-2 shrink-0 flex items-center justify-between">
@@ -472,6 +484,7 @@ import type { ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveMode } from '@/composables/useActiveMode'
 import { hasAnyPermission, parseStoredUserInfo } from '@/composables/useAuthz'
+import { apiClient } from '@/api/client'
 import { authApi } from '../api/auth'
 import { overviewApi } from '@/api/overview'
 import { deviceApi, type DeviceInfo } from '@/api/device'
@@ -585,11 +598,18 @@ const testDevice = async (deviceId: number) => {
     deviceTesting.value = null
   }
 }
-const notifications = ref([
-  { id: 'n-1', title: 'Workspace status', content: 'Page transitions do not interrupt backend tasks.', time: 'Just now', read: false },
-  { id: 'n-2', title: 'Audit export done', content: 'Latest audit export task finished.', time: '5 min ago', read: false },
-  { id: 'n-3', title: 'Scan reminder', content: 'There are scan results waiting for confirmation.', time: '15 min ago', read: true },
-])
+interface NotifItem {
+  id: number | string
+  title: string
+  content: string
+  time: string
+  read: boolean
+  category?: string
+  severity?: string
+  link?: string
+}
+const notifications = ref<NotifItem[]>([])
+const unreadCount = ref(0)
 const NOTIF_PAGE_SIZE = 5
 const notifPage = ref(1)
 const notifTotalPages = computed(() => Math.max(1, Math.ceil(notifications.value.length / NOTIF_PAGE_SIZE)))
@@ -597,6 +617,42 @@ const pagedNotifications = computed(() => {
   const start = (notifPage.value - 1) * NOTIF_PAGE_SIZE
   return notifications.value.slice(start, start + NOTIF_PAGE_SIZE)
 })
+
+const formatNotifTime = (iso: string) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return '刚刚'
+  if (diffMin < 60) return `${diffMin} 分钟前`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr} 小时前`
+  return d.toLocaleDateString('zh-CN')
+}
+
+const loadNotifications = async () => {
+  try {
+    const res: any = await apiClient.get('/notifications', { params: { limit: 50 } })
+    const data = res?.data ?? res
+    const items = data?.items ?? []
+    notifications.value = items.map((n: any) => ({
+      id: n.id,
+      title: n.title || '',
+      content: n.content || '',
+      time: formatNotifTime(n.created_at || ''),
+      read: !!n.read,
+      category: n.category,
+      severity: n.severity,
+      link: n.link,
+    }))
+    unreadCount.value = data?.unread ?? notifications.value.filter((n: NotifItem) => !n.read).length
+  } catch {
+    // keep existing
+  }
+}
+
+let notifPollTimer: ReturnType<typeof setInterval> | null = null
 const shellRef = ref<HTMLElement | null>(null)
 const sidebarRef = ref<HTMLElement | null>(null)
 
@@ -901,7 +957,7 @@ const roleBadgeVariant = computed(() => {
   return role.value === 'admin' ? ('default' as const) : ('secondary' as const)
 })
 
-const unreadNotifications = computed(() => notifications.value.filter((item) => !item.read).length)
+const unreadNotifications = computed(() => unreadCount.value)
 
 // function removed
 
@@ -1190,9 +1246,22 @@ const goToSecuritySettings = () => {
   router.push('/settings?tab=security')
 }
 
-const markAllNotificationsRead = () => {
-  notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
-  notifPage.value = 1
+const markNotificationRead = async (item: NotifItem) => {
+  if (item.read) return
+  try {
+    await apiClient.post(`/notifications/${item.id}/read`)
+    item.read = true
+    unreadCount.value = Math.max(0, unreadCount.value - 1)
+  } catch { /* ignore */ }
+}
+
+const markAllNotificationsRead = async () => {
+  try {
+    await apiClient.post('/notifications/read-all')
+    notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
+    unreadCount.value = 0
+    notifPage.value = 1
+  } catch { /* ignore */ }
 }
 
 const goToProfile = () => {
@@ -1238,6 +1307,9 @@ onMounted(() => {
 
   loadTopbarStatus()
   statusPollTimer = setInterval(loadTopbarStatus, 30000)
+
+  loadNotifications()
+  notifPollTimer = setInterval(loadNotifications, 30000)
 })
 
 onUnmounted(() => {
@@ -1254,6 +1326,10 @@ onUnmounted(() => {
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
     statusPollTimer = null
+  }
+  if (notifPollTimer) {
+    clearInterval(notifPollTimer)
+    notifPollTimer = null
   }
 })
 

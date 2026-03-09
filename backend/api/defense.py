@@ -24,6 +24,7 @@ from services.workflow_rollout import (
 from services.workflow_runtime import run_published_workflow
 from services.event_broadcaster import DEFENSE_EVENTS_CHANNEL, event_broadcaster
 from services.push_service import PushService
+from services.notification_service import NotificationService
 
 router = APIRouter(prefix="/api/v1/defense", tags=["defense"])
 compat_router = APIRouter(tags=["defense"])
@@ -1139,19 +1140,34 @@ async def receive_alert(
     ]
     if high_severity_events and ingested_event_ids:
         sample, sample_severity = high_severity_events[0]
+        alert_title = f"新增 {len(ingested_event_ids)} 条威胁事件"
+        alert_ip = str(sample.get("ip", ""))
+        alert_summary = str(sample.get("threat_label", ""))
         asyncio.ensure_future(
             PushService.send_alert(
                 SessionLocal,
-                title=f"新增 {len(ingested_event_ids)} 条威胁事件",
+                title=alert_title,
                 severity=sample_severity,
-                ip=str(sample.get("ip", "")),
+                ip=alert_ip,
                 source=str(sample.get("source_vendor", "hfish")),
-                summary=str(sample.get("threat_label", "")),
+                summary=alert_summary,
                 event_id=ingested_event_ids[0],
                 trace_id=trace_id,
                 extra={"入库数": len(ingested_event_ids), "去重数": len(deduped_event_ids)},
             )
         )
+        try:
+            NotificationService.broadcast(
+                SessionLocal,
+                title=f"⚠️ {alert_title}",
+                content=f"严重等级: {sample_severity} | IP: {alert_ip} | {alert_summary}",
+                category="alert",
+                severity=sample_severity.lower(),
+                link=f"/defense?event_id={ingested_event_ids[0]}",
+                trace_id=trace_id,
+            )
+        except Exception as exc:
+            logger.warning("notification_broadcast error: %s", exc)
 
     first_id: Optional[int] = None
     if ingested_event_ids:

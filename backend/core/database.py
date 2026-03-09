@@ -458,6 +458,39 @@ class PushChannel(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class PushLog(Base):
+    __tablename__ = "push_log"
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(Integer, index=True)
+    channel_type = Column(String, nullable=False)
+    channel_name = Column(String, nullable=False)
+    target = Column(String)
+    message_preview = Column(Text)
+    success = Column(Integer, default=0)
+    status = Column(String, nullable=False, default="pending")
+    detail = Column(Text)
+    retry_count = Column(Integer, default=0)
+    max_retries = Column(Integer, default=3)
+    trace_id = Column(String, index=True)
+    trigger_source = Column(String)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class Notification(Base):
+    __tablename__ = "notification"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    title = Column(String, nullable=False)
+    content = Column(Text)
+    category = Column(String, nullable=False, default="system")
+    severity = Column(String, default="info")
+    link = Column(String)
+    read = Column(Integer, default=0)
+    trace_id = Column(String, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class FirewallSyncTask(Base):
     __tablename__ = "firewall_sync_task"
     id = Column(Integer, primary_key=True, index=True)

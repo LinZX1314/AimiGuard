@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.auth import require_permissions
-from core.database import PushChannel, User, get_db
+from core.database import PushChannel, PushLog, SessionLocal, User, get_db
 from core.response import APIResponse
 from services.audit_service import AuditService
 from services.push_service import PushService
@@ -205,4 +205,70 @@ async def test_channel(
         message="推送测试成功",
         trace_id=trace_id,
     )
+
+
+@router.get("/logs")
+async def list_push_logs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    channel_id: Optional[int] = Query(None),
+    success: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("view_push")),
+):
+    q = db.query(PushLog)
+    if channel_id is not None:
+        q = q.filter(PushLog.channel_id == channel_id)
+    if success is not None:
+        q = q.filter(PushLog.success == success)
+    total = q.count()
+    items = q.order_by(PushLog.created_at.desc()).offset(offset).limit(limit).all()
+    return APIResponse.success({
+        "total": total,
+        "items": [
+            {
+                "id": log.id,
+                "channel_id": log.channel_id,
+                "channel_type": log.channel_type,
+                "channel_name": log.channel_name,
+                "target": log.target,
+                "message_preview": log.message_preview,
+                "success": bool(log.success),
+                "status": log.status,
+                "detail": log.detail,
+                "retry_count": log.retry_count,
+                "max_retries": log.max_retries,
+                "trace_id": log.trace_id,
+                "trigger_source": log.trigger_source,
+                "created_at": log.created_at.isoformat().replace("+00:00", "Z") if log.created_at else None,
+            }
+            for log in items
+        ],
+    })
+
+
+@router.post("/logs/{log_id}/retry")
+async def retry_push_log(
+    log_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("manage_push")),
+):
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
+    result = await PushService.retry_push_log(SessionLocal, log_id)
+
+    AuditService.log(
+        db=db,
+        actor=str(current_user.username),
+        action="retry_push_log",
+        target=str(log_id),
+        target_type="push_log",
+        result="success" if result.get("success") else "FAILED",
+        trace_id=trace_id,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(502, f"重试失败: {result.get('detail')}")
+
+    return APIResponse.success(result, message="重试成功", trace_id=trace_id)
 
