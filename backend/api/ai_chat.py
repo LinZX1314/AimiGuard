@@ -393,7 +393,7 @@ async def cleanup_expired_sessions(
     for s in expired_sessions:
         msgs_deleted = db.query(AIChatMessage).filter(AIChatMessage.session_id == s.id).delete()
         msg_count += msgs_deleted
-        db.delete(s)
+        s.ended_at = now
         cleaned_count += 1
 
     db.commit()

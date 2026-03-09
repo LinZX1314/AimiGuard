@@ -590,7 +590,7 @@ def seed_demo_data(db) -> dict[str, Any]:
         context_id=None,
         operator=DEMO_OPERATOR,
         started_at=now - timedelta(minutes=40),
-        expires_at=now + timedelta(hours=23),
+        expires_at=now + timedelta(days=30),
         created_at=now - timedelta(minutes=40),
     )
     db.add(session)
