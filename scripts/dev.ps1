@@ -4,7 +4,8 @@
 param(
     [switch]$PrepareOnly,
     [switch]$Verify,
-    [switch]$InstallBackendDependencies
+    [switch]$InstallBackendDependencies,
+    [switch]$SkipFrontend
 )
 
 $ErrorActionPreference = "Stop"
@@ -145,6 +146,27 @@ if ($backendNeedsInstall) {
     Write-Host "✓ 后端依赖已安装" -ForegroundColor Green
 }
 
+# 自动生成 .env
+$envFile = Join-Path $BackendPath ".env"
+$envExample = Join-Path $BackendPath ".env.example"
+if (-not (Test-Path $envFile)) {
+    if (Test-Path $envExample) {
+        Write-Host "🔧 从 .env.example 生成 .env ..." -ForegroundColor Yellow
+        $content = Get-Content $envExample -Raw
+        # 生成随机 JWT_SECRET
+        $randomBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($randomBytes)
+        $jwtSecret = [Convert]::ToBase64String($randomBytes)
+        $content = $content -replace 'JWT_SECRET=.*', "JWT_SECRET=$jwtSecret"
+        Set-Content -Path $envFile -Value $content -Encoding utf8
+        Write-Host "✓ .env 已生成（JWT_SECRET 已随机化）" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️  未找到 .env.example，请手动创建 .env" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "✓ .env 已存在" -ForegroundColor Green
+}
+
 # 初始化数据库
 Write-Host "🗄️  初始化数据库..." -ForegroundColor Yellow
 $databasePath = Join-Path $BackendPath "aimiguard.db"
@@ -158,18 +180,31 @@ if (Test-Path $databasePath) {
 }
 
 # 初始化前端
-Write-Host ""
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "📦 初始化前端..." -ForegroundColor Yellow
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+if (-not $SkipFrontend) {
+    Write-Host ""
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+    Write-Host "📦 初始化前端..." -ForegroundColor Yellow
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 
-Set-Location $FrontendPath
+    Set-Location $FrontendPath
 
-if (-not (Test-Path "node_modules")) {
-    Write-Host "🔧 安装前端依赖..." -ForegroundColor Yellow
-    npm install
+    # 自动生成前端 .env
+    $feEnvFile = Join-Path $FrontendPath ".env"
+    $feEnvExample = Join-Path $FrontendPath ".env.example"
+    if (-not (Test-Path $feEnvFile) -and (Test-Path $feEnvExample)) {
+        Copy-Item $feEnvExample $feEnvFile
+        Write-Host "✓ 前端 .env 已从 .env.example 复制" -ForegroundColor Green
+    }
+
+    if (-not (Test-Path "node_modules")) {
+        Write-Host "🔧 安装前端依赖..." -ForegroundColor Yellow
+        npm install
+    } else {
+        Write-Host "✓ 前端依赖已安装" -ForegroundColor Green
+    }
 } else {
-    Write-Host "✓ 前端依赖已安装" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "⏭️  跳过前端初始化 (-SkipFrontend)" -ForegroundColor Yellow
 }
 
 if ($Verify) {
@@ -222,13 +257,25 @@ if (-not (Wait-ForBackendHealth -Url $BackendHealthUrl -TimeoutSeconds 30)) {
 Write-Host "✓ 后端健康检查通过" -ForegroundColor Green
 
 # 启动前端（前台）
-Set-Location $FrontendPath
-try {
-    npm run dev
-} finally {
-    # 清理：停止后端任务
-    Write-Host ""
-    Write-Host "🛑 正在停止服务..." -ForegroundColor Yellow
-    Stop-BackendJob -Job $backendJob
-    Write-Host "✓ 服务已停止" -ForegroundColor Green
+if (-not $SkipFrontend) {
+    Set-Location $FrontendPath
+    try {
+        npm run dev
+    } finally {
+        Write-Host ""
+        Write-Host "🛑 正在停止服务..." -ForegroundColor Yellow
+        Stop-BackendJob -Job $backendJob
+        Write-Host "✓ 服务已停止" -ForegroundColor Green
+    }
+} else {
+    Write-Host "✓ 仅后端模式，前端已跳过" -ForegroundColor Green
+    Write-Host "💡 按 Ctrl+C 停止后端" -ForegroundColor Yellow
+    try {
+        Wait-Job -Job $backendJob
+    } finally {
+        Write-Host ""
+        Write-Host "🛑 正在停止后端..." -ForegroundColor Yellow
+        Stop-BackendJob -Job $backendJob
+        Write-Host "✓ 服务已停止" -ForegroundColor Green
+    }
 }

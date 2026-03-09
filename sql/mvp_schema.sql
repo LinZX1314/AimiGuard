@@ -845,3 +845,25 @@ CREATE TABLE IF NOT EXISTS prompt_template (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_template_key_ver ON prompt_template(template_key, version);
 CREATE INDEX IF NOT EXISTS idx_prompt_template_active ON prompt_template(template_key, is_active);
+
+-- D1: CVE 情报缓存
+CREATE TABLE IF NOT EXISTS cve_intel_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vuln_id TEXT NOT NULL UNIQUE,
+  cvss_score REAL,
+  cvss_vector TEXT,
+  epss_score REAL,
+  epss_percentile REAL,
+  is_in_kev INTEGER NOT NULL DEFAULT 0,
+  affected_versions TEXT,
+  patch_url TEXT,
+  exploit_available INTEGER NOT NULL DEFAULT 0,
+  exploit_sources TEXT,
+  raw_json TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cve_cache_vuln_id ON cve_intel_cache(vuln_id);
+CREATE INDEX IF NOT EXISTS idx_cve_cache_cvss ON cve_intel_cache(cvss_score);
+CREATE INDEX IF NOT EXISTS idx_cve_cache_epss ON cve_intel_cache(epss_score);

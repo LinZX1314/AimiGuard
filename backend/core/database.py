@@ -412,6 +412,25 @@ class PromptTemplate(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class CVEIntelCache(Base):
+    __tablename__ = "cve_intel_cache"
+    id = Column(Integer, primary_key=True, index=True)
+    vuln_id = Column(String, unique=True, nullable=False)
+    cvss_score = Column(Float)
+    cvss_vector = Column(String)
+    epss_score = Column(Float)
+    epss_percentile = Column(Float)
+    is_in_kev = Column(Integer, default=0)
+    affected_versions = Column(Text)
+    patch_url = Column(String)
+    exploit_available = Column(Integer, default=0)
+    exploit_sources = Column(Text)
+    raw_json = Column(Text, nullable=False)
+    fetched_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class PluginCallLog(Base):
     __tablename__ = "plugin_call_log"
     id = Column(Integer, primary_key=True, index=True)
