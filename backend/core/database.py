@@ -949,6 +949,56 @@ def _ensure_default_rbac_data() -> None:
         db.close()
 
 
+def _normalize_default_devices() -> None:
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    try:
+        targets = (
+            (
+                "默认交换机",
+                "192.168.1.1",
+                23,
+                "示例设备（已禁用），请修改为实际地址后启用",
+                {None, "", "示例设备，请根据实际情况修改", "示例设备（已禁用），请修改为实际地址后启用"},
+            ),
+            (
+                "DEMO-CORE-SWITCH",
+                "10.0.0.254",
+                23,
+                "[demo] core switch for execution demo (disabled)",
+                {None, "", "[demo] core switch for execution demo", "[demo] core switch for execution demo (disabled)"},
+            ),
+        )
+        changed = False
+        for name, ip, port, new_description, legacy_descriptions in targets:
+            device = (
+                db.query(Device)
+                .filter(Device.name == name, Device.ip == ip, Device.port == port)
+                .first()
+            )
+            if device is None:
+                continue
+
+            device_changed = False
+            if device.enabled != 0:
+                device.enabled = 0
+                device_changed = True
+            if device.description in legacy_descriptions and device.description != new_description:
+                device.description = new_description
+                device_changed = True
+            if device_changed:
+                device.updated_at = now
+                changed = True
+
+        if changed:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
@@ -1023,3 +1073,4 @@ def init_db():
         _ensure_sqlite_column("fix_ticket", "closed_at", "VARCHAR")
 
     _ensure_default_rbac_data()
+    _normalize_default_devices()

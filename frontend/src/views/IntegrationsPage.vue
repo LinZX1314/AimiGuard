@@ -640,7 +640,7 @@
                   <Server class="size-4 text-cyan-400" />
                   交换机 / 设备凭证管理
                 </CardTitle>
-                <p class="text-xs text-muted-foreground">管理网络设备的 SSH/Telnet 登录凭证，支持每台设备多组密码</p>
+                <p class="text-xs text-muted-foreground">管理网络设备的 SSH/Telnet 登录凭证，支持每台设备多组密码；启用状态仅表示是否参与执行，不代表网络连通</p>
               </div>
               <Button variant="outline" size="sm" class="cursor-pointer gap-1.5" @click="showAddDevice = !showAddDevice">
                 <Plus class="size-3.5" />
@@ -711,7 +711,7 @@
                         <Badge variant="outline" class="text-[10px] h-4 capitalize">{{ dev.vendor }}</Badge>
                         <Badge v-if="dev.device_type" variant="outline" class="text-[10px] h-4">{{ dev.device_type }}</Badge>
                         <Badge :class="dev.enabled ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-muted text-muted-foreground'" class="text-[10px] h-4">
-                          {{ dev.enabled ? '启用' : '禁用' }}
+                          {{ dev.enabled ? '配置已启用' : '配置已禁用' }}
                         </Badge>
                       </div>
                       <p class="text-xs text-muted-foreground font-mono">{{ dev.ip }}:{{ dev.port }}</p>

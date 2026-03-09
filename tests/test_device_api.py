@@ -1,6 +1,8 @@
 """Device & Credential API tests — full CRUD + connection test."""
 import pytest
+from sqlalchemy import text
 from unittest.mock import patch, MagicMock
+from core.database import init_db
 
 
 def _h(token: str) -> dict:
@@ -225,3 +227,33 @@ def test_delete_device_cascades_credentials(client, admin_token, db):
     client.delete(f"/api/v1/device/{dev_id}", headers=_h(admin_token))
     db.expire_all()
     assert db.query(Credential).filter(Credential.device_id == dev_id).count() == 0
+
+
+def test_init_db_normalizes_placeholder_default_devices(db):
+    db.execute(text("DELETE FROM device WHERE name IN ('默认交换机', 'DEMO-CORE-SWITCH')"))
+    db.execute(
+        text(
+            """
+            INSERT INTO device (name, ip, port, vendor, device_type, enabled, description, created_at, updated_at)
+            VALUES
+            ('默认交换机', '192.168.1.1', 23, 'generic', 'switch', 1, '示例设备，请根据实际情况修改', '2026-03-09 00:00:00', '2026-03-09 00:00:00'),
+            ('DEMO-CORE-SWITCH', '10.0.0.254', 23, 'generic', 'switch', 1, '[demo] core switch for execution demo', '2026-03-09 00:00:00', '2026-03-09 00:00:00')
+            """
+        )
+    )
+    db.commit()
+
+    init_db()
+    db.expire_all()
+
+    rows = db.execute(
+        text(
+            "SELECT name, enabled, description FROM device WHERE name IN ('默认交换机', 'DEMO-CORE-SWITCH') ORDER BY name"
+        )
+    ).fetchall()
+    result = {row[0]: {"enabled": row[1], "description": row[2]} for row in rows}
+
+    assert result["默认交换机"]["enabled"] == 0
+    assert result["默认交换机"]["description"] == "示例设备（已禁用），请修改为实际地址后启用"
+    assert result["DEMO-CORE-SWITCH"]["enabled"] == 0
+    assert result["DEMO-CORE-SWITCH"]["description"] == "[demo] core switch for execution demo (disabled)"

@@ -240,7 +240,7 @@ async def test_device_connection(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions(["system:config"])),
 ):
-    """测试交换机连接（TCP 端口可达性 + 服务响应验证）"""
+    """测试交换机连接（TCP 端口可达性）"""
     import asyncio
 
     device = db.query(Device).filter(Device.id == device_id).first()
@@ -253,7 +253,6 @@ async def test_device_connection(
             asyncio.open_connection(device.ip, device.port),
             timeout=5,
         )
-        # 尝试读取 banner/欢迎信息，验证远端确实有服务
         try:
             banner = await asyncio.wait_for(reader.read(256), timeout=3)
         except asyncio.TimeoutError:
