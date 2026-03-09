@@ -91,9 +91,17 @@ class AuditService:
             if log.prev_hash and log.prev_hash != expected_prev:
                 return {"valid": False, "checked": i + 1, "broken_at": log.id}
 
+            # SQLite round-trip may strip timezone; restore UTC suffix to match log()
+            if log.created_at:
+                ca = log.created_at
+                if ca.tzinfo is None:
+                    ca = ca.replace(tzinfo=timezone.utc)
+                created_iso = ca.isoformat()
+            else:
+                created_iso = ""
             expected_hash = _compute_hash(
                 log.actor, log.action, log.target, log.result,
-                log.trace_id, log.created_at.isoformat() if log.created_at else "",
+                log.trace_id, created_iso,
                 log.prev_hash or "GENESIS",
             )
             if log.integrity_hash != expected_hash:
