@@ -6,6 +6,15 @@ import hashlib
 import uuid
 
 
+def _normalize_result(result: str) -> str:
+    normalized = str(result).strip().lower()
+    if normalized in {"success", "succeeded", "pass", "passed", "ok", "true", "1"}:
+        return "success"
+    if normalized in {"failed", "fail", "failure", "error", "false", "0"}:
+        return "failed"
+    raise ValueError(f"unsupported audit result: {result}")
+
+
 def _compute_hash(
     actor: str, action: str, target: str, result: str,
     trace_id: str, created_at: str, prev_hash: str,
@@ -32,6 +41,7 @@ class AuditService:
     ):
         """统一审计日志写入（含哈希链不可篡改校验）"""
         trace_id = trace_id or str(uuid.uuid4())
+        result = _normalize_result(result)
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
 

@@ -44,6 +44,24 @@ def test_audit_log_error_message(db):
     assert entry.error_message == "Disk full"
 
 
+def test_audit_log_normalizes_uppercase_result(db):
+    entry = AuditService.log(
+        db, actor="scheduler", action="hfish_auto_sync", target="hfish_collector",
+        result="SUCCESS", error_message="无新数据",
+    )
+    assert entry.result == "success"
+    assert entry.error_message == "无新数据"
+
+
+def test_audit_log_normalizes_alias_result(db):
+    entry = AuditService.log(
+        db, actor="security_test", action="hardening_check", target="system",
+        result="pass", trace_id="audit-pass-normalized",
+    )
+    assert entry.result == "success"
+    assert entry.trace_id == "audit-pass-normalized"
+
+
 def test_audit_log_auto_generates_trace_id(db):
     entry = AuditService.log(db, actor="admin", action="test", target="x")
     assert entry.trace_id is not None
