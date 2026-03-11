@@ -2878,11 +2878,18 @@ tests/                         # 68+ 测试文件, 697+ 测试用例
 ## 开发指南（快速上手）
 
 ### 环境准备
-**必需软件**
-- Python 3.9+
-- Node.js 16+
-- SQLite 3
-- Git
+
+| 依赖 | 最低版本 | 快速安装（Windows winget） |
+|------|---------|---------------------------|
+| Python | 3.9+ | `winget install Python.Python.3.12` |
+| Node.js | 18+ | `winget install OpenJS.NodeJS.LTS` |
+| Git | 任意 | `winget install Git.Git` |
+
+> **新机一键准备**（管理员 PowerShell）：
+> ```powershell
+> winget install Python.Python.3.12 OpenJS.NodeJS.LTS Git.Git
+> ```
+> 安装完成后重开终端使 PATH 生效。
 
 **可选软件（按需）**
 - Ollama / LM Studio（本地 AI 模型）
@@ -2891,73 +2898,44 @@ tests/                         # 68+ 测试文件, 697+ 测试用例
 
 ### 快速启动（本地开发）
 
-#### 1. 克隆仓库
+#### 推荐：一键启动脚本
 ```powershell
 git clone <repository-url>
 cd aimiguan
+.\scripts\dev.ps1
 ```
 
-#### 2. 后端初始化
-```powershell
-# 进入后端目录
-cd backend
+脚本自动完成：检测/引导安装 Python · Node.js → 创建虚拟环境 → 安装依赖 → 生成 `.env`（随机 JWT_SECRET）→ 初始化数据库 → 启动前后端。
 
-# 创建虚拟环境
+详见 [QUICKSTART.md](./QUICKSTART.md)。
+
+#### 手动启动（后端）
+```powershell
+cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-
-# 安装依赖
 pip install -r requirements.txt
-
-# 复制环境配置
-Copy-Item .env.example .env
-
-# 编辑 .env 配置必要参数
-# JWT_SECRET=<生成随机密钥>
-# DATABASE_URL=sqlite:///aimiguard.db
-
-# 初始化数据库
 python init_db.py
-
-# 启动后端服务（开发模式）
-python main.py --dev
+python main.py        # http://localhost:8000
 ```
 
-后端默认运行在 `http://localhost:8000`
-
-**启动参数说明**：
+**启动参数**：
 ```powershell
-# 开发模式（热重载 + 详细日志）
-python main.py --dev
-
-# 指定端口
-python main.py --port 8080
-
-# 指定主机（允许外部访问）
-python main.py --host 0.0.0.0 --port 8000
-
-# 生产模式（多进程）
-python main.py --workers 4
+python main.py --dev          # 热重载 + 详细日志
+python main.py --port 8080    # 指定端口
+python main.py --workers 4   # 生产多进程
 ```
 
-#### 3. 前端初始化
+#### 手动启动（前端）
 ```powershell
-# 新开终端，进入前端目录
 cd frontend
-
-# 安装依赖
 npm install
-
-# 复制环境配置
-Copy-Item .env.example .env
-
-# 启动开发服务器
-npm run dev
+npm run dev    # http://localhost:3000
 ```
 
-前端默认运行在 `http://localhost:3000`
+> `.env` 由一键脚本自动生成；手动操作时复制 `.env.example` 并修改 `JWT_SECRET`。
 
-#### 4. 验证安装
+#### 验证安装
 - 访问前端：`http://localhost:3000`
 - 检查后端健康：`http://localhost:8000/api/health`
 - 默认登录账号：`admin` / `admin123`（首次启动自动创建）

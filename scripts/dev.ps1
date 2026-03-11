@@ -75,23 +75,58 @@ Write-Host "║          Aimiguan 开发环境启动脚本 v1.0                 
 Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
-# 检查 Python
+# 检查 Python (3.9+)
 Write-Host "🔍 检查 Python 环境..." -ForegroundColor Yellow
-try {
-    $pythonVersion = python --version 2>&1
-    Write-Host "✓ Python: $pythonVersion" -ForegroundColor Green
-} catch {
-    Write-Host "✗ 未找到 Python，请先安装 Python 3.8+" -ForegroundColor Red
+$pythonFound = $false
+foreach ($candidate in @("python", "py", "python3")) {
+    try {
+        $pyVer = & $candidate --version 2>&1
+        if ($pyVer -match "Python (\d+)\.(\d+)") {
+            $major = [int]$Matches[1]; $minor = [int]$Matches[2]
+            if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 9)) {
+                Write-Host "✓ Python: $pyVer" -ForegroundColor Green
+                $pythonFound = $true
+                break
+            }
+            Write-Host "⚠️  Python $($Matches[1]).$($Matches[2]) 版本过低（需要 3.9+）" -ForegroundColor Yellow
+        }
+    } catch {}
+}
+if (-not $pythonFound) {
+    Write-Host "✗ 未找到 Python 3.9+，尝试通过 winget 自动安装..." -ForegroundColor Red
+    try {
+        winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+        Write-Host ""
+        Write-Host "✓ 安装完成。请关闭此终端，重新打开后再次运行脚本。" -ForegroundColor Green
+    } catch {
+        Write-Host "💡 winget 不可用，请手动安装: https://www.python.org/downloads/" -ForegroundColor Yellow
+    }
     exit 1
 }
 
-# 检查 Node.js
+# 检查 Node.js (18+)
 Write-Host "🔍 检查 Node.js 环境..." -ForegroundColor Yellow
+$nodeFound = $false
 try {
-    $nodeVersion = node --version 2>&1
-    Write-Host "✓ Node.js: $nodeVersion" -ForegroundColor Green
-} catch {
-    Write-Host "✗ 未找到 Node.js，请先安装 Node.js 16+" -ForegroundColor Red
+    $nodeVer = node --version 2>&1
+    if ($nodeVer -match "v(\d+)") {
+        if ([int]$Matches[1] -ge 18) {
+            Write-Host "✓ Node.js: $nodeVer" -ForegroundColor Green
+            $nodeFound = $true
+        } else {
+            Write-Host "⚠️  Node.js $nodeVer 版本过低（需要 18+）" -ForegroundColor Yellow
+        }
+    }
+} catch {}
+if (-not $nodeFound) {
+    Write-Host "✗ 未找到 Node.js 18+，尝试通过 winget 自动安装..." -ForegroundColor Red
+    try {
+        winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+        Write-Host ""
+        Write-Host "✓ 安装完成。请关闭此终端，重新打开后再次运行脚本。" -ForegroundColor Green
+    } catch {
+        Write-Host "💡 winget 不可用，请手动安装: https://nodejs.org/zh-cn/" -ForegroundColor Yellow
+    }
     exit 1
 }
 
