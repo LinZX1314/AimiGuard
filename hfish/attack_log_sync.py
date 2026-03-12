@@ -56,7 +56,7 @@ def _format_error(host_port, err_msg):
 """
 
 
-def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
+def get_attack_logs(start_time, end_time, host_port, api_key):
     """
     获取攻击详情列表
 
@@ -65,7 +65,6 @@ def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
         end_time: 结束时间戳 (0 表示最新时间)
         host_port: 主机地址和端口，如 "127.0.0.1:4433"
         api_key: API密钥
-        on_error: 可选，错误时回调 (host_port, err_msg) -> None
 
     返回:
         处理后的攻击详情列表
@@ -122,34 +121,22 @@ def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
-            msg = _format_error(host_port, err_msg)
-            print(msg)
-            if on_error:
-                on_error(host_port, err_msg)
+            print(_format_error(host_port, err_msg))
             return []
 
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
-            err_msg = "请求超时，HFish 服务响应过慢"
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            print(_format_error(host_port, "请求超时，HFish 服务响应过慢"))
             return []
 
         except requests.exceptions.HTTPError as e:
-            err_msg = f"HTTP 错误 {e.response.status_code}: {str(e)}"
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            print(_format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"))
             return []
 
         except Exception as e:
-            err_msg = str(e)
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            print(_format_error(host_port, str(e)))
             return []
 
 

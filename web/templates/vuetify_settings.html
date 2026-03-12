@@ -1,58 +1,112 @@
-{% extends "base.html" %}
-{% block title %}设置 - 玄枢·AI攻防指挥官{% endblock %}
-{% block content %}
-{% raw %}
-<div id="app" v-cloak>
-    <v-app>
-        <v-main>
-                <v-container fluid style="max-width: 800px;">
-                    <!-- 动态状态卡片：轮询 /api/status 实时更新 -->
-                    <v-card class="mb-4">
-                        <v-card-title>
-                            <v-icon start>mdi-information-outline</v-icon>
-                            模块运行状态
-                            <v-chip size="small" color="primary" class="ml-2">动态更新</v-chip>
-                        </v-card-title>
-                        <v-card-text>
-                            <v-row dense>
-                                <v-col cols="6" sm="3">
-                                    <div class="d-flex align-center">
-                                        <v-icon :color="status.hfish_sync ? 'success' : 'grey'" size="small" class="mr-2">
-                                            {{ status.hfish_sync ? 'mdi-check-circle' : 'mdi-close-circle' }}
-                                        </v-icon>
-                                        <span>HFish 同步</span>
-                                    </div>
-                                </v-col>
-                                <v-col cols="6" sm="3">
-                                    <div class="d-flex align-center">
-                                        <v-icon :color="status.nmap_scan ? 'success' : 'grey'" size="small" class="mr-2">
-                                            {{ status.nmap_scan ? 'mdi-check-circle' : 'mdi-close-circle' }}
-                                        </v-icon>
-                                        <span>Nmap 扫描</span>
-                                    </div>
-                                </v-col>
-                                <v-col cols="6" sm="3">
-                                    <div class="d-flex align-center">
-                                        <v-icon :color="status.ai_analysis ? 'success' : 'grey'" size="small" class="mr-2">
-                                            {{ status.ai_analysis ? 'mdi-check-circle' : 'mdi-close-circle' }}
-                                        </v-icon>
-                                        <span>AI 分析</span>
-                                    </div>
-                                </v-col>
-                                <v-col cols="6" sm="3">
-                                    <div class="d-flex align-center">
-                                        <v-icon :color="status.acl_auto_ban ? 'success' : 'grey'" size="small" class="mr-2">
-                                            {{ status.acl_auto_ban ? 'mdi-check-circle' : 'mdi-close-circle' }}
-                                        </v-icon>
-                                        <span>ACL 自动封禁</span>
-                                    </div>
-                                </v-col>
-                            </v-row>
-                        </v-card-text>
-                    </v-card>
+<!DOCTYPE html>
+<html lang="zh-CN">
 
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置 - AimiGuard</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+    <link href="/static/css/vuetify.min.css" rel="stylesheet">
+    <link href="/static/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="/static/css/inter.css" rel="stylesheet">
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #0B0F19;
+        }
+
+        .v-application {
+            background-color: transparent !important;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(0, 229, 255, 0.08), transparent 25%) !important;
+            background-attachment: fixed !important;
+        }
+
+        .v-card {
+            background: rgba(26, 34, 53, 0.7) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+            transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+        }
+
+        .v-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 229, 255, 0.1) !important;
+            border: 1px solid rgba(0, 229, 255, 0.2) !important;
+        }
+
+        .custom-app-bar {
+            background: linear-gradient(90deg, #0B0F19 0%, #1A2235 100%) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app-loading"
+        style="background:#0B0F19;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div
+            style="width: 50px; height: 50px; border: 3px solid rgba(0, 229, 255, 0.1); border-radius: 50%; border-top-color: #00E5FF; animation: spin 1s ease-in-out infinite; margin-bottom: 20px;">
+        </div>
+        <div style="color:#00E5FF;font-size:1.2rem;font-family:'Inter',sans-serif;letter-spacing:2px;font-weight:500;">
+            AimiGuard System</div>
+        <style>
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+        </style>
+    </div>
+
+    {% raw %}
+    <div id="app" v-cloak>
+        <v-app>
+            <v-app-bar class="custom-app-bar" density="compact" elevation="0">
+                <v-app-bar-title style="color: #00E5FF; font-weight: 600; letter-spacing: 1px;">
+                    <v-icon class="mr-2" color="primary">mdi-shield-check-outline</v-icon>
+                    AimiGuard 安全监控
+                </v-app-bar-title>
+                <v-spacer></v-spacer>
+                <v-btn variant="text" href="/">
+                    <v-icon start>mdi-view-dashboard</v-icon>
+                    仪表盘
+                </v-btn>
+                <v-btn variant="text" href="/hfish">
+                    <v-icon start>mdi-alert-circle</v-icon>
+                    攻击日志
+                </v-btn>
+                <v-btn variant="text" href="/nmap">
+                    <v-icon start>mdi-radar</v-icon>
+                    网络扫描
+                </v-btn>
+                <v-btn variant="text" href="/vuln">
+                    <v-icon start>mdi-bug-outline</v-icon>
+                    漏洞扫描
+                </v-btn>
+                <v-btn variant="text" href="/ai">
+                    <v-icon start>mdi-robot-outline</v-icon>
+                    AI 助手
+                </v-btn>
+                <v-btn variant="text" href="/settings">
+                    <v-icon start>mdi-cog</v-icon>
+                    设置
+                </v-btn>
+            </v-app-bar>
+
+            <v-main>
+                <v-container fluid style="max-width: 800px;">
                     <v-card class="mb-4">
-                        <v-card-title>HFish 攻击数据同步</v-card-title>
+                        <v-card-title>HFish 攻击日志同步</v-card-title>
                         <v-card-text>
                             <v-row>
                                 <v-col cols="12" md="6">
@@ -158,26 +212,30 @@
                     </v-card>
 
                     <v-card class="mb-4">
-                        <v-card-title>
-                            <v-icon start>mdi-file-document-outline</v-icon>
-                            日志记录开关
-                        </v-card-title>
+                        <v-card-title>AI 安全大模型配置</v-card-title>
                         <v-card-text>
                             <v-row>
-                                <v-col cols="12" md="6">
-                                    <v-switch v-model="logging.api_request_log" label="API 请求日志" color="primary" hide-details></v-switch>
+                                <v-col cols="12">
+                                    <v-text-field v-model="ai.api_url" label="API Endpoint (兼容 OpenAI 格式)" 
+                                        variant="outlined" density="compact" placeholder="http://127.0.0.1:1234/v1/chat/completions"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="8">
+                                    <v-text-field v-model="ai.api_key" label="API Key" variant="outlined"
+                                        density="compact" placeholder="sk-..." type="password"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="4">
+                                    <v-text-field v-model="ai.model" label="Model Name" variant="outlined"
+                                        density="compact" placeholder="qwen-turbo"></v-text-field>
                                 </v-col>
                                 <v-col cols="12" md="6">
-                                    <v-switch v-model="logging.sync_log" label="同步日志" color="primary" hide-details></v-switch>
+                                    <v-text-field v-model.number="ai.timeout" label="请求超时 (秒)" variant="outlined"
+                                        density="compact" type="number"></v-text-field>
                                 </v-col>
                                 <v-col cols="12" md="6">
-                                    <v-switch v-model="logging.scan_log" label="扫描日志" color="primary" hide-details></v-switch>
+                                    <v-switch v-model="ai.enabled" label="启用 AI 辅助功能" color="primary" hide-details></v-switch>
                                 </v-col>
-                                <v-col cols="12" md="6">
-                                    <v-switch v-model="logging.ai_log" label="AI 分析日志" color="primary" hide-details></v-switch>
-                                </v-col>
-                                <v-col cols="12" md="6">
-                                    <v-switch v-model="logging.error_log" label="错误日志" color="primary" hide-details></v-switch>
+                                <v-col cols="12">
+                                    <v-switch v-model="ai.auto_ban" label="自动化防御: AI 决断后自动下发 ACL 封禁 (高风险)" color="error" hide-details></v-switch>
                                 </v-col>
                             </v-row>
                         </v-card-text>
@@ -196,14 +254,12 @@
             </v-main>
         </v-app>
     </div>
-{% endraw %}
-{% endblock %}
 
-{% block scripts %}
-<script src="/static/js/vue.global.prod.js"></script>
-<script src="/static/js/vuetify.min.js"></script>
-<script>
-        const { createApp, ref, onMounted, onUnmounted } = Vue;
+    <script src="/static/js/vue.global.prod.js"></script>
+    <script src="/static/js/vuetify.min.js"></script>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
         const { createVuetify } = Vuetify;
 
         const vuetify = createVuetify({
@@ -233,23 +289,6 @@
                 const snackbar = ref(false);
                 const snackbarText = ref('');
                 const snackbarColor = ref('success');
-                const status = ref({
-                    hfish_sync: false,
-                    nmap_scan: false,
-                    ai_analysis: false,
-                    acl_auto_ban: false
-                });
-
-                const loadStatus = async () => {
-                    try {
-                        const res = await fetch('/api/status');
-                        const data = await res.json();
-                        status.value = data;
-                    } catch (e) {
-                        console.error('加载状态失败:', e);
-                    }
-                };
-
                 const hfish = ref({
                     host_port: '',
                     api_key: '',
@@ -263,12 +302,13 @@
                     scan_enabled: false,
                     vuln_scripts_by_tag_text: ''
                 });
-                const logging = ref({
-                    api_request_log: true,
-                    sync_log: true,
-                    scan_log: true,
-                    ai_log: true,
-                    error_log: true
+                const ai = ref({
+                    enabled: false,
+                    auto_ban: false,
+                    api_url: '',
+                    api_key: '',
+                    model: '',
+                    timeout: 60
                 });
 
                 const loadSettings = async () => {
@@ -294,8 +334,11 @@
                             // 同步解析后的规则到可视化列表
                             syncRulesFromJson();
                         }
-                        if (data.status) status.value = data.status;
-                        if (data.logging) logging.value = { ...logging.value, ...data.logging };
+
+                        if (data.ai) {
+                            ai.value = { ...data.ai };
+                            ai.value.api_key = ''; // 不返回 api_key
+                        }
                     } catch (e) {
                         console.error('加载设置失败:', e);
                     }
@@ -334,12 +377,18 @@
                                     scan_enabled: nmap.value.scan_enabled,
                                     vuln_scripts_by_tag: parsedVulnScripts
                                 },
-                                logging: logging.value
+                                ai: {
+                                    enabled: ai.value.enabled,
+                                    auto_ban: ai.value.auto_ban,
+                                    api_url: ai.value.api_url,
+                                    api_key: ai.value.api_key,
+                                    model: ai.value.model,
+                                    timeout: ai.value.timeout
+                                }
                             })
                         });
                         const data = await res.json();
                         if (data.success) {
-                            if (data.status) status.value = data.status;
                             snackbarText.value = '设置已保存';
                             snackbarColor.value = 'success';
                             snackbar.value = true;
@@ -427,19 +476,12 @@
                     syncJsonFromRules();
                 };
 
-                let statusInterval = null;
                 onMounted(() => {
                     loadSettings();
-                    loadStatus();
-                    // 每 5 秒轮询状态，支持动态更新
-                    statusInterval = setInterval(loadStatus, 5000);
-                });
-                onUnmounted(() => {
-                    if (statusInterval) clearInterval(statusInterval);
                 });
 
                 return {
-                    saving, snackbar, snackbarText, snackbarColor, status, hfish, nmap, logging, saveSettings,
+                    saving, snackbar, snackbarText, snackbarColor, hfish, nmap, ai, saveSettings,
                     newRuleTag, newRuleScripts, parsedVulnRules, osTagOptions,
                     addVulnRule, removeVulnRule, syncRulesFromJson
                 };
@@ -448,5 +490,9 @@
 
         app.use(vuetify);
         app.mount('#app');
-</script>
-{% endblock %}
+        document.getElementById('app-loading').style.display = 'none';
+    </script>
+    {% endraw %}
+</body>
+
+</html>
