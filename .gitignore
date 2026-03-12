@@ -1,8 +1,3 @@
-# 忽略 Nmap 程序目录
-nmap/Nmap/
-
-# 忽略 hfish 程序目录
-hfish-3.3.6-windows-amd64/
 .claude/
 # 忽略数据库文件
 *.db
