@@ -115,6 +115,10 @@
                     <v-icon start>mdi-bug-outline</v-icon>
                     漏洞扫描
                 </v-btn>
+                <v-btn variant="text" href="/ai">
+                    <v-icon start>mdi-robot-outline</v-icon>
+                    AI 助手
+                </v-btn>
                 <v-btn variant="text" href="/settings">
                     <v-icon start>mdi-cog</v-icon>
                     设置
@@ -132,6 +136,10 @@
                             <v-btn color="primary" @click="startScan" :loading="scanning">
                                 <v-icon start>mdi-radar</v-icon>
                                 手动扫描
+                            </v-btn>
+                            <v-btn color="secondary" variant="flat" class="ml-4" href="/ai">
+                                <v-icon start>mdi-robot-outline</v-icon>
+                                AI 助手对话扫描
                             </v-btn>
                             <v-spacer></v-spacer>
                             <div class="text-grey">

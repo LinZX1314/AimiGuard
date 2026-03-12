@@ -10,6 +10,7 @@
 2. **智能化漏洞探测 (NSE)**：根据主机的 OS 标签，自动挂载并下发对应的专属 Nmap Vulnerability 探测脚本（如只对老旧组件跑特定的 MS 漏洞扫描），大大提高扫描精度和效率。
 3. **威胁情报中枢 (HFish)**：自动提取 HFish 蜜罐中高价值的攻击行为日志并做图表化分析，随时掌控内网横向移动痕迹。
 4. **全自动后台轮询**：Nmap 漏洞资产扫描与 HFish 攻击拦截均在 Python 守护线程中自动静默运行（按你设定的间隔时间）。
+5. **🤖 AI 驱动的“对话即扫描”**：集成大语言模型（LLM），支持通过自然语言指令直接触发扫描任务并生成专业安全报告。
 
 ---
 
@@ -26,7 +27,8 @@ aimiguard/
 ├── hfish/                   # 蜜罐子系统
 │   └── attack_log_sync.py   # API 对接及格式化程序
 ├── nmap/                    # 扫描与测绘子系统
-│   └── network_scan.py      # 主机存活、端口及 NSE 漏洞执行器
+│   ├── network_scan.py      # 主机存活、端口及 NSE 漏洞执行器
+│   └── ai_scanner.py        # AI 扫描指令处理引擎
 └── web/                     
     ├── web_app.py           # Web 控制器与 API 层 [C]
     └── templates/           # 前端大屏视图代码 [V] (基于 Vuetify)
@@ -97,12 +99,13 @@ python web/web_app.py
 | **资产** | `/api/nmap/hosts` <br/> `/api/nmap/assets` | GET | 按照 `scan_id` 获取资产明细，以及被追踪的高级资产池 |
 | **漏洞** | `/api/nmap/vuln` <br/> `/api/nmap/vuln/scan` | GET / POST | 获取漏洞扫描明细，或手动启动全局深度 NSE 漏洞扫描 |
 | **情报** | `/api/hfish/logs` | GET | 分页获取并检索从 HFish 蜜罐收集到的攻击数据 |
+| **AI** | `/api/ai/scan` | POST | 接收自然语言指令，解析并执行 Nmap 扫描任务 |
 
 ---
 
 ## 👨‍💻 后续演进规划 (Roadmap)
 - [x] 基于模型层 (MVC) 的底层大重构
 - [x] 实现主机操作系统的智能聚类标签机制
-- [ ] 🤖 **接入 LLM (大模型) 安全防守大师功能**
+- [x] 🤖 **接入 LLM (大模型) 安全防守大师功能**
 - [ ] 提供主机上线/漏洞触发时的钉钉/飞书 Webhook 实时告警
 - [ ] 导出 PDF 企业网络安全体检报告

@@ -93,6 +93,10 @@
                     <v-icon start>mdi-bug-outline</v-icon>
                     漏洞扫描
                 </v-btn>
+                <v-btn variant="text" href="/ai">
+                    <v-icon start>mdi-robot-outline</v-icon>
+                    AI 助手
+                </v-btn>
                 <v-btn variant="text" href="/settings">
                     <v-icon start>mdi-cog</v-icon>
                     设置
@@ -207,6 +211,36 @@
                         </v-card-text>
                     </v-card>
 
+                    <v-card class="mb-4">
+                        <v-card-title>AI 安全大模型配置</v-card-title>
+                        <v-card-text>
+                            <v-row>
+                                <v-col cols="12">
+                                    <v-text-field v-model="ai.api_url" label="API Endpoint (兼容 OpenAI 格式)" 
+                                        variant="outlined" density="compact" placeholder="http://127.0.0.1:1234/v1/chat/completions"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="8">
+                                    <v-text-field v-model="ai.api_key" label="API Key" variant="outlined"
+                                        density="compact" placeholder="sk-..." type="password"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="4">
+                                    <v-text-field v-model="ai.model" label="Model Name" variant="outlined"
+                                        density="compact" placeholder="qwen-turbo"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="6">
+                                    <v-text-field v-model.number="ai.timeout" label="请求超时 (秒)" variant="outlined"
+                                        density="compact" type="number"></v-text-field>
+                                </v-col>
+                                <v-col cols="12" md="6">
+                                    <v-switch v-model="ai.enabled" label="启用 AI 辅助功能" color="primary" hide-details></v-switch>
+                                </v-col>
+                                <v-col cols="12">
+                                    <v-switch v-model="ai.auto_ban" label="自动化防御: AI 决断后自动下发 ACL 封禁 (高风险)" color="error" hide-details></v-switch>
+                                </v-col>
+                            </v-row>
+                        </v-card-text>
+                    </v-card>
+
                     <v-btn color="primary" size="large" @click="saveSettings" :loading="saving">
                         <v-icon start>mdi-content-save</v-icon>
                         保存设置
@@ -268,6 +302,14 @@
                     scan_enabled: false,
                     vuln_scripts_by_tag_text: ''
                 });
+                const ai = ref({
+                    enabled: false,
+                    auto_ban: false,
+                    api_url: '',
+                    api_key: '',
+                    model: '',
+                    timeout: 60
+                });
 
                 const loadSettings = async () => {
                     try {
@@ -291,6 +333,11 @@
                                 : '';
                             // 同步解析后的规则到可视化列表
                             syncRulesFromJson();
+                        }
+
+                        if (data.ai) {
+                            ai.value = { ...data.ai };
+                            ai.value.api_key = ''; // 不返回 api_key
                         }
                     } catch (e) {
                         console.error('加载设置失败:', e);
@@ -329,6 +376,14 @@
                                     scan_interval: nmap.value.scan_interval,
                                     scan_enabled: nmap.value.scan_enabled,
                                     vuln_scripts_by_tag: parsedVulnScripts
+                                },
+                                ai: {
+                                    enabled: ai.value.enabled,
+                                    auto_ban: ai.value.auto_ban,
+                                    api_url: ai.value.api_url,
+                                    api_key: ai.value.api_key,
+                                    model: ai.value.model,
+                                    timeout: ai.value.timeout
                                 }
                             })
                         });
@@ -426,7 +481,7 @@
                 });
 
                 return {
-                    saving, snackbar, snackbarText, snackbarColor, hfish, nmap, saveSettings,
+                    saving, snackbar, snackbarText, snackbarColor, hfish, nmap, ai, saveSettings,
                     newRuleTag, newRuleScripts, parsedVulnRules, osTagOptions,
                     addVulnRule, removeVulnRule, syncRulesFromJson
                 };

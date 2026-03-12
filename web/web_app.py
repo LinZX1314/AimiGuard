@@ -6,13 +6,14 @@ from flask import Flask, render_template, jsonify, request
 
 # 导入nmap扫描模块
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
 import network_scan
 
 # 导入 MVC 模型层
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from database.db import get_connection, init_db
 from database.models import NmapModel, VulnModel, HFishModel, StatsModel, ScannerModel, AiModel
+from ai_scanner import AIScanner
 
 app = Flask(__name__)
 
@@ -283,6 +284,11 @@ def vuln_page():
     """漏洞扫描页面"""
     return render_template('vuetify_vuln.html')
 
+@app.route('/ai')
+def ai_scanner_page():
+    """AI 扫描助手页面"""
+    return render_template('vuetify_ai_scanner.html')
+
 # ==================== API接口 ====================
 
 # HFish API
@@ -487,6 +493,24 @@ def api_nmap_host(ip):
         return jsonify(parse_host_row(host))
     return jsonify({})
 
+# AI Scanner API
+@app.route('/api/ai/scan', methods=['POST'])
+def api_ai_scan():
+    """AI 扫描指令执行"""
+    data = request.get_json(silent=True) or {}
+    query = data.get('query')
+    if not query:
+        return jsonify({"success": False, "message": "请输入指令"}), 400
+    
+    try:
+        scanner = AIScanner()
+        result = scanner.chat_and_scan(query)
+        if isinstance(result, str):
+            return jsonify({"success": False, "message": result})
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
 
 @app.route('/settings')
 def settings_page():
@@ -502,7 +526,8 @@ def api_settings_get():
 
     return jsonify({
         "hfish": hfish_config,
-        "nmap": config.get("nmap", {})
+        "nmap": config.get("nmap", {}),
+        "ai": config.get("ai", {})
     })
 
 @app.route('/api/settings', methods=['POST'])
@@ -530,6 +555,10 @@ def api_settings_save():
     # 2. 合并 Nmap 配置
     if "nmap" in data:
         config["nmap"] = data["nmap"]
+
+    # 3. 合并 AI 配置
+    if "ai" in data:
+        config["ai"] = data["ai"]
 
     # 保存到文件
     try:

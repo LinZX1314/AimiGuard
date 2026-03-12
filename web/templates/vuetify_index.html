@@ -108,6 +108,10 @@
                     <v-icon start>mdi-bug-outline</v-icon>
                     漏洞扫描
                 </v-btn>
+                <v-btn variant="text" href="/ai">
+                    <v-icon start>mdi-robot-outline</v-icon>
+                    AI 助手
+                </v-btn>
                 <v-btn variant="text" href="/settings">
                     <v-icon start>mdi-cog</v-icon>
                     设置
@@ -155,6 +159,23 @@
                                     <v-icon size="48" color="error"
                                         style="opacity: 0.8">mdi-shield-alert-outline</v-icon>
                                 </div>
+                            </v-card>
+                        </v-col>
+                    </v-row>
+
+                    <v-row class="mb-4">
+                        <v-col cols="12">
+                            <v-card class="pa-4 d-flex align-center" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(0, 229, 255, 0.1)) !important; border: 1px solid rgba(0, 229, 255, 0.3) !important;">
+                                <v-icon size="64" color="primary" class="mr-4">mdi-robot-outline</v-icon>
+                                <div>
+                                    <div class="text-h5 font-weight-bold text-primary">AI 安全扫描助手</div>
+                                    <div class="text-body-1 text-grey-lighten-1">通过自然语言对话，智能解析扫描意图并自动执行 Nmap 任务，快速获取安全报告。</div>
+                                </div>
+                                <v-spacer></v-spacer>
+                                <v-btn color="primary" size="large" variant="flat" href="/ai" class="font-weight-bold">
+                                    立即体验 对话即扫描
+                                    <v-icon end>mdi-chevron-right</v-icon>
+                                </v-btn>
                             </v-card>
                         </v-col>
                     </v-row>
