@@ -20,7 +20,7 @@ def analyze_and_ban(ip, logs, config):
     api_url = ai_config.get("api_url", "")
     api_key = ai_config.get("api_key", "")
     model = ai_config.get("model", "")
-    timeout = ai_config.get("timeout", 60)
+    timeout = ai_config.get("timeout", 600)
     
     if not api_key or not api_url:
         logger.error("AI API 密钥或接口地址 (api_url) 未配置，跳过 AI 分析阶段。")
@@ -67,10 +67,10 @@ def analyze_and_ban(ip, logs, config):
     # 准备提示词 (Prompt)
     prompt = f"""
 请分析以下来自同一IP ({ip}) 的蜜罐攻击日志。
-作为专业的网络安全专家，请判断该IP的攻击行为是否具有高威胁且严重到了需要封禁的程度。
+作为专业的网络安全专家，请判断该IP的攻击行为是否具有高威胁且严需要封禁。
 
 要求：
-1. 请简要陈述你的分析理由简单回答不要超过200字。
+1. 请简要陈述你的分析理由简单回答不要超过400字。
 2. 必须在回复的最后使用特定标签包裹你的最终判断：
    - 如果需要封禁，请输出：<ban>true</ban>
    - 如果不需要封禁，请输出：<ban>false</ban>

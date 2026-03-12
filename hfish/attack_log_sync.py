@@ -68,7 +68,7 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
     headers = {'Content-Type': 'application/json'}
 
     try:
-        response = requests.post(url, headers=headers, data=payload, verify=False, timeout=30)
+        response = requests.post(url, headers=headers, data=payload, verify=False, timeout=600)
         response.raise_for_status()
         data = response.json()
 
