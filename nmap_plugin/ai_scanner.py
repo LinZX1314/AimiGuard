@@ -34,7 +34,7 @@ class AIScanner:
         self.model = self.ai_config.get("model")
         self.timeout = self.ai_config.get("timeout", 160)
 
-    def _call_llm(self, prompt, system_prompt="/no_think 你是一个专业的网络安全扫描助手。"):
+    def _call_llm(self, prompt, system_prompt="你是一个专业的网络安全扫描助手。"):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
