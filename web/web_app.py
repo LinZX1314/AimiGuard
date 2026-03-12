@@ -6,14 +6,13 @@ from flask import Flask, render_template, jsonify, request
 
 # 导入nmap扫描模块
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap'))
 import network_scan
 
 # 导入 MVC 模型层
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from database.db import get_connection, init_db
 from database.models import NmapModel, VulnModel, HFishModel, StatsModel, ScannerModel, AiModel
-from ai_scanner import AIScanner
 
 app = Flask(__name__)
 
@@ -31,7 +30,47 @@ def load_config():
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
+def reload_config():
+    """从文件重新加载配置，支持动态更新"""
+    global config
+    try:
+        config = load_config()
+        return config
+    except Exception as e:
+        print(f"[{datetime.now()}] 配置重载失败: {e}")
+        return config
+
+
 config = load_config()
+
+# ==================== 日志缓冲（供 Web 展示） ====================
+_log_buffer = []
+_log_max = 500
+_log_lock = threading.Lock()
+
+def append_log(level, message, category="system"):
+    """追加日志到缓冲，供 /api/logs 拉取"""
+    cfg = config.get("logging", {})
+    if category == "sync" and not cfg.get("sync_log", True):
+        return
+    if category == "scan" and not cfg.get("scan_log", True):
+        return
+    if category == "ai" and not cfg.get("ai_log", True):
+        return
+    if category == "error" and not cfg.get("error_log", True):
+        return
+    if category == "api" and not cfg.get("api_request_log", True):
+        return
+    with _log_lock:
+        _log_buffer.append({
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": level,
+            "message": message,
+            "category": category
+        })
+        if len(_log_buffer) > _log_max:
+            _log_buffer.pop(0)
 
 # 扫描锁，防止同时执行多次扫描
 is_scanning = False
@@ -42,7 +81,13 @@ scan_thread_started = False
 
 # 启动时初始化数据库（每个进程都需要确保表存在）
 init_db()
-print(f"[{datetime.now()}] 统一数据库初始化完成")
+
+def _log(level, msg, category="system"):
+    """同时输出到控制台并追加到日志缓冲"""
+    print(msg)
+    append_log(level, msg, category)
+
+_log("info", f"[{datetime.now()}] 统一数据库初始化完成", "system")
 
 # ==================== 数据解析工具 ====================
 
@@ -99,12 +144,12 @@ def run_vuln_scan_task():
         hosts_data = NmapModel.get_latest_up_hosts()
 
         if not hosts_data:
-            print(f"[{datetime.now()}] 漏洞扫描失败: 没有在线主机")
+            _log("warn", f"[{datetime.now()}] 漏洞扫描失败: 没有在线主机", "scan")
             return
 
-        print(f"[{datetime.now()}] 开始漏洞扫描，共 {len(hosts_data)} 台主机")
+        _log("info", f"[{datetime.now()}] 开始漏洞扫描，共 {len(hosts_data)} 台主机", "scan")
         stats = network_scan.run_vuln_scan(hosts_data)
-        print(f"[{datetime.now()}] 漏洞扫描完成: {stats}")
+        _log("info", f"[{datetime.now()}] 漏洞扫描完成: {stats}", "scan")
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -123,11 +168,14 @@ def run_hfish_sync():
 
         last_timestamp = HFishModel.get_last_timestamp()
 
-        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
+        def on_hfish_error(hp, err):
+            _log("error", f"HFish 蜜罐连接异常 [{hp}]: {err}", "sync")
+
+        logs = get_attack_logs(last_timestamp, 0, host_port, api_key, on_error=on_hfish_error)
 
         if logs:
             count = HFishModel.save_logs(logs)
-            print(f"[{datetime.now()}] 同步完成: 获取 {len(logs)} 条, 新增 {count} 条")
+            _log("info", f"[{datetime.now()}] 同步完成: 获取 {len(logs)} 条, 新增 {count} 条", "sync")
             
             # 开始分组和调用 AI 分析
             if count > 0:
@@ -145,15 +193,15 @@ def run_hfish_sync():
                         # 新建线程执行 AI 判定，避免阻塞全局同步日志任务
                         threading.Thread(target=analyze_and_ban, args=(ip, ip_log_list, current_config), daemon=True).start()
                 except Exception as e:
-                    print(f"[{datetime.now()}] 调度 AI 分析线程时发生异常: {e}")
+                    _log("error", f"[{datetime.now()}] 调度 AI 分析线程时发生异常: {e}", "ai")
             
             return {"success": True, "total": len(logs), "new": count}
         else:
-            print(f"[{datetime.now()}] 同步完成: 无新数据")
+            _log("info", f"[{datetime.now()}] 同步完成: 无新数据", "sync")
             return {"success": True, "total": 0, "new": 0}
 
     except Exception as e:
-        print(f"[{datetime.now()}] 同步错误: {e}")
+        _log("error", f"[{datetime.now()}] 同步错误: {e}", "sync")
         return {"success": False, "error": str(e)}
 
 def run_hfish_sync_loop():
@@ -179,7 +227,7 @@ def run_hfish_sync_loop():
             time_module.sleep(sync_interval)
 
         except Exception as e:
-            print(f"[{datetime.now()}] 持续同步错误: {e}")
+            _log("error", f"[{datetime.now()}] 持续同步错误: {e}", "sync")
             time_module.sleep(10)
 
 def run_nmap_scan_loop():
@@ -229,7 +277,7 @@ def run_nmap_scan_loop():
             time_module.sleep(scan_interval)
 
         except Exception as e:
-            print(f"[{datetime.now()}] Nmap定时扫描错误: {e}")
+            _log("error", f"[{datetime.now()}] Nmap定时扫描错误: {e}", "scan")
             is_scanning = False
             time_module.sleep(10)
 
@@ -249,45 +297,68 @@ def start_sync_thread():
         sync_thread = threading.Thread(target=run_hfish_sync_loop, daemon=True)
         sync_thread.start()
         sync_thread_started = True
-        print(f"[{datetime.now()}] HFish同步线程已启动")
+        _log("info", f"[{datetime.now()}] HFish同步线程已启动", "system")
     else:
-        print(f"[{datetime.now()}] HFish同步已禁用")
+        _log("info", f"[{datetime.now()}] HFish同步已禁用", "system")
 
     # Nmap扫描线程 - 只有启用时才启动
     if config.get("nmap", {}).get("scan_enabled", False) and not scan_thread_started:
         scan_thread = threading.Thread(target=run_nmap_scan_loop, daemon=True)
         scan_thread.start()
         scan_thread_started = True
-        print(f"[{datetime.now()}] Nmap扫描线程已启动")
+        _log("info", f"[{datetime.now()}] Nmap扫描线程已启动", "system")
     else:
-        print(f"[{datetime.now()}] Nmap扫描已禁用")
+        _log("info", f"[{datetime.now()}] Nmap扫描已禁用", "system")
+
+# ==================== API 请求日志 ====================
+
+@app.before_request
+def log_api_request():
+    """根据 config.logging.api_request_log 记录 API 请求"""
+    if (request.path.startswith('/api/') and request.path != '/api/logs' and
+            config.get("logging", {}).get("api_request_log", False)):
+        append_log("info", f"API {request.method} {request.path}", "api")
+
 
 # ==================== 路由 ====================
+
+@app.route('/api/logs')
+def api_logs():
+    """获取系统日志（供 Web 日志页展示）"""
+    limit = int(request.args.get('limit', 200))
+    category = request.args.get('category')
+    with _log_lock:
+        logs = list(_log_buffer)
+    if category:
+        logs = [l for l in logs if l.get("category") == category]
+    logs = logs[-limit:]
+    return jsonify(logs)
+
 
 @app.route('/')
 def index():
     """首页"""
-    return render_template('vuetify_index.html')
+    return render_template('vuetify_index.html', active='index')
 
 @app.route('/hfish')
 def hfish():
     """攻击日志页面"""
-    return render_template('vuetify_hfish.html')
+    return render_template('vuetify_hfish.html', active='hfish')
 
 @app.route('/nmap')
 def nmap_page():
     """网络扫描页面"""
-    return render_template('vuetify_nmap.html')
+    return render_template('vuetify_nmap.html', active='nmap')
 
 @app.route('/vuln')
 def vuln_page():
     """漏洞扫描页面"""
-    return render_template('vuetify_vuln.html')
+    return render_template('vuetify_vuln.html', active='vuln')
 
-@app.route('/ai')
-def ai_scanner_page():
-    """AI 扫描助手页面"""
-    return render_template('vuetify_ai_scanner.html')
+@app.route('/logs')
+def logs_page():
+    """系统日志页面"""
+    return render_template('vuetify_logs.html', active='logs')
 
 # ==================== API接口 ====================
 
@@ -341,7 +412,7 @@ def api_hfish_aggregated_logs():
             data["decision"] = None
         result.append(data)
         
-    # 按最新时间排序
+    # Sort by latest time
     result.sort(key=lambda x: x["latest_time"], reverse=True)
     return jsonify(result)
 
@@ -382,7 +453,7 @@ def api_nmap_stats():
 
 @app.route('/api/nmap/assets')
 def api_nmap_assets():
-    """获取nmap资产"""
+    """Get nmap assets."""
     try:
         limit = int(request.args.get('limit', 100))
     except ValueError:
@@ -398,7 +469,7 @@ def api_nmap_assets():
 
 @app.route('/api/nmap/assets/<int:asset_id>/ips')
 def api_nmap_asset_ip_history(asset_id):
-    """根据资产ID获取IP历史记录"""
+    """Get asset IP history by asset id."""
     try:
         limit = int(request.args.get('limit', 200))
     except ValueError:
@@ -408,7 +479,7 @@ def api_nmap_asset_ip_history(asset_id):
 
 @app.route('/api/nmap/assets/mac/<mac_address>/ips')
 def api_nmap_asset_ip_history_by_mac(mac_address):
-    """根据MAC地址获取IP历史记录"""
+    """Get asset IP history by MAC."""
     try:
         limit = int(request.args.get('limit', 200))
     except ValueError:
@@ -448,14 +519,6 @@ def api_vuln_mark_safe():
         return jsonify({"success": True, "message": "已手动标记为安全"})
     return jsonify({"success": False, "message": "未找到对应记录"})
 
-
-@app.route('/api/scan/status')
-def api_scan_status():
-    """获取当前扫描状态"""
-    return jsonify({
-        "is_scanning": is_scanning,
-        "is_vuln_scanning": is_vuln_scanning
-    })
 
 @app.route('/api/nmap/vuln/scan', methods=['POST'])
 def api_vuln_scan():
@@ -566,20 +629,50 @@ def api_ai_history():
 @app.route('/settings')
 def settings_page():
     """设置页面"""
-    return render_template('vuetify_settings.html')
+    return render_template('vuetify_settings.html', active='settings')
 
 @app.route('/api/settings', methods=['GET'])
 def api_settings_get():
-    """获取设置"""
-    # 不返回 api_key 以保证安全
+    """获取设置（支持动态更新：每次从文件重载）"""
+    reload_config()
     hfish_config = config.get("hfish", {}).copy()
     hfish_config.pop("api_key", None)
 
     return jsonify({
         "hfish": hfish_config,
         "nmap": config.get("nmap", {}),
-        "ai": config.get("ai", {})
+        "ai": _safe_ai_config(),
+        "logging": config.get("logging", {}),
+        "status": _get_module_status()
     })
+
+
+def _safe_ai_config():
+    """返回脱敏后的 AI 配置（不含 api_key）"""
+    ai = config.get("ai", {}).copy()
+    ai.pop("api_key", None)
+    return ai
+
+
+def _get_module_status():
+    """获取各模块当前状态，供动态展示"""
+    ai_cfg = config.get("ai", {})
+    ai_enabled = ai_cfg.get("enabled", False)
+    auto_ban = ai_cfg.get("auto_ban", False)
+    switches = config.get("switches", [])
+    return {
+        "hfish_sync": config.get("hfish", {}).get("sync_enabled", False),
+        "nmap_scan": config.get("nmap", {}).get("scan_enabled", False),
+        "ai_analysis": ai_enabled,
+        "acl_auto_ban": bool(ai_enabled and auto_ban and switches),
+    }
+
+
+@app.route('/api/status')
+def api_status():
+    """获取模块运行状态（支持动态更新，供前端轮询）"""
+    reload_config()
+    return jsonify(_get_module_status())
 
 @app.route('/api/settings', methods=['POST'])
 def api_settings_save():
@@ -607,9 +700,9 @@ def api_settings_save():
     if "nmap" in data:
         config["nmap"] = data["nmap"]
 
-    # 3. 合并 AI 配置
-    if "ai" in data:
-        config["ai"] = data["ai"]
+    # 3. 合并日志配置
+    if "logging" in data:
+        config["logging"] = data["logging"]
 
     # 保存到文件
     try:
@@ -627,16 +720,50 @@ def api_settings_save():
         if not sync_thread_started:
             sync_thread = threading.Thread(target=run_hfish_sync_loop, daemon=True)
             sync_thread.start()
-            print(f"[{datetime.now()}] HFish同步已启用，启动同步线程")
+            _log("info", f"[{datetime.now()}] HFish同步已启用，启动同步线程", "system")
 
     # 如果Nmap扫描刚启用，启动线程
     if nmap_enabled and not prev_nmap_enabled:
         if not scan_thread_started:
             scan_thread = threading.Thread(target=run_nmap_scan_loop, daemon=True)
             scan_thread.start()
-            print(f"[{datetime.now()}] Nmap扫描已启用，启动扫描线程")
+            _log("info", f"[{datetime.now()}] Nmap扫描已启用，启动扫描线程", "system")
 
-    return jsonify({"success": True, "message": "设置已保存"})
+    # 重载配置并打印更新后状态（支持动态更新提示）
+    reload_config()
+    _print_status_update()
+
+    return jsonify({"success": True, "message": "设置已保存", "status": _get_module_status()})
+
+
+def _print_status_update():
+    """打印配置更新后的模块状态（动态更新提示）"""
+    s = _get_module_status()
+    msg = f"[{datetime.now()}] 配置已更新 | HFish: {'✓' if s['hfish_sync'] else '✗'} | Nmap: {'✓' if s['nmap_scan'] else '✗'} | AI: {'✓' if s['ai_analysis'] else '✗'} | ACL: {'✓' if s['acl_auto_ban'] else '✗'}"
+    print(msg)
+    append_log("info", msg, "system")
+
+
+def print_startup_banner():
+    """打印 玄枢·AI攻防指挥官 启动横幅及模块状态"""
+    server_config = config.get('server', {})
+    host = server_config.get('host', '0.0.0.0')
+    port = server_config.get('port', 5000)
+    display_host = 'localhost' if host in ('0.0.0.0', '127.0.0.1') else host
+    ai_cfg = config.get('ai', {})
+    ai_enabled = ai_cfg.get('enabled', False)
+    auto_ban = ai_cfg.get('auto_ban', False)
+    switches = config.get('switches', [])
+
+    print()
+    print("=" * 58)
+    print("  [*] 玄枢·AI攻防指挥官 已启动")
+    print("=" * 58)
+    print(f"  控制台地址: http://{display_host}:{port}")
+    print(f"  HFish 同步: {'已启用' if config.get('hfish', {}).get('sync_enabled') else '已禁用'}  |  Nmap 扫描: {'已启用' if config.get('nmap', {}).get('scan_enabled') else '已禁用'}")
+    print(f"  AI 分析: {'已启用' if ai_enabled else '已禁用'}  |  ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and switches) else '已禁用'}")
+    print("=" * 58)
+    print()
 
 
 if __name__ == '__main__':
@@ -645,9 +772,6 @@ if __name__ == '__main__':
     host = server_config.get('host', '0.0.0.0')
     port = server_config.get('port', 5000)
     debug_mode = server_config.get('debug', False)
-
-    # 初始化数据库
-    init_db()
 
     # 如果关键服务器配置缺失，则报错提示或退出
     if not host or not port:
@@ -660,10 +784,12 @@ if __name__ == '__main__':
         if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
             print(f"[{datetime.now()}] 主进程启动后台线程 (Debug模式)")
             start_sync_thread()
+            print_startup_banner()
         else:
             print(f"[{datetime.now()}] 初始进程，跳过后台线程 (等待主进程重载)")
     else:
         print(f"[{datetime.now()}] 启动后台线程 (生产模式)")
         start_sync_thread()
+        print_startup_banner()
 
     app.run(host=host, port=port, debug=debug_mode)

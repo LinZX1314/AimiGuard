@@ -1,8 +1,45 @@
-.claude/
-# 忽略数据库文件
-*.db
-
-# 忽略 Python 缓存
+# ── Python ──
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+*.egg-info/
+.eggs/
+
+# ── 数据库 ──
+*.db
+*.sqlite3
+
+# ── 前端依赖 & 构建产物 ──
+web/frontend/node_modules/
+web/dist/
+# 如有根目录 frontend 残留
+frontend/node_modules/
+frontend/dist/
+
+# ── 环境变量 ──
+.env
+.env.local
+.env.*.local
+
+# ── 日志文件 ──
+*.log
+flask.log
+vite.log
+flask_run.log
+
+# ── 编辑器 / IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 项目专属 ──
+.claude/
+资料/
+err.txt
