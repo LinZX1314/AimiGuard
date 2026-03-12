@@ -4,6 +4,18 @@ import threading
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
+# ==================== 统一日志工具 ====================
+def log(module, message, level="INFO"):
+    """统一日志格式输出
+
+    Args:
+        module: 模块名称，如 WebApp, HFish, Nmap, AI
+        message: 日志消息
+        level: 日志级别，可选 INFO, WARN, ERROR, DEBUG
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [{level:5}] [{module:10}] {message}")
+
 # 导入nmap扫描模块
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
@@ -42,7 +54,7 @@ scan_thread_started = False
 
 # 启动时初始化数据库（每个进程都需要确保表存在）
 init_db()
-print(f"[{datetime.now()}] 统一数据库初始化完成")
+log("WebApp", "统一数据库初始化完成")
 
 # ==================== 数据解析工具 ====================
 
@@ -99,12 +111,12 @@ def run_vuln_scan_task():
         hosts_data = NmapModel.get_latest_up_hosts()
 
         if not hosts_data:
-            print(f"[{datetime.now()}] 漏洞扫描失败: 没有在线主机")
+            log("VulnScan", "漏洞扫描失败: 没有在线主机", "WARN")
             return
 
-        print(f"[{datetime.now()}] 开始漏洞扫描，共 {len(hosts_data)} 台主机")
+        log("VulnScan", f"开始漏洞扫描，共 {len(hosts_data)} 台主机")
         stats = network_scan.run_vuln_scan(hosts_data)
-        print(f"[{datetime.now()}] 漏洞扫描完成: {stats}")
+        log("VulnScan", f"漏洞扫描完成: {stats}")
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -127,7 +139,7 @@ def run_hfish_sync():
 
         if logs:
             count = HFishModel.save_logs(logs)
-            print(f"[{datetime.now()}] 同步完成: 获取 {len(logs)} 条, 新增 {count} 条")
+            log("HFish", f"同步完成: 获取 {len(logs)} 条, 新增 {count} 条")
             
             # 开始分组和调用 AI 分析
             if count > 0:
@@ -145,15 +157,15 @@ def run_hfish_sync():
                         # 新建线程执行 AI 判定，避免阻塞全局同步日志任务
                         threading.Thread(target=analyze_and_ban, args=(ip, ip_log_list, current_config), daemon=True).start()
                 except Exception as e:
-                    print(f"[{datetime.now()}] 调度 AI 分析线程时发生异常: {e}")
+                    log("HFish", f"调度 AI 分析线程时发生异常: {e}", "ERROR")
             
             return {"success": True, "total": len(logs), "new": count}
         else:
-            print(f"[{datetime.now()}] 同步完成: 无新数据")
+            log("HFish", "同步完成: 无新数据")
             return {"success": True, "total": 0, "new": 0}
 
     except Exception as e:
-        print(f"[{datetime.now()}] 同步错误: {e}")
+        log("HFish", f"同步错误: {e}", "ERROR")
         return {"success": False, "error": str(e)}
 
 def run_hfish_sync_loop():
@@ -179,7 +191,7 @@ def run_hfish_sync_loop():
             time_module.sleep(sync_interval)
 
         except Exception as e:
-            print(f"[{datetime.now()}] 持续同步错误: {e}")
+            log("HFish", f"持续同步错误: {e}", "ERROR")
             time_module.sleep(10)
 
 def run_nmap_scan_loop():
@@ -229,7 +241,7 @@ def run_nmap_scan_loop():
             time_module.sleep(scan_interval)
 
         except Exception as e:
-            print(f"[{datetime.now()}] Nmap定时扫描错误: {e}")
+            log("Nmap", f"定时扫描错误: {e}", "ERROR")
             is_scanning = False
             time_module.sleep(10)
 
@@ -249,18 +261,18 @@ def start_sync_thread():
         sync_thread = threading.Thread(target=run_hfish_sync_loop, daemon=True)
         sync_thread.start()
         sync_thread_started = True
-        print(f"[{datetime.now()}] HFish同步线程已启动")
+        log("HFish", "同步线程已启动")
     else:
-        print(f"[{datetime.now()}] HFish同步已禁用")
+        log("HFish", "同步已禁用", "WARN")
 
     # Nmap扫描线程 - 只有启用时才启动
     if config.get("nmap", {}).get("scan_enabled", False) and not scan_thread_started:
         scan_thread = threading.Thread(target=run_nmap_scan_loop, daemon=True)
         scan_thread.start()
         scan_thread_started = True
-        print(f"[{datetime.now()}] Nmap扫描线程已启动")
+        log("Nmap", "扫描线程已启动")
     else:
-        print(f"[{datetime.now()}] Nmap扫描已禁用")
+        log("Nmap", "扫描已禁用", "WARN")
 
 # ==================== 路由 ====================
 
@@ -532,9 +544,9 @@ def api_ai_scan():
         yield f"data: {json.dumps({'type': 'status', 'content': '已连接 AI 助手，正在思考...'}, ensure_ascii=False)}\n\n"
         
         try:
-            print(f"[*] 启动 AI 流式生成器，用户查询: {query}")
+            log("AI", f"启动流式生成器，用户查询: {query}")
             for delta in scanner.chat_and_scan_stream(query, history=history_context):
-                print(f"[DEBUG] 发送数据包: {delta['type']}")
+                log("AI", f"发送数据包: {delta['type']}", "DEBUG")
                 if delta['type'] == 'text':
                     full_content += delta['content']
                 elif delta['type'] == 'scan':
@@ -543,7 +555,7 @@ def api_ai_scan():
                 # 发送 SSE 事件
                 yield f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
             
-            print(f"[*] 流式处理完成，保存数据库. ID: {history_id}, ScanID: {scan_id}")
+            log("AI", f"流式处理完成，保存数据库. ID: {history_id}, ScanID: {scan_id}")
             # 2. 结束后，将完整回复存入数据库
             AiModel.save_chat_history(query, full_content, scan_id, history_id=history_id)
             
@@ -627,14 +639,14 @@ def api_settings_save():
         if not sync_thread_started:
             sync_thread = threading.Thread(target=run_hfish_sync_loop, daemon=True)
             sync_thread.start()
-            print(f"[{datetime.now()}] HFish同步已启用，启动同步线程")
+            log("HFish", "同步已启用，启动同步线程")
 
     # 如果Nmap扫描刚启用，启动线程
     if nmap_enabled and not prev_nmap_enabled:
         if not scan_thread_started:
             scan_thread = threading.Thread(target=run_nmap_scan_loop, daemon=True)
             scan_thread.start()
-            print(f"[{datetime.now()}] Nmap扫描已启用，启动扫描线程")
+            log("Nmap", "扫描已启用，启动扫描线程")
 
     return jsonify({"success": True, "message": "设置已保存"})
 
@@ -651,19 +663,19 @@ if __name__ == '__main__':
 
     # 如果关键服务器配置缺失，则报错提示或退出
     if not host or not port:
-        print(f"[{datetime.now()}] 错误: 关键服务器配置缺失 (host, port)")
+        log("WebApp", "关键服务器配置缺失 (host, port)", "ERROR")
         sys.exit(1)
 
     # Flask debug 模式会启动两个进程：
     # 只在主运行环境中启动后台线程，防止端口占用和重复启动
     if debug_mode:
         if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-            print(f"[{datetime.now()}] 主进程启动后台线程 (Debug模式)")
+            log("WebApp", "主进程启动后台线程 (Debug模式)")
             start_sync_thread()
         else:
-            print(f"[{datetime.now()}] 初始进程，跳过后台线程 (等待主进程重载)")
+            log("WebApp", "初始进程，跳过后台线程 (等待主进程重载)", "WARN")
     else:
-        print(f"[{datetime.now()}] 启动后台线程 (生产模式)")
+        log("WebApp", "启动后台线程 (生产模式)")
         start_sync_thread()
 
     app.run(host=host, port=port, debug=debug_mode)

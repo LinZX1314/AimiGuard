@@ -17,6 +17,7 @@ except ImportError:
 
 from database.models import ScannerModel, NmapModel
 from openai import OpenAI
+from utils.logger import log
 
 
 class AIScanner:
@@ -79,7 +80,7 @@ class AIScanner:
 
         # 第一步：发起对话
         try:
-            print(f"[AI] 发起请求: {self.model}")
+            log("AI", f"发起请求: {self.model}")
 
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -119,7 +120,7 @@ class AIScanner:
 
                 if func_name == "nmap_scan":
                     raw_args = tool_call.get("arguments", "{}")
-                    print(f"[AI] 准备执行工具: {func_name}, 参数: {raw_args}")
+                    log("AI", f"准备执行工具: {func_name}, 参数: {raw_args}")
 
                     try:
                         args = json.loads(raw_args)
@@ -171,7 +172,7 @@ class AIScanner:
                         "content": json.dumps(hosts_data[:15], ensure_ascii=False)
                     })
 
-                    print(f"[AI] 发起结果解读请求...")
+                    log("AI", "发起结果解读请求...")
                     final_response = self.client.chat.completions.create(
                         model=self.model,
                         messages=messages,

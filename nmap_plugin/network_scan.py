@@ -18,6 +18,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db import get_connection
 from database.models import ScannerModel, VulnModel, NmapModel
+from utils.logger import log
 
 import json
 
@@ -53,7 +54,7 @@ def scan_hosts(ip_range, arguments='-sV -O -T4'):
         nm.scan(hosts=ip_range, arguments=arguments)
         return nm
     except Exception as e:
-        print(f"Nmap Scan Error: {str(e)}")
+        log("Nmap", f"Nmap Scan Error: {str(e)}", "ERROR")
         return None
 
 
@@ -273,23 +274,23 @@ def run_vuln_scan(hosts_data):
         for vuln_script in vuln_scripts:
             if should_skip_vuln(mac_address, vuln_script):
                 stats['skipped'] += 1
-                print(f"  [跳过] {ip} ({mac_address}): {vuln_script} (历史确认安全)")
+                log("VulnScan", f"[跳过] {ip} ({mac_address}): {vuln_script} (历史确认安全)", "DEBUG")
                 continue
 
             prev_status = VulnModel.get_vuln_status(mac_address, vuln_script)
             if prev_status == 'vulnerable':
-                print(f"  [警告] {ip} ({mac_address}): {vuln_script} (历史发现漏洞)")
+                log("VulnScan", f"[警告] {ip} ({mac_address}): {vuln_script} (历史发现漏洞)", "WARN")
                 stats['vulnerable'] += 1
                 continue
 
-            print(f"  [扫描] {ip} ({mac_address}): {vuln_script}")
+            log("VulnScan", f"[扫描] {ip} ({mac_address}): {vuln_script}")
             result, details = scan_vuln(nm, ip, vuln_script)
 
             VulnModel.save_vuln_result(mac_address, ip, vuln_script, result, details, os_tags, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
             if result == 'vulnerable':
                 stats['vulnerable'] += 1
-                print(f"    -> 发现漏洞: {details[:100]}...")
+                log("VulnScan", f"发现漏洞: {details[:100]}...", "WARN")
             elif result == 'safe':
                 stats['safe'] += 1
             else:
@@ -347,7 +348,7 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
     
     # 如果既没有传入参数，配置文件里也没有，则直接退出
     if not ip_ranges or not scan_args:
-        print(f"[{datetime.now()}] 错误: 未指定 IP 范围或扫描参数 (配置文件缺失或参数为空)")
+        log("Nmap", "未指定 IP 范围或扫描参数 (配置文件缺失或参数为空)", "ERROR")
         return
 
     # 确保ip_ranges是列表
@@ -364,7 +365,7 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
             scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             scan_id = ScannerModel.create_scan(ip_ranges, scan_args, scan_time)
 
-            print(f"[{datetime.now()}] 开始扫描 #{scan_id}: {ip_ranges}")
+            log("Nmap", f"开始扫描 #{scan_id}: {ip_ranges}")
 
             for ip_range in ip_ranges:
                 nm = scan_hosts(ip_range, scan_args)
@@ -376,12 +377,12 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
                     count = save_to_db(scan_id, hosts_data)
                     total_hosts += len(hosts_data)
 
-            print(f"[{datetime.now()}] 扫描完成，发现 {total_hosts} 台主机")
+            log("Nmap", f"扫描完成，发现 {total_hosts} 台主机")
 
             if all_hosts_data:
-                print(f"[{datetime.now()}] 开始漏洞扫描...")
+                log("VulnScan", "开始漏洞扫描...")
                 vuln_stats = run_vuln_scan(all_hosts_data)
-                print(f"[{datetime.now()}] 漏洞扫描完成: 总计 {vuln_stats['total']}, "
+                log("VulnScan", f"漏洞扫描完成: 总计 {vuln_stats['total']}, "
                       f"跳过 {vuln_stats['skipped']}, "
                       f"发现漏洞 {vuln_stats['vulnerable']}, "
                       f"安全 {vuln_stats['safe']}, "
@@ -389,7 +390,7 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
 
         except Exception as e:
             import traceback
-            print(f"[{datetime.now()}] 扫描引擎发生致命错误: {e}")
+            log("Nmap", f"扫描引擎发生致命错误: {e}", "ERROR")
             traceback.print_exc()
 
         if scan_interval <= 0:
