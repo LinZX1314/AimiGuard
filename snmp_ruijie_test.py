@@ -2,20 +2,18 @@ import time
 from pysnmp.entity.rfc3413.oneliner import cmdgen
 from pysnmp.proto import rfc1902
 
-# ==================== 测试配置区 ====================
-SWITCH_IP = "192.168.0.254"       # 交换机IP
-SNMP_VERSION = 3                # 2 或 3
-COMMUNITY = "private"           # v2c 团体字(需具备写权限)
+# ==================== 锐捷 SNMP v3 测试配置区 ====================
+SWITCH_IP = "192.168.0.254"     # 交换机IP
+SNMP_VERSION = 3                # 锐捷建议使用 v3
 
-# SNMP v3 配置 (如果 VERSION=3)
-V3_USER = "admin"
-V3_AUTH_KEY = "auth123456"
-V3_PRIV_KEY = "priv123456"
+# SNMP v3 参数填写
+V3_USER = "ruijie"              # SNMP口令/用户名 (对应你的 'SNMP口令')
+V3_AUTH_KEY = "auth_pass"       # 认证密码 (Authentication Password)
+V3_PRIV_KEY = "priv_pass"       # 加密密码 (Privacy Password)
 
 # 目标端口索引 (ifIndex)
-# 注意：ifIndex 不是端口号(如G0/1)，需要通过 snmpwalk 预先查得
-TARGET_IF_INDEX = 1             
-# ====================================================
+TARGET_IF_INDEX = 1             # 请根据实际情况修改（可以通过查看接口索引表获得）
+# ===============================================================
 
 class RuijieSNMPTest:
     def __init__(self):

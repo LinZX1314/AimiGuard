@@ -1,8 +1,5 @@
 import os
 import json
-import re
-import requests
-import nmap
 import sys
 from datetime import datetime
 
@@ -19,151 +16,193 @@ except ImportError:
     from network_scan import scan_hosts, parse_scan_results
 
 from database.models import ScannerModel, NmapModel
+from openai import OpenAI
+
 
 class AIScanner:
     def __init__(self, config_path=None):
         if config_path is None:
             config_path = os.path.join(BASE_DIR, "config.json")
-        
+
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
-        
+
         self.ai_config = self.config.get("ai", {})
         self.api_url = self.ai_config.get("api_url")
         self.api_key = self.ai_config.get("api_key")
         self.model = self.ai_config.get("model")
         self.timeout = self.ai_config.get("timeout", 160)
 
-    def _call_llm(self, prompt, system_prompt="你是一个专业的网络安全扫描助手。"):
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.1
-        }
-        try:
-            response = requests.post(self.api_url, headers=headers, json=payload, timeout=self.timeout)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        except Exception as e:
-            return f"Error calling AI: {str(e)}"
+        # 初始化 OpenAI 客户端
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.api_url,
+            timeout=self.timeout
+        )
 
-    def parse_instruction(self, user_input):
-        """
-        使用 LLM 将自然语言转换为 Nmap 参数
-        """
-        prompt = f"""
-请将以下用户的扫描指令转换为 Nmap 扫描参数。
-用户的输入: "{user_input}"
-
-请仅返回如下 JSON 格式 (不要包含 Markdown 代码块标签，也不要包含任何其他文字):
-{{
-    "target": "目标IP或范围",
-    "arguments": "nmap参数",
-    "description": "对本次扫描任务的简短描述"
-}}
-
-默认参数建议使用: "-sV -T4" (如果用户没有特别指定)。
-如果你认为用户的问题不是扫描指令，或者缺少必要的目标 IP 信息，请在 target 中返回 "none"。
-"""
-        response = self._call_llm(prompt)
-        # 清理可能的 markdown 代码块
-        clean_response = re.sub(r'```json\s*|\s*```', '', response).strip()
-        try:
-            return json.loads(clean_response)
-        except:
-            # 尝试回退处理
-            return {"target": "none", "arguments": "", "description": "无法解析指令"}
-
-    def analyze_results(self, user_input, scan_results):
-        """
-        使用 LLM 分析扫描结果并回答用户
-        """
-        # 精简结果以避免超出 token 限制
-        simplified_results = []
-        for host in scan_results[:20]: # 限制前20个主机
-            simplified_results.append({
-                "ip": host.get("ip"),
-                "hostname": host.get("hostname"),
-                "state": host.get("state"),
-                "ports": [s.get("port") for s in host.get("services", [])[:10]]
-            })
-
-        prompt = f"""
-用户的问题是: "{user_input}"
-
-以下是 Nmap 扫描的结果数据:
-{json.dumps(simplified_results, ensure_ascii=False, indent=2)}
-
-请作为安全专家，结合扫描结果回答用户的问题。回答要专业、简洁，重点关注开放的敏感端口和潜在风险。使用中文回答。
-"""
-        return self._call_llm(prompt)
-
-    def chat_and_scan(self, user_input):
-        """
-        核心流程：对话 -> 扫描 -> 解释
-        """
-        print(f"[*] AI 正在解析指令: {user_input}")
-        instruction = self.parse_instruction(user_input)
-        
-        target = instruction.get("target")
-        arguments = instruction.get("arguments", "-sV -T4")
-        description = instruction.get("description", "")
-
-        if not target or target.lower() == "none":
-            return f"抱歉，我无法从您的指令中提取到有效的扫描目标。请确保提供了 IP 地址、域名或网段（例如：'帮我扫一下 192.168.1.1'）。"
-
-        print(f"[*] 解析结果: 描述='{description}', 目标='{target}', 参数='{arguments}'")
-        print(f"[*] 正在开始 Nmap 扫描，请稍候...")
-        
-        try:
-            # 执行扫描
-            nm = scan_hosts(target, arguments)
-            if not nm:
-                return "扫描执行失败，请检查网络连接或 Nmap 路径配置。"
-            
-            hosts_data = parse_scan_results(nm)
-            
-            # 保存到数据库
-            from network_scan import save_to_db
-            scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            scan_id = ScannerModel.create_scan([target], arguments, scan_time)
-            save_to_db(scan_id, hosts_data)
-            
-            print(f"[*] 扫描完成，发现 {len(hosts_data)} 个存活主机。正在请求 AI 进行结果分析...")
-            
-            # 分析结果
-            analysis = self.analyze_results(user_input, hosts_data)
-            
-            return {
-                "scan_id": scan_id,
-                "description": description,
-                "target": target,
-                "arguments": arguments,
-                "hosts_count": len(hosts_data),
-                "analysis": analysis
+    def get_tools_definition(self):
+        """定义 AI 可调用的网络工具"""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "nmap_scan",
+                    "description": "执行 Nmap 扫描以发现主机、端口、服务和操作系统信息。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "要扫描的目标 IP、域名或网段"
+                            },
+                            "arguments": {
+                                "type": "string",
+                                "description": "Nmap 参数，如 -sV -T4 -O"
+                            }
+                        },
+                        "required": ["target"]
+                    }
+                }
             }
-            
-        except Exception as e:
-            return f"执行扫描任务时发生错误: {str(e)}"
+        ]
 
-if __name__ == "__main__":
-    scanner = AIScanner()
-    if len(sys.argv) > 1:
-        query = " ".join(sys.argv[1:])
-        result = scanner.chat_and_scan(query)
-        if isinstance(result, dict):
-            print("\n=== 扫描结果分析 ===")
-            print(result["analysis"])
-        else:
-            print(result)
-    else:
-        print("用法: python ai_scanner.py <你的扫描指令>")
-        print("示例: python ai_scanner.py 扫描 127.0.0.1 看看开了哪些端口")
+    def chat_and_scan_stream(self, user_input, history=None):
+        """
+        使用 OpenAI 库的流式 + 函数调用
+        """
+        messages = [
+            {"role": "system", "content": "你是一个专业的网络安全助手，拥有实时的 Nmap 扫描能力。请直接回复用户，如果需要扫描，请调用工具。"}
+        ]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_input})
+
+        # 第一步：发起对话
+        try:
+            print(f"[AI] 发起请求: {self.model}")
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=self.get_tools_definition(),
+                stream=True
+            )
+
+            # 收集完整回复和工具调用
+            content_buffer = ""
+            tool_calls = []
+
+            for chunk in response:
+                choice = chunk.choices[0]
+                delta = choice.delta
+
+                # 处理文字流
+                if delta.content:
+                    content_buffer += delta.content
+                    yield {"type": "text", "content": delta.content}
+
+                # 处理工具调用
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        # 收集工具调用
+                        tool_calls.append({
+                            "id": tc.id,
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments
+                        })
+                        yield {"type": "status", "content": "AI 正在构造扫描指令..."}
+
+            # 第二步：如果有工具调用，执行工具
+            if tool_calls:
+                tool_call = tool_calls[0]
+                func_name = tool_call["name"]
+
+                if func_name == "nmap_scan":
+                    raw_args = tool_call.get("arguments", "{}")
+                    print(f"[AI] 准备执行工具: {func_name}, 参数: {raw_args}")
+
+                    try:
+                        args = json.loads(raw_args)
+                    except json.JSONDecodeError:
+                        yield {"type": "error", "content": "AI 生成的扫描参数格式错误"}
+                        return
+
+                    target = args.get("target")
+                    nmap_args = args.get("arguments", "-sV -T4")
+
+                    yield {"type": "status", "content": f"正在启动 Nmap 扫描目标: {target}..."}
+
+                    # 执行扫描
+                    nm = scan_hosts(target, nmap_args)
+                    if not nm:
+                        yield {"type": "error", "content": "Nmap 执行失败，请检查系统环境。"}
+                        return
+
+                    hosts_data = parse_scan_results(nm)
+
+                    # 保存入库
+                    scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
+                    save_to_db(scan_id, hosts_data)
+
+                    yield {"type": "scan", "scan_id": scan_id}
+                    yield {"type": "status", "content": "扫描完成，分析中..."}
+
+                    # 第三步：将结果发回 AI 继续对话
+                    messages.append({
+                        "role": "assistant",
+                        "content": content_buffer if content_buffer else "",
+                        "tool_calls": [
+                            {
+                                "id": tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": tc["arguments"]
+                                }
+                            }
+                            for tc in tool_calls
+                        ]
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "name": func_name,
+                        "content": json.dumps(hosts_data[:15], ensure_ascii=False)
+                    })
+
+                    print(f"[AI] 发起结果解读请求...")
+                    final_response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        stream=True
+                    )
+
+                    for chunk in final_response:
+                        if chunk.choices[0].delta.content:
+                            yield {"type": "text", "content": chunk.choices[0].delta.content}
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield {"type": "error", "content": f"AI 引擎内部错误: {str(e)}"}
+
+
+def save_to_db(scan_id, hosts_data):
+    """保存扫描结果到数据库"""
+    for host_info in hosts_data:
+        host = host_info.get("host")
+        if not host:
+            continue
+
+        NmapModel.create_nmap(
+            scan_id=scan_id,
+            host=host,
+            state=host_info.get("state", "unknown"),
+            protocol=host_info.get("protocol", "tcp"),
+            port=host_info.get("port", ""),
+            service=host_info.get("service", ""),
+            version=host_info.get("version", ""),
+            os_match=host_info.get("os_match", "")
+        )
+

@@ -510,35 +510,51 @@ def api_ai_scan():
     if not query:
         return jsonify({"success": False, "message": "请输入指令"}), 400
     
-    # 1. 立即保存初始记录（标记为“正在扫描”）
-    history_id = AiModel.save_chat_history(query, response="[SCANNING]")
-    
-    try:
-        scanner = AIScanner()
-        result = scanner.chat_and_scan(query)
-        
-        # 2. 扫描成功，更新记录
-        scan_id = result.get('scan_id') if isinstance(result, dict) else None
-        AiModel.save_chat_history(query, result, scan_id, history_id=history_id)
-        
-        if isinstance(result, str):
-            # 将错误字符串也保存回数据库作为结果
-            AiModel.save_chat_history(query, result, history_id=history_id)
-            return jsonify({"success": False, "message": result})
-            
-        return jsonify({
-            "success": True, 
-            "data": result,
-            "status": "completed"
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        error_msg = f"执行异常: {str(e)}"
-        # 3. 发生异常，更新记录为错误信息
-        AiModel.save_chat_history(query, error_msg, history_id=history_id)
-        return jsonify({"success": False, "message": str(e)}), 500
+    # 获取最近 10 条历史作为上下文
+    history_data = AiModel.get_chat_history(10)
+    history_context = []
+    for h in reversed(history_data):
+        history_context.append({"role": "user", "content": h['query']})
+        resp_text = h['response']
+        if isinstance(resp_text, dict):
+            resp_text = resp_text.get('analysis') or resp_text.get('content')
+        history_context.append({"role": "assistant", "content": str(resp_text)})
 
+    def generate():
+        scanner = AIScanner()
+        full_content = ""
+        scan_id = None
+        
+        # 1. 保存一个占位，得到 history_id
+        history_id = AiModel.save_chat_history(query, response="[SCANNING]")
+        
+        # 0. 立即发送一个开始信号，避免前端显示“连接中”过久
+        yield f"data: {json.dumps({'type': 'status', 'content': '已连接 AI 助手，正在思考...'}, ensure_ascii=False)}\n\n"
+        
+        try:
+            print(f"[*] 启动 AI 流式生成器，用户查询: {query}")
+            for delta in scanner.chat_and_scan_stream(query, history=history_context):
+                print(f"[DEBUG] 发送数据包: {delta['type']}")
+                if delta['type'] == 'text':
+                    full_content += delta['content']
+                elif delta['type'] == 'scan':
+                    scan_id = delta.get('scan_id')
+                
+                # 发送 SSE 事件
+                yield f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
+            
+            print(f"[*] 流式处理完成，保存数据库. ID: {history_id}, ScanID: {scan_id}")
+            # 2. 结束后，将完整回复存入数据库
+            AiModel.save_chat_history(query, full_content, scan_id, history_id=history_id)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            err = {"type": "error", "content": f"流式处理异常: {str(e)}"}
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+
+    from flask import Response
+    return Response(generate(), mimetype='text/event-stream')
 @app.route('/api/ai/history')
 def api_ai_history():
     """获取 AI 聊天历史记录"""

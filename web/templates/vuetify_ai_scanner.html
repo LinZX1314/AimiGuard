@@ -290,7 +290,7 @@
     <script src="/static/js/vuetify.min.js"></script>
 
     <script>
-        const { createApp, ref, onMounted, nextTick } = Vue;
+        const { createApp, ref, reactive, onMounted, nextTick } = Vue;
         const { createVuetify } = Vuetify;
 
         const vuetify = createVuetify({
@@ -394,19 +394,20 @@
                     const query = inputQuery.value.trim();
                     if (!query || loading.value) return;
 
+                    // 1. 发送用户消息
                     messages.value.push({ role: 'user', content: query });
                     localStorage.setItem('aimiguard_ai_chat', JSON.stringify(messages.value));
-                    localStorage.setItem('aimiguard_ai_busy', 'true'); // 标记为忙碌/扫描中
+                    localStorage.setItem('aimiguard_ai_busy', 'true');
                     
                     inputQuery.value = '';
                     loading.value = true;
-                    loadingStatus.value = '正在解析您的指令...';
+                    loadingStatus.value = '正在连接 AI 助手...';
                     
-                    setTimeout(() => {
-                        if (loading.value) loadingStatus.value = '扫描任务已启动，正在执行扫描...';
-                    }, 2500);
-
                     await scrollToBottom();
+
+                    // 2. 预占位一个机器人消息对象，后续流式更新它
+                    const botMsg = reactive({ role: 'bot', content: '', scan_info: null });
+                    messages.value.push(botMsg);
 
                     try {
                         const response = await fetch('/api/ai/scan', {
@@ -414,25 +415,49 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ query })
                         });
-                        const result = await response.json();
-                        if (result.success) {
-                            messages.value.push({
-                                role: 'bot',
-                                content: result.data.analysis || result.data.message,
-                                scan_info: result.data
-                            });
-                        } else {
-                            messages.value.push({
-                                role: 'bot',
-                                content: '错误：' + result.message
-                            });
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            
+                            buffer += decoder.decode(value, { stream: true });
+                            let lines = buffer.split('\n');
+                            // 最后一项可能是不完整的行，留到下一次处理
+                            buffer = lines.pop(); 
+                            
+                            for (const line of lines) {
+                                let trimmedLine = line.trim();
+                                if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+                                
+                                try {
+                                    const data = JSON.parse(trimmedLine.substring(6));
+                                    
+                                    if (data.type === 'text') {
+                                        botMsg.content += data.content;
+                                    } else if (data.type === 'status') {
+                                        loadingStatus.value = data.content;
+                                    } else if (data.type === 'scan') {
+                                        botMsg.scan_info = data;
+                                    } else if (data.type === 'error') {
+                                        botMsg.content += `\n\n⚠️ **系统错误**: ${data.content}`;
+                                    }
+                                    
+                                    await scrollToBottom();
+                                } catch (e) {
+                                    console.error("解析流碎片失败:", e, trimmedLine);
+                                }
+                            }
                         }
                         fetchHistory();
                     } catch (e) {
-                        messages.value.push({ role: 'bot', content: '通信错误' });
+                        botMsg.content = '❌ 与服务器通信中断，请重试。';
                     } finally {
                         loading.value = false;
-                        localStorage.setItem('aimiguard_ai_busy', 'false'); // 扫描结束，取消忙碌标记
+                        localStorage.setItem('aimiguard_ai_busy', 'false');
                         localStorage.setItem('aimiguard_ai_chat', JSON.stringify(messages.value));
                         await scrollToBottom();
                     }
