@@ -9,6 +9,9 @@ import urllib3
 import requests
 import threading
 
+# 禁用 SSL 证书校验警告（蜜罐内网自签名证书场景）
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 # 添加项目根目录到 sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db import get_connection
@@ -36,6 +39,21 @@ def timestamp_to_time(timestamp):
     if timestamp > 10000000000:
         timestamp = timestamp / 1000
     return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _format_error(host_port, err_msg):
+    """格式化控制台错误输出"""
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return f"""
+╭─────────────────────────────────────────────────────────────────╮
+│ [{ts}] HFish 蜜罐连接异常
+├─────────────────────────────────────────────────────────────────┤
+│ 地址: {host_port}
+│ 错误: {err_msg}
+│
+│ 建议: 请确认 HFish 服务已启动，且地址与 config.json 中配置一致
+╰─────────────────────────────────────────────────────────────────╯
+"""
 
 
 def get_attack_logs(start_time, end_time, host_port, api_key):
@@ -67,34 +85,59 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
 
     headers = {'Content-Type': 'application/json'}
 
-    try:
-        response = requests.post(url, headers=headers, data=payload, verify=False, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
+            response.raise_for_status()
+            data = response.json()
 
-        # 列表处理
-        if "data" in data and "detail_list" in data.get("data", {}):
-            detail_list = data["data"]["detail_list"]
+            # 列表处理
+            if "data" in data and "detail_list" in data.get("data", {}):
+                detail_list = data["data"]["detail_list"]
 
-            for item in detail_list:
-                # 1. 时间戳转换
-                if "create_time" in item:
-                    item["create_time_str"] = timestamp_to_time(item["create_time"])
-                    del item["create_time"]
+                for item in detail_list:
+                    # 1. 时间戳转换
+                    if "create_time" in item:
+                        item["create_time_str"] = timestamp_to_time(item["create_time"])
+                        del item["create_time"]
 
-                # 2. 删除多余字段
-                for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
-                    item.pop(key, None)
+                    # 2. 删除多余字段
+                    for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
+                        item.pop(key, None)
 
-            return detail_list
+                return detail_list
 
-        return []
+            return []
 
-    except Exception as e:
-        print(f"请求错误: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+        except requests.exceptions.ConnectionError as e:
+            raw = str(e)
+            if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
+                err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
+            elif "Name or service not known" in raw or "nodename nor servname" in raw:
+                err_msg = "无法解析主机名，请检查地址配置"
+            else:
+                err_msg = raw[:80] + "..." if len(raw) > 80 else raw
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            print(_format_error(host_port, err_msg))
+            return []
+
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            print(_format_error(host_port, "请求超时，HFish 服务响应过慢"))
+            return []
+
+        except requests.exceptions.HTTPError as e:
+            print(_format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"))
+            return []
+
+        except Exception as e:
+            print(_format_error(host_port, str(e)))
+            return []
 
 
 
