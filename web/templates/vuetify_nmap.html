@@ -98,6 +98,18 @@
                     <v-icon class="mr-2" color="primary">mdi-shield-check-outline</v-icon>
                     AimiGuard 安全监控
                 </v-app-bar-title>
+
+                <!-- 全局扫描状态 -->
+                <v-fade-transition>
+                    <div v-if="globalScanStatus.is_scanning || globalScanStatus.is_vuln_scanning" 
+                        class="mx-4 d-flex align-center bg-rgba(0,0,0,0.2) pa-1 px-3" style="border-radius: 20px; border: 1px solid rgba(0, 229, 255, 0.2);">
+                        <v-progress-circular indeterminate size="16" width="2" color="primary" class="mr-2"></v-progress-circular>
+                        <span class="text-caption font-weight-bold" style="color: #00E5FF; letter-spacing: 1px;">
+                                {{ globalScanStatus.is_vuln_scanning ? '正在进行漏洞扫描...' : '正在进行资产发现扫描...' }}
+                        </span>
+                    </div>
+                </v-fade-transition>
+
                 <v-spacer></v-spacer>
                 <v-btn variant="text" href="/">
                     <v-icon start>mdi-view-dashboard</v-icon>
@@ -310,6 +322,16 @@
                 const currentScanId = ref(null);
                 const onlineCount = ref(0);
                 const scanEnabled = ref(false);
+                const globalScanStatus = ref({ is_scanning: false, is_vuln_scanning: false });
+
+                const fetchGlobalStatus = async () => {
+                    try {
+                        const response = await fetch('/api/scan/status');
+                        globalScanStatus.value = await response.json();
+                    } catch (e) {
+                        console.error("Failed to fetch global status:", e);
+                    }
+                };
 
                 const snackbar = ref(false);
                 const snackbarText = ref('');
@@ -422,6 +444,8 @@
                 onMounted(() => {
                     loadScanStatus();
                     loadScanList();
+                    fetchGlobalStatus();
+                    setInterval(fetchGlobalStatus, 5000);
                 });
 
                 return {
@@ -430,7 +454,7 @@
                     snackbar, snackbarText, snackbarColor,
                     portDialog, currentHost, showPorts,
                     nmapSearch, vendorFilter, vendorOptions, filteredHosts,
-                    loadHosts, startScan
+                    loadHosts, startScan, globalScanStatus
                 };
             }
         });

@@ -142,17 +142,76 @@
             <!-- 导航栏 -->
             <v-app-bar class="custom-app-bar" density="compact" elevation="0">
                 <v-app-bar-title style="color: #00E5FF; font-weight: 600; letter-spacing: 1px;">
-                    <v-icon class="mr-2" color="primary">mdi-robot-outline</v-icon>
-                    AimiGuard AI 扫描助手
+                    <v-icon class="mr-2" color="primary">mdi-shield-check-outline</v-icon>
+                    AimiGuard 安全监控
                 </v-app-bar-title>
+
+                <!-- 全局扫描状态 -->
+                <v-fade-transition>
+                    <div v-if="globalScanStatus.is_scanning || globalScanStatus.is_vuln_scanning" 
+                        class="mx-4 d-flex align-center bg-rgba(0,0,0,0.2) pa-1 px-3" style="border-radius: 20px; border: 1px solid rgba(0, 229, 255, 0.2);">
+                        <v-progress-circular indeterminate size="16" width="2" color="primary" class="mr-2"></v-progress-circular>
+                        <span class="text-caption font-weight-bold" style="color: #00E5FF; letter-spacing: 1px;">
+                                {{ globalScanStatus.is_vuln_scanning ? '正在进行漏洞扫描...' : '正在进行资产发现扫描...' }}
+                        </span>
+                    </div>
+                </v-fade-transition>
+
                 <v-spacer></v-spacer>
-                <v-btn variant="text" href="/">仪表盘</v-btn>
-                <v-btn variant="text" href="/hfish">攻击日志</v-btn>
-                <v-btn variant="text" href="/nmap">网络扫描</v-btn>
-                <v-btn variant="text" href="/vuln">漏洞扫描</v-btn>
-                <v-btn variant="text" color="primary" href="/ai">AI 助手</v-btn>
-                <v-btn variant="text" href="/settings">设置</v-btn>
+                <v-btn variant="text" href="/">
+                    <v-icon start>mdi-view-dashboard</v-icon>
+                    仪表盘
+                </v-btn>
+                <v-btn variant="text" href="/hfish">
+                    <v-icon start>mdi-alert-circle</v-icon>
+                    攻击日志
+                </v-btn>
+                <v-btn variant="text" href="/nmap">
+                    <v-icon start>mdi-radar</v-icon>
+                    网络扫描
+                </v-btn>
+                <v-btn variant="text" href="/vuln">
+                    <v-icon start>mdi-bug-outline</v-icon>
+                    漏洞扫描
+                </v-btn>
+                <v-btn variant="text" color="primary" href="/ai">
+                    <v-icon start>mdi-robot-outline</v-icon>
+                    AI 助手
+                </v-btn>
+                <v-btn variant="text" href="/settings">
+                    <v-icon start>mdi-cog-outline</v-icon>
+                    设置
+                </v-btn>
+                <v-divider vertical class="mx-2"></v-divider>
+                <v-btn icon @click="clearChat" title="开启新对话">
+                    <v-icon>mdi-broom</v-icon>
+                </v-btn>
+                <v-btn icon @click="drawer = !drawer" title="对话历史">
+                    <v-icon>mdi-history</v-icon>
+                </v-btn>
             </v-app-bar>
+
+            <!-- 历史记录侧边栏 -->
+            <v-navigation-drawer v-model="drawer" location="right" width="320" temporary border="none"
+                style="background: rgba(11, 15, 25, 0.95); backdrop-filter: blur(20px);">
+                <v-list subheader class="bg-transparent">
+                    <v-list-subheader class="text-grey-lighten-1">对话历史</v-list-subheader>
+                    <v-divider color="rgba(255,255,255,0.1)"></v-divider>
+                    <v-list-item v-for="item in history" :key="item.id" @click="loadHistory(item)" link class="px-3 py-2">
+                        <div class="d-flex flex-column w-100">
+                            <div class="text-subtitle-2 text-primary text-truncate mb-1">{{ item.query }}</div>
+                            <div class="d-flex align-center justify-space-between">
+                                <v-chip size="x-small" density="compact" color="grey" variant="outlined">{{ item.create_time }}</v-chip>
+                                <v-icon size="x-small" color="grey">mdi-chevron-right</v-icon>
+                            </div>
+                        </div>
+                    </v-list-item>
+                    <v-list-item v-if="history.length === 0" class="text-center text-grey text-caption mt-10">
+                        <v-icon size="large" class="mb-2">mdi-history</v-icon>
+                        <div>暂无历史对话</div>
+                    </v-list-item>
+                </v-list>
+            </v-navigation-drawer>
 
             <!-- 主内容 -->
             <v-main>
@@ -172,8 +231,8 @@
                                     </div>
                                     <div>目标: {{ msg.scan_info.target }}</div>
                                     <div>参数: {{ msg.scan_info.arguments }}</div>
-                                    <div>存活主机: {{ msg.scan_info.hosts_count }} 台</div>
-                                    <div class="mt-1">
+                                    <div v-if="msg.scan_info.hosts_count !== undefined">存活主机: {{ msg.scan_info.hosts_count }} 台</div>
+                                    <div class="mt-1" v-if="msg.scan_info.scan_id">
                                         <v-btn size="x-small" color="primary" variant="outlined" 
                                             :href="'/nmap?scan_id=' + msg.scan_info.scan_id">
                                             查看详细结果
@@ -183,7 +242,11 @@
                             </div>
                             
                             <!-- 输入中提示 -->
-                            <div v-if="loading" class="message message-bot">
+                            <div v-if="loading" class="message message-bot" style="border-left: 3px solid #6366f1;">
+                                <div class="d-flex align-center mb-1">
+                                    <v-progress-circular indeterminate size="18" width="2" color="primary" class="mr-2"></v-progress-circular>
+                                    <span class="text-subtitle-2 font-weight-medium" style="color: #00E5FF;">{{ loadingStatus }}</span>
+                                </div>
                                 <div class="typing-indicator">
                                     <div class="dot"></div>
                                     <div class="dot"></div>
@@ -198,7 +261,7 @@
                                 <v-col>
                                     <v-text-field
                                         v-model="inputQuery"
-                                        placeholder="输入指令，例如：'帮我扫一下 192.168.1.0/24' 或 '探测 10.0.0.5 的 80 端口'..."
+                                        placeholder="输入指令，例如：'帮我扫一下 192.168.1.0/24'..."
                                         variant="solo-filled"
                                         density="comfortable"
                                         hide-details
@@ -211,26 +274,15 @@
                                     <v-btn
                                         color="primary"
                                         icon="mdi-send"
-                                        size="large"
                                         @click="sendMessage"
                                         :loading="loading"
-                                        elevation="4"
                                     ></v-btn>
                                 </v-col>
                             </v-row>
-                            <div class="text-caption text-grey mt-2 pl-1">
-                                <v-icon size="x-small">mdi-lightbulb-on-outline</v-icon>
-                                提示：你可以直接用自然语言描述你的扫描需求，AI 会自动为你生成 Nmap 命令。
-                            </div>
                         </div>
                     </div>
                 </v-container>
             </v-main>
-
-            <!-- 错误提示 -->
-            <v-snackbar v-model="errorShow" color="error" timeout="3000">
-                {{ errorMessage }}
-            </v-snackbar>
         </v-app>
     </div>
 
@@ -248,38 +300,112 @@
         const app = createApp({
             setup() {
                 const messages = ref([
-                    { 
-                        role: 'bot', 
-                        content: '您好！我是 AimiGuard AI 扫描助手。您可以直接告诉我您想进行什么样的网络扫描，我会为您解析并执行。' 
-                    }
+                    { role: 'bot', content: '您好！我是 AimiGuard AI 扫描助手。您可以直接告诉我您的扫描需求。' }
                 ]);
                 const inputQuery = ref('');
                 const loading = ref(false);
+                const loadingStatus = ref('正在思考...');
                 const messageBox = ref(null);
-                const errorShow = ref(false);
-                const errorMessage = ref('');
+                const drawer = ref(false);
+                const history = ref([]);
+                const globalScanStatus = ref({ is_scanning: false, is_vuln_scanning: false });
 
-                const scrollToBottom = async () => {
-                    await nextTick();
-                    if (messageBox.value) {
-                        messageBox.value.scrollTop = messageBox.value.scrollHeight;
+                const fetchGlobalStatus = async () => {
+                    try {
+                        const response = await fetch('/api/scan/status');
+                        globalScanStatus.value = await response.json();
+                    } catch (e) {
+                        console.error("Failed to fetch global status:", e);
                     }
                 };
 
-                const formatMessage = (content) => {
-                    if (!content) return '';
-                    // 简单的 markdown 换行处理
-                    return content.replace(/\n/g, '<br>');
+                const scrollToBottom = async () => {
+                    await nextTick();
+                    if (messageBox.value) messageBox.value.scrollTop = messageBox.value.scrollHeight;
+                };
+
+                const formatMessage = (content) => content ? content.replace(/\n/g, '<br>') : '';
+
+                const fetchHistory = async () => {
+                    try {
+                        const r = await fetch('/api/ai/history');
+                        history.value = await r.json();
+                    } catch (e) {}
+                };
+
+                const parseHistoryItem = (item) => {
+                    const result = [];
+                    // 用户提问
+                    result.push({ role: 'user', content: item.query });
+                    
+                    const resp = item.response;
+                    if (resp === '[SCANNING]') {
+                        result.push({ role: 'bot', content: '📡 该扫描任务正在执行中，请稍后刷新页面查看分析结果...' });
+                    } else if (typeof resp === 'object' && resp !== null) {
+                        const data = resp.data || resp;
+                        result.push({
+                            role: 'bot',
+                            content: data.analysis || "解析完成",
+                            scan_info: data
+                        });
+                    } else {
+                        result.push({ role: 'bot', content: resp });
+                    }
+                    return result;
+                };
+
+                const loadHistory = (item) => {
+                    // 点击侧边栏加载指定的单条记录
+                    messages.value = parseHistoryItem(item);
+                    drawer.value = false;
+                    scrollToBottom();
+                };
+
+                const loadInitialChat = async () => {
+                    const welcomeMsg = [{ role: 'bot', content: '你好！我是 AimiGuard AI 扫描助手，您可以输入指令让我帮您执行网络操作。' }];
+                    
+                    // 仅当后台有正在进行的活跃扫描（isBusy 为 true）时，才恢复主窗口对话流
+                    const isBusy = localStorage.getItem('aimiguard_ai_busy') === 'true';
+                    const cached = localStorage.getItem('aimiguard_ai_chat');
+
+                    if (isBusy && cached) {
+                        try {
+                            messages.value = JSON.parse(cached);
+                            scrollToBottom();
+                        } catch(e) {
+                            messages.value = welcomeMsg;
+                        }
+                    } else {
+                        // 默认为清新开始
+                        messages.value = welcomeMsg;
+                    }
+
+                    // 始终同步侧边栏历史列表
+                    await fetchHistory();
+                };
+
+                const clearChat = () => {
+                    messages.value = [{ role: 'bot', content: '你好！我是 AimiGuard AI 扫描助手，您可以输入指令让我帮您执行网络操作。' }];
+                    localStorage.removeItem('aimiguard_ai_chat');
+                    localStorage.setItem('aimiguard_ai_busy', 'false');
                 };
 
                 const sendMessage = async () => {
                     const query = inputQuery.value.trim();
                     if (!query || loading.value) return;
 
-                    // 添加用户消息
                     messages.value.push({ role: 'user', content: query });
+                    localStorage.setItem('aimiguard_ai_chat', JSON.stringify(messages.value));
+                    localStorage.setItem('aimiguard_ai_busy', 'true'); // 标记为忙碌/扫描中
+                    
                     inputQuery.value = '';
                     loading.value = true;
+                    loadingStatus.value = '正在解析您的指令...';
+                    
+                    setTimeout(() => {
+                        if (loading.value) loadingStatus.value = '扫描任务已启动，正在执行扫描...';
+                    }, 2500);
+
                     await scrollToBottom();
 
                     try {
@@ -288,56 +414,46 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ query })
                         });
-
                         const result = await response.json();
-                        
                         if (result.success) {
-                            // 添加 AI 回复和扫描信息
                             messages.value.push({
                                 role: 'bot',
-                                content: result.data.analysis,
-                                scan_info: {
-                                    scan_id: result.data.scan_id,
-                                    description: result.data.description,
-                                    target: result.data.target,
-                                    arguments: result.data.arguments,
-                                    hosts_count: result.data.hosts_count
-                                }
+                                content: result.data.analysis || result.data.message,
+                                scan_info: result.data
                             });
                         } else {
                             messages.value.push({
                                 role: 'bot',
-                                content: '抱歉，执行过程中出了一些问题：' + result.message
+                                content: '错误：' + result.message
                             });
                         }
+                        fetchHistory();
                     } catch (e) {
-                        messages.value.push({
-                            role: 'bot',
-                            content: '抱歉，与服务器通信时发生错误。'
-                        });
+                        messages.value.push({ role: 'bot', content: '通信错误' });
                     } finally {
                         loading.value = false;
+                        localStorage.setItem('aimiguard_ai_busy', 'false'); // 扫描结束，取消忙碌标记
+                        localStorage.setItem('aimiguard_ai_chat', JSON.stringify(messages.value));
                         await scrollToBottom();
                     }
                 };
 
+                onMounted(() => {
+                    loadInitialChat();
+                    fetchGlobalStatus();
+                    setInterval(fetchGlobalStatus, 5000);
+                });
+
                 return {
-                    messages,
-                    inputQuery,
-                    loading,
-                    messageBox,
-                    errorShow,
-                    errorMessage,
-                    sendMessage,
-                    formatMessage
+                    messages, inputQuery, loading, loadingStatus, messageBox, drawer, history,
+                    sendMessage, formatMessage, loadHistory, globalScanStatus, clearChat
                 };
             }
         });
-
+        
         app.use(vuetify);
         app.mount('#app');
     </script>
     {% endraw %}
 </body>
-
 </html>

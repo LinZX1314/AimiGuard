@@ -61,8 +61,6 @@ def analyze_and_ban(ip, logs, config):
             "last_seen": times[-1] if len(times) > 1 else (times[0] if times else "")
         })
         
-    # 限制发送分类的数量，防止极端情况下超出上下文限制
-    simplified_logs = simplified_logs[-20:]
 
     # 准备提示词 (Prompt)
     prompt = f"""

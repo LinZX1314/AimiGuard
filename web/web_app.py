@@ -341,7 +341,7 @@ def api_hfish_aggregated_logs():
             data["decision"] = None
         result.append(data)
         
-    # Sort by latest time
+    # 按最新时间排序
     result.sort(key=lambda x: x["latest_time"], reverse=True)
     return jsonify(result)
 
@@ -382,7 +382,7 @@ def api_nmap_stats():
 
 @app.route('/api/nmap/assets')
 def api_nmap_assets():
-    """Get nmap assets."""
+    """获取nmap资产"""
     try:
         limit = int(request.args.get('limit', 100))
     except ValueError:
@@ -398,7 +398,7 @@ def api_nmap_assets():
 
 @app.route('/api/nmap/assets/<int:asset_id>/ips')
 def api_nmap_asset_ip_history(asset_id):
-    """Get asset IP history by asset id."""
+    """根据资产ID获取IP历史记录"""
     try:
         limit = int(request.args.get('limit', 200))
     except ValueError:
@@ -408,7 +408,7 @@ def api_nmap_asset_ip_history(asset_id):
 
 @app.route('/api/nmap/assets/mac/<mac_address>/ips')
 def api_nmap_asset_ip_history_by_mac(mac_address):
-    """Get asset IP history by MAC."""
+    """根据MAC地址获取IP历史记录"""
     try:
         limit = int(request.args.get('limit', 200))
     except ValueError:
@@ -448,6 +448,14 @@ def api_vuln_mark_safe():
         return jsonify({"success": True, "message": "已手动标记为安全"})
     return jsonify({"success": False, "message": "未找到对应记录"})
 
+
+@app.route('/api/scan/status')
+def api_scan_status():
+    """获取当前扫描状态"""
+    return jsonify({
+        "is_scanning": is_scanning,
+        "is_vuln_scanning": is_vuln_scanning
+    })
 
 @app.route('/api/nmap/vuln/scan', methods=['POST'])
 def api_vuln_scan():
@@ -502,14 +510,41 @@ def api_ai_scan():
     if not query:
         return jsonify({"success": False, "message": "请输入指令"}), 400
     
+    # 1. 立即保存初始记录（标记为“正在扫描”）
+    history_id = AiModel.save_chat_history(query, response="[SCANNING]")
+    
     try:
         scanner = AIScanner()
         result = scanner.chat_and_scan(query)
+        
+        # 2. 扫描成功，更新记录
+        scan_id = result.get('scan_id') if isinstance(result, dict) else None
+        AiModel.save_chat_history(query, result, scan_id, history_id=history_id)
+        
         if isinstance(result, str):
+            # 将错误字符串也保存回数据库作为结果
+            AiModel.save_chat_history(query, result, history_id=history_id)
             return jsonify({"success": False, "message": result})
-        return jsonify({"success": True, "data": result})
+            
+        return jsonify({
+            "success": True, 
+            "data": result,
+            "status": "completed"
+        })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_msg = f"执行异常: {str(e)}"
+        # 3. 发生异常，更新记录为错误信息
+        AiModel.save_chat_history(query, error_msg, history_id=history_id)
         return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/ai/history')
+def api_ai_history():
+    """获取 AI 聊天历史记录"""
+    limit = request.args.get('limit', 50, type=int)
+    history = AiModel.get_chat_history(limit)
+    return jsonify(history)
 
 
 @app.route('/settings')
@@ -594,6 +629,9 @@ if __name__ == '__main__':
     host = server_config.get('host', '0.0.0.0')
     port = server_config.get('port', 5000)
     debug_mode = server_config.get('debug', False)
+
+    # 初始化数据库
+    init_db()
 
     # 如果关键服务器配置缺失，则报错提示或退出
     if not host or not port:

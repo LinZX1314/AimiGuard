@@ -119,6 +119,16 @@ def init_db():
             scan_time TEXT
         )
     ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT NOT NULL,
+            response TEXT NOT NULL,
+            scan_id INTEGER,
+            create_time TEXT NOT NULL
+        )
+    ''')
     
     conn.commit()
     conn.close()

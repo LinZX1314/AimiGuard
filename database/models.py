@@ -501,3 +501,52 @@ class AiModel:
         rows = cursor.fetchall()
         conn.close()
         return {r["ip"]: dict(r) for r in rows}
+
+    @staticmethod
+    def save_chat_history(query, response="", scan_id=None, history_id=None):
+        from datetime import datetime
+        import json
+        conn = get_connection()
+        cursor = conn.cursor()
+        create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        resp_str = json.dumps(response, ensure_ascii=False) if isinstance(response, dict) else response
+        
+        if history_id:
+            cursor.execute('''
+                UPDATE ai_chat_history 
+                SET response = ?, scan_id = ?
+                WHERE id = ?
+            ''', (resp_str, scan_id, history_id))
+            last_id = history_id
+        else:
+            cursor.execute('''
+                INSERT INTO ai_chat_history (query, response, scan_id, create_time)
+                VALUES (?, ?, ?, ?)
+            ''', (query, resp_str, scan_id, create_time))
+            last_id = cursor.lastrowid
+            
+        conn.commit()
+        conn.close()
+        return last_id
+
+    @staticmethod
+    def get_chat_history(limit=50):
+        import json
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM ai_chat_history ORDER BY create_time DESC LIMIT ?', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        results = []
+        for row in rows:
+            d = dict(row)
+            try:
+                # 尝试解析 JSON
+                if d['response'].startswith('{') or d['response'].startswith('['):
+                    d['response'] = json.loads(d['response'])
+            except:
+                pass
+            results.append(d)
+        return results
