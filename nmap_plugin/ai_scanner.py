@@ -17,7 +17,7 @@ except ImportError:
     sys.path.append(os.path.join(BASE_DIR, "nmap_plugin"))
     from network_scan import scan_hosts, parse_scan_results
 
-from database.models import ScannerModel, NmapModel
+from database.models import ScannerModel
 from utils.logger import log
 
 
@@ -30,12 +30,26 @@ class AIScanner:
             self.config = json.load(f)
 
         self.ai_config = self.config.get("ai", {})
+        self.analysis_map = self.ai_config.get("analysis_map", {})
         self.api_url = self.ai_config.get("api_url")
         self.api_key = self.ai_config.get("api_key")
         self.model = self.ai_config.get("model")
         self.timeout = self.ai_config.get("timeout", 160)
 
         self.client = OpenAI(api_key=self.api_key, base_url=self.api_url)
+
+    def _get_prompt(self, key, default=""):
+        """统一从 ai.analysis_map 获取提示词，并兼容旧字段。"""
+        value = self.analysis_map.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+        # 兼容历史字段：chat_system_prompt 作为通用系统提示词
+        legacy = self.ai_config.get("system_prompt")
+        if isinstance(legacy, str) and legacy.strip():
+            return legacy.strip()
+
+        return default
 
     def get_tools_definition(self):
         return [
@@ -66,10 +80,15 @@ class AIScanner:
         """
         使用 OpenAI 库的流式 + 函数调用
         """
+        system_prompt = self._get_prompt(
+            "nmap_scan_system_prompt",
+            "你是一个专业的网络安全助手，拥有实时的 Nmap 扫描能力。请直接回复用户，如果需要扫描，请调用工具。",
+        )
+
         messages = [
             {
                 "role": "system",
-                "content": "你是一个专业的网络安全助手，拥有实时的 Nmap 扫描能力。请直接回复用户，如果需要扫描，请调用工具。",
+                "content": system_prompt,
             }
         ]
         if history:
@@ -87,7 +106,9 @@ class AIScanner:
             )
 
             content_buffer = ""
-            tool_calls = []
+            # 按 index 累积工具调用分片，key=index, value={id, name, arguments_buf}
+            tool_calls_buf: dict[int, dict] = {}
+            _status_yielded = False
 
             for chunk in response:
                 choice = chunk.choices[0]
@@ -98,15 +119,28 @@ class AIScanner:
                     yield {"type": "text", "content": delta.content}
 
                 if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        tool_calls.append(
-                            {
-                                "id": tc.id,
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            }
-                        )
+                    if not _status_yielded:
                         yield {"type": "status", "content": "AI 正在构造扫描指令..."}
+                        _status_yielded = True
+                    for tc in delta.tool_calls:
+                        idx = tc.index if tc.index is not None else 0
+                        if idx not in tool_calls_buf:
+                            tool_calls_buf[idx] = {
+                                "id": tc.id or "",
+                                "name": tc.function.name or "",
+                                "arguments": "",
+                            }
+                        else:
+                            # 后续分片可能补充 id/name
+                            if tc.id:
+                                tool_calls_buf[idx]["id"] = tc.id
+                            if tc.function.name:
+                                tool_calls_buf[idx]["name"] = tc.function.name
+                        if tc.function.arguments:
+                            tool_calls_buf[idx]["arguments"] += tc.function.arguments
+
+            # 还原有序工具列表
+            tool_calls = [tool_calls_buf[k] for k in sorted(tool_calls_buf.keys())]
 
             if tool_calls:
                 tool_call = tool_calls[0]
@@ -186,19 +220,27 @@ class AIScanner:
 
 
 def save_to_db(scan_id, hosts_data):
-    """保存扫描结果到数据库"""
-    for host_info in hosts_data:
-        host = host_info.get("host")
-        if not host:
-            continue
-
-        NmapModel.create_nmap(
-            scan_id=scan_id,
-            host=host,
-            state=host_info.get("state", "unknown"),
-            protocol=host_info.get("protocol", "tcp"),
-            port=host_info.get("port", ""),
-            service=host_info.get("service", ""),
-            version=host_info.get("version", ""),
-            os_match=host_info.get("os_match", ""),
-        )
+    """保存扫描结果到数据库（与 network_scan.save_to_db 逻辑一致）"""
+    if not hosts_data:
+        return
+    scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    count = 0
+    for host in hosts_data:
+        try:
+            open_ports_str = ','.join(map(str, host.get('open_ports') or []))
+            services_list = []
+            for svc in host.get('services') or []:
+                svc_str = f"{svc.get('port', '')}/{svc.get('service', '')}"
+                if svc.get('product'):
+                    svc_str += f" {svc['product']}"
+                if svc.get('version'):
+                    svc_str += f" {svc['version']}"
+                services_list.append(svc_str)
+            services_str = '; '.join(services_list)
+            ScannerModel.save_host(scan_id, host, scan_time, open_ports_str, services_str)
+            ScannerModel.upsert_asset(scan_id, host, scan_time)
+            count += 1
+        except Exception:
+            pass
+    if count > 0:
+        ScannerModel.increment_hosts_count(scan_id, count)

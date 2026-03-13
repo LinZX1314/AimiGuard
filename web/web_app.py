@@ -4,16 +4,11 @@ import threading
 from datetime import datetime
 from flask import Flask, jsonify, request
 
-# 导入nmap扫描模块 (位于 nmap_plugin 目录)
 import sys
-# nmap_plugin 包含 network_scan.py，确保其目录在 sys.path 中，以便直接导入
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
-import network_scan
 
 # 导入 MVC 模型层
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from database.db import init_db
-from database.models import NmapModel, VulnModel, HFishModel, AiModel
 from utils.logger import log as unified_log
 
 app = Flask(__name__)
@@ -25,7 +20,7 @@ werkzeug_logger.setLevel(logging.WARNING)
 
 # ── 注册 /api/v1/ Blueprint ──────────────────────────────────────────────────
 try:
-    from api_v1 import v1 as _v1_bp, legacy_api as _legacy_api_bp
+    from api_v1 import v1 as _v1_bp, legacy_api as _legacy_api_bp, start_runtime_workers
     app.register_blueprint(_v1_bp)
     app.register_blueprint(_legacy_api_bp)
     # /api/system/ai-config  ← reference frontend tries this prefix too
@@ -99,10 +94,6 @@ def append_log(level, message, category="system"):
 # 扫描锁，防止同时执行多次扫描
 is_scanning = False
 
-# 线程启动标志
-sync_thread_started = False
-scan_thread_started = False
-
 # 启动时初始化数据库（每个进程都需要确保表存在）
 init_db()
 
@@ -124,200 +115,7 @@ def _int_arg(name, default):
         return default
 
 # ==================== 后台任务 ====================
-
-def run_nmap_scan(ip_ranges, arguments):
-    """在后台运行Nmap扫描"""
-    global is_scanning
-
-    # 检查是否正在扫描
-    if is_scanning:
-        return
-
-    is_scanning = True
-    try:
-        # 直接调用main函数，传入0表示只扫描一次
-        network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-    finally:
-        is_scanning = False
-
-is_vuln_scanning = False
-
-def run_vuln_scan_task():
-    """在后台运行漏洞扫描（基于最新的主机数据）"""
-    global is_vuln_scanning
-    if is_vuln_scanning:
-        return
-
-    is_vuln_scanning = True
-    try:
-        hosts_data = NmapModel.get_latest_up_hosts()
-
-        if not hosts_data:
-            _log("warn", f"[{datetime.now()}] 漏洞扫描失败: 没有在线主机", "scan")
-            return
-
-        _log("info", f"[{datetime.now()}] 开始漏洞扫描，共 {len(hosts_data)} 台主机", "scan")
-        stats = network_scan.run_vuln_scan(hosts_data)
-        _log("info", f"[{datetime.now()}] 漏洞扫描完成: {stats}", "scan")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-    finally:
-        is_vuln_scanning = False
-
-def run_hfish_sync():
-    """运行HFish数据同步（单次）"""
-    try:
-        sys.path.insert(0, os.path.join(BASE_DIR, "hfish"))
-        from attack_log_sync import get_attack_logs
-
-        current_config = load_config()
-        host_port = current_config["hfish"]["host_port"]
-        api_key = current_config["hfish"]["api_key"]
-
-        last_timestamp = HFishModel.get_last_timestamp()
-
-        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
-
-        if logs:
-            count = HFishModel.save_logs(logs)
-            _log("info", f"[{datetime.now()}] 同步完成: 获取 {len(logs)} 条, 新增 {count} 条", "sync")
-            
-            # 开始分组和调用 AI 分析
-            if count > 0:
-                try:
-                    from hfish.ai_analyzer import analyze_and_ban
-                    ip_logs = {}
-                    for log in logs:
-                        ip = log.get("attack_ip")
-                        if ip:
-                            if ip not in ip_logs:
-                                ip_logs[ip] = []
-                            ip_logs[ip].append(log)
-                            
-                    for ip, ip_log_list in ip_logs.items():
-                        # 新建线程执行 AI 判定，避免阻塞全局同步日志任务
-                        threading.Thread(target=analyze_and_ban, args=(ip, ip_log_list, current_config), daemon=True).start()
-                except Exception as e:
-                    _log("error", f"[{datetime.now()}] 调度 AI 分析线程时发生异常: {e}", "ai")
-            
-            return {"success": True, "total": len(logs), "new": count}
-        else:
-            _log("info", f"[{datetime.now()}] 同步完成: 无新数据", "sync")
-            return {"success": True, "total": 0, "new": 0}
-
-    except Exception as e:
-        _log("error", f"[{datetime.now()}] 同步错误: {e}", "sync")
-        return {"success": False, "error": str(e)}
-
-def run_hfish_sync_loop():
-    """持续同步HFish数据"""
-    import time as time_module
-
-    while True:
-        try:
-            # 每次循环重新加载配置
-            current_config = load_config()
-
-            # 检查是否启用同步
-            if not current_config.get("hfish", {}).get("sync_enabled", False):
-                time_module.sleep(10)
-                continue
-
-            sync_interval = current_config.get("hfish", {}).get("sync_interval", 60)
-
-            # 执行同步
-            run_hfish_sync()
-
-            # 等待下次同步
-            time_module.sleep(sync_interval)
-
-        except Exception as e:
-            _log("error", f"[{datetime.now()}] 持续同步错误: {e}", "sync")
-            time_module.sleep(10)
-
-def run_nmap_scan_loop():
-    """定时Nmap扫描"""
-    import time as time_module
-
-    # 启动后先等待一次扫描间隔，再开始第一次扫描
-    time_module.sleep(5)  # 等待5秒让服务完全启动
-
-    while True:
-        global is_scanning
-
-        try:
-            # 每次循环重新加载配置
-            current_config = load_config()
-
-            # 检查是否启用扫描
-            if not current_config.get("nmap", {}).get("scan_enabled", False):
-                time_module.sleep(10)
-                continue
-
-            nmap_cfg = current_config.get("nmap", {})
-            scan_interval = nmap_cfg.get("scan_interval")
-            ip_ranges = nmap_cfg.get("ip_ranges")
-            arguments = nmap_cfg.get("arguments")
-
-            # 如果关键配置缺失，则跳过
-            if scan_interval is None or not ip_ranges or not arguments:
-                time_module.sleep(10)
-                continue
-
-            # 检查是否正在扫描
-            if is_scanning:
-                time_module.sleep(10)
-                continue
-
-            # 设置扫描标志
-            is_scanning = True
-
-            # 执行扫描
-            try:
-                network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
-            finally:
-                is_scanning = False
-
-            # 等待下次扫描
-            time_module.sleep(scan_interval)
-
-        except Exception as e:
-            _log("error", f"[{datetime.now()}] Nmap定时扫描错误: {e}", "scan")
-            is_scanning = False
-            time_module.sleep(10)
-
-# 启动持续同步线程
-def start_sync_thread():
-    """启动持续同步和定时扫描线程"""
-    global config, sync_thread_started, scan_thread_started
-
-    # 防止重复启动
-    if sync_thread_started and scan_thread_started:
-        return
-
-    config = load_config()
-
-    # HFish同步线程 - 只有启用时才启动
-    if config.get("hfish", {}).get("sync_enabled", False) and not sync_thread_started:
-        sync_thread = threading.Thread(target=run_hfish_sync_loop, daemon=True)
-        sync_thread.start()
-        sync_thread_started = True
-        _log("info", f"[{datetime.now()}] HFish同步线程已启动", "system")
-    else:
-        _log("info", f"[{datetime.now()}] HFish同步已禁用", "system")
-
-    # Nmap扫描线程 - 只有启用时才启动
-    if config.get("nmap", {}).get("scan_enabled", False) and not scan_thread_started:
-        scan_thread = threading.Thread(target=run_nmap_scan_loop, daemon=True)
-        scan_thread.start()
-        scan_thread_started = True
-        _log("info", f"[{datetime.now()}] Nmap扫描线程已启动", "system")
-    else:
-        _log("info", f"[{datetime.now()}] Nmap扫描已禁用", "system")
+# 任务实现已迁移到 api_v1.py，由 start_runtime_workers 统一托管。
 
 # ==================== API 请求日志 ====================
 
@@ -406,13 +204,13 @@ if __name__ == '__main__':
     if debug_mode:
         if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
             unified_log("WebApp", "主进程启动后台线程 (Debug模式)")
-            start_sync_thread()
+            start_runtime_workers()
             print_startup_banner()
         else:
             unified_log("WebApp", "初始进程，跳过后台线程 (等待主进程重载)", "WARN")
     else:
         unified_log("WebApp", "启动后台线程 (生产模式)")
-        start_sync_thread()
+        start_runtime_workers()
         print_startup_banner()
 
     app.run(host=host, port=port, debug=debug_mode)

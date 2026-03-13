@@ -106,9 +106,9 @@ def analyze_and_ban(ip, logs, config):
             ]
         )
 
-        reply = response.choices[0].message.content
+        reply = response.choices[0].message.content or ""
         _info(f"AI 对 IP [{ip}] 的分析回复:\n{reply}")
-        
+
         decision = _extract_ban_decision(reply)
         if decision != "true":
             _info(f"ℹ️ AI 决断结果: 无需封禁 IP [{ip}]。")

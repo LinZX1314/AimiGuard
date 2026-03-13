@@ -550,9 +550,9 @@ class AiModel:
         for row in rows:
             d = dict(row)
             try:
-                # 尝试解析 JSON
-                if d['response'].startswith('{') or d['response'].startswith('['):
-                    d['response'] = json.loads(d['response'])
+                resp = d.get('response')
+                if resp and isinstance(resp, str) and (resp.startswith('{') or resp.startswith('[')):
+                    d['response'] = json.loads(resp)
             except Exception:
                 pass
             results.append(d)

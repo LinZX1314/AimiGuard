@@ -44,6 +44,16 @@ const aggHeaders = [
 ]
 const headers = computed(() => viewMode.value === 'aggregated' ? aggHeaders : detailHeaders)
 
+function normalizeLogs(payload: unknown): any[] {
+  // 兼容多种返回形态，确保表格 items 始终是数组。
+  if (Array.isArray(payload)) return payload
+  if (payload && typeof payload === 'object') {
+    const obj = payload as { items?: unknown }
+    if (Array.isArray(obj.items)) return obj.items
+  }
+  return []
+}
+
 // ── ECharts options ──────────────────────────────────────────────────────
 const CHART_THEME = {
   textStyle: { color: 'rgba(255,255,255,.7)', fontFamily: 'inherit' },
@@ -109,7 +119,7 @@ const servicePieOption = computed(() => {
 async function loadStats() {
   try {
     const d = await api.get<any>('/api/v1/defense/hfish/stats')
-    const sd = d.data ?? d
+    const sd = d ?? {}
     stats.value.total_attacks = (sd.service_stats ?? []).reduce((a:number,s:any) => a + s.count, 0)
     services.value = (sd.service_stats ?? []).map((s:any) => s.name)
   } catch(e) { console.error(e) }
@@ -123,7 +133,7 @@ async function loadLogs() {
       : '/api/v1/defense/hfish/logs?limit=500'
     if (svcFilter.value) url += `&service_name=${encodeURIComponent(svcFilter.value)}`
     const d = await api.get<any>(url)
-    logs.value = d.data?.items ?? d.data ?? d
+    logs.value = normalizeLogs(d)
   } catch(e) { console.error(e) }
   loading.value = false
 }

@@ -34,6 +34,10 @@ async function request<T>(method: string, url: string, body?: unknown, auth = tr
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined
   })
+  if (url.includes('/api/v1/ai/chat')) {
+    // 仅对 AI 对话请求打印调试信息，方便快速确认链路。
+    console.info(`[ai-chat] ${method} ${BASE + url} -> status=${resp.status}`)
+  }
   if (resp.status === 401) {
     let msg = 'Unauthorized'
     try { const d = await resp.json(); msg = d.message || msg } catch {}

@@ -21,6 +21,7 @@ if WEB_DIR not in sys.path:
 from database.models import (
     NmapModel, VulnModel, HFishModel, AiModel
 )
+from utils.logger import log as unified_log
 
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
@@ -93,6 +94,185 @@ def _normalize_host_fields(host: dict | None) -> dict | None:
                 host[key] = [p.strip() for p in value.split(',') if p.strip()]
     return host
 
+
+def _read_chat_system_prompt(cfg: dict) -> tuple[str, bool]:
+    """从 ai.analysis_map 读取聊天系统提示词，并兼容迁移旧字段。"""
+    ai_cfg = cfg.setdefault('ai', {})
+    analysis_map = ai_cfg.setdefault('analysis_map', {})
+
+    prompt = (analysis_map.get('chat_system_prompt') or '').strip()
+    if prompt:
+        return prompt, False
+
+    legacy_prompt = (ai_cfg.get('system_prompt') or '').strip()
+    if legacy_prompt:
+        analysis_map['chat_system_prompt'] = legacy_prompt
+        ai_cfg.pop('system_prompt', None)
+        return legacy_prompt, True
+
+    return '', False
+
+
+# ─── Runtime workers (migrated from web_app) ─────────────────────────────────
+_is_scanning = False
+_is_vuln_scanning = False
+_sync_thread_started = False
+_scan_thread_started = False
+
+
+def _runtime_log(level: str, msg: str):
+    """统一后台任务日志输出。"""
+    unified_log('Runtime', msg, level.upper())
+
+
+def get_runtime_scan_status() -> dict:
+    return {
+        'is_scanning': _is_scanning,
+        'is_vuln_scanning': _is_vuln_scanning,
+    }
+
+
+def run_nmap_scan(ip_ranges, arguments):
+    """后台执行一次 Nmap 扫描。"""
+    global _is_scanning
+    if _is_scanning:
+        return
+
+    _is_scanning = True
+    try:
+        nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+        if nmap_dir not in sys.path:
+            sys.path.insert(0, nmap_dir)
+        import network_scan
+        network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
+    except Exception as e:
+        _runtime_log('error', f'Nmap 扫描执行失败: {e}')
+    finally:
+        _is_scanning = False
+
+
+def run_vuln_scan_task():
+    """后台执行一次漏洞扫描任务。"""
+    global _is_vuln_scanning
+    if _is_vuln_scanning:
+        return
+
+    _is_vuln_scanning = True
+    try:
+        hosts_data = NmapModel.get_latest_up_hosts()
+        if not hosts_data:
+            _runtime_log('warn', '漏洞扫描跳过: 没有在线主机')
+            return
+
+        nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+        if nmap_dir not in sys.path:
+            sys.path.insert(0, nmap_dir)
+        import network_scan
+        stats = network_scan.run_vuln_scan(hosts_data)
+        _runtime_log('info', f'漏洞扫描完成: {stats}')
+    except Exception as e:
+        _runtime_log('error', f'漏洞扫描执行失败: {e}')
+    finally:
+        _is_vuln_scanning = False
+
+
+def run_hfish_sync():
+    """执行一次 HFish 同步并触发 AI 分析。"""
+    try:
+        hfish_dir = os.path.join(BASE_DIR, 'hfish')
+        if hfish_dir not in sys.path:
+            sys.path.insert(0, hfish_dir)
+        from attack_log_sync import get_attack_logs
+        from hfish.ai_analyzer import analyze_and_ban
+
+        cfg = _load_cfg()
+        host_port = cfg.get('hfish', {}).get('host_port', '')
+        api_key = cfg.get('hfish', {}).get('api_key', '')
+        last_timestamp = HFishModel.get_last_timestamp()
+        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
+
+        if not logs:
+            _runtime_log('info', 'HFish 同步完成: 无新数据')
+            return {'success': True, 'total': 0, 'new': 0}
+
+        count = HFishModel.save_logs(logs)
+        _runtime_log('info', f'HFish 同步完成: 获取 {len(logs)} 条, 新增 {count} 条')
+
+        if count > 0:
+            ip_logs: dict[str, list] = {}
+            for log in logs:
+                ip = log.get('attack_ip')
+                if not ip:
+                    continue
+                ip_logs.setdefault(ip, []).append(log)
+
+            for ip, ip_log_list in ip_logs.items():
+                _run_daemon(lambda ip=ip, logs=ip_log_list, cfg=cfg: analyze_and_ban(ip, logs, cfg))
+
+        return {'success': True, 'total': len(logs), 'new': count}
+    except Exception as e:
+        _runtime_log('error', f'HFish 同步失败: {e}')
+        return {'success': False, 'error': str(e)}
+
+
+def run_hfish_sync_loop():
+    """持续执行 HFish 同步。"""
+    while True:
+        try:
+            cfg = _load_cfg()
+            if not cfg.get('hfish', {}).get('sync_enabled', False):
+                time.sleep(10)
+                continue
+            run_hfish_sync()
+            time.sleep(int(cfg.get('hfish', {}).get('sync_interval', 60)))
+        except Exception as e:
+            _runtime_log('error', f'HFish 持续同步异常: {e}')
+            time.sleep(10)
+
+
+def run_nmap_scan_loop():
+    """持续执行 Nmap 定时扫描。"""
+    time.sleep(5)
+    while True:
+        try:
+            cfg = _load_cfg()
+            ncfg = cfg.get('nmap', {})
+            if not ncfg.get('scan_enabled', False):
+                time.sleep(10)
+                continue
+
+            scan_interval = ncfg.get('scan_interval')
+            ip_ranges = ncfg.get('ip_ranges')
+            arguments = ncfg.get('arguments')
+            if scan_interval is None or not ip_ranges or not arguments:
+                time.sleep(10)
+                continue
+            if _is_scanning:
+                time.sleep(10)
+                continue
+
+            run_nmap_scan(ip_ranges, arguments)
+            time.sleep(int(scan_interval))
+        except Exception as e:
+            _runtime_log('error', f'Nmap 定时扫描异常: {e}')
+            time.sleep(10)
+
+
+def start_runtime_workers():
+    """按配置启动后台同步与扫描线程（幂等）。"""
+    global _sync_thread_started, _scan_thread_started
+    cfg = _load_cfg()
+
+    if cfg.get('hfish', {}).get('sync_enabled', False) and not _sync_thread_started:
+        _run_daemon(run_hfish_sync_loop)
+        _sync_thread_started = True
+        _runtime_log('info', 'HFish 同步线程已启动')
+
+    if cfg.get('nmap', {}).get('scan_enabled', False) and not _scan_thread_started:
+        _run_daemon(run_nmap_scan_loop)
+        _scan_thread_started = True
+        _runtime_log('info', 'Nmap 扫描线程已启动')
+
 def _make_token(payload: dict) -> str:
     hdr = _b64e(json.dumps({'typ': 'JWT', 'alg': 'HS256'}).encode())
     pld = _b64e(json.dumps({**payload, 'exp': int(time.time()) + _JWT_TTL}).encode())
@@ -121,8 +301,17 @@ def require_auth(f):
     def wrapped(*args, **kwargs):
         header = request.headers.get('Authorization', '')
         token  = header.removeprefix('Bearer ').strip()
+        if request.path == '/api/v1/ai/chat':
+            auth_header = request.headers.get('Authorization', '')
+            unified_log(
+                'AIChat',
+                f'入口命中 path={request.path} from={request.remote_addr} pid={os.getpid()} auth={"yes" if auth_header else "no"}',
+                'INFO'
+            )
         payload = _decode_token(token)
         if payload is None:
+            if request.path == '/api/v1/ai/chat':
+                unified_log('AIChat', '鉴权失败: token 缺失、格式错误或已过期', 'WARN')
             return jsonify({'code': 401, 'message': '未授权'}), 401
         g.user = payload
         return f(*args, **kwargs)
@@ -276,13 +465,10 @@ def defense_hfish_stats():
 @require_auth
 def defense_hfish_sync():
     # 手动触发一次同步，不等待执行结束（异步 best-effort）。
+    # 复用 run_hfish_sync 逻辑（HFishSyncer 已废弃，与 run_hfish_sync_loop 保持一致）
     def _do():
         try:
-            cfg = _load_cfg()
-            sys.path.insert(0, os.path.join(BASE_DIR, 'hfish'))
-            from hfish.attack_log_sync import HFishSyncer
-            syncer = HFishSyncer(cfg)
-            syncer.run_once()
+            run_hfish_sync()
         except Exception:
             pass
     _run_daemon(_do)
@@ -494,26 +680,150 @@ def _next_session_id():
         _session_counter += 1
         return _session_counter
 
-def _call_ai(messages: list, cfg: dict) -> str:
-    """调用 OpenAI-compatible 接口，返回文本回复。"""
+def _ai_diag(cfg: dict, message: str, level: str = 'INFO'):
+    """统一 AI 诊断日志输出，便于定位配置与网关问题。"""
+    try:
+        enabled = cfg.get('logging', {}).get('ai_log', True)
+    except Exception:
+        enabled = True
+    if enabled:
+        unified_log('AIChat', message, level)
+
+def _call_ai(messages: list, cfg: dict, tools: list | None = None) -> dict:
+    """调用 OpenAI-compatible 接口，返回 {content, tool_calls}。"""
+    import urllib.error
     import urllib.request
+    from json import JSONDecodeError
+
+    def _candidate_chat_urls(raw_url: str) -> list[str]:
+        """生成候选地址并按顺序尝试，兼容不同网关的 URL 约定。"""
+        u = (raw_url or '').strip().rstrip('/')
+        if not u:
+            return []
+        low = u.lower()
+        cands: list[str] = []
+
+        if low.endswith('/chat/completions'):
+            cands.append(u)
+        elif low.endswith('/v1'):
+            cands.append(f'{u}/chat/completions')
+            cands.append(f'{u[:-3]}/chat/completions')
+        else:
+            cands.append(f'{u}/v1/chat/completions')
+            cands.append(f'{u}/chat/completions')
+
+        # 去重且保持顺序。
+        seen = set()
+        ordered = []
+        for item in cands:
+            if item and item not in seen:
+                ordered.append(item)
+                seen.add(item)
+        return ordered
+
     ai_cfg  = cfg.get('ai', {})
     api_url = ai_cfg.get('api_url', '')
     api_key = ai_cfg.get('api_key', '')
     model   = ai_cfg.get('model', 'gpt-3.5-turbo')
     timeout = int(ai_cfg.get('timeout', 60))
-    if not api_url:
-        return '⚠️ AI 接口未配置，请在设置中填写 api_url。'
-    body = json.dumps({'model': model, 'messages': messages, 'stream': False}).encode()
-    req  = urllib.request.Request(api_url, data=body,
-                                  headers={'Content-Type': 'application/json',
-                                           'Authorization': f'Bearer {api_key}'})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read())
-            return data['choices'][0]['message']['content']
-    except Exception as e:
-        return f'⚠️ AI 调用失败: {e}'
+    endpoints = _candidate_chat_urls(api_url)
+    if not endpoints:
+        _ai_diag(cfg, f'AI 接口未配置，config={CONFIG_FILE}', 'WARN')
+        return {'content': '⚠️ AI 接口未配置，请在设置中填写 api_url。', 'tool_calls': []}
+
+    _ai_diag(cfg, f'配置来源: config={CONFIG_FILE} | module={__file__} | python={sys.executable}')
+    _ai_diag(cfg, f'AI 请求候选 endpoint: {" | ".join(endpoints)}')
+
+    req_body: dict = {'model': model, 'messages': messages, 'stream': False}
+    if tools:
+        req_body['tools'] = tools
+        req_body['tool_choice'] = 'auto'
+    body = json.dumps(req_body).encode()
+    headers = {'Content-Type': 'application/json'}
+    if api_key:
+        headers['Authorization'] = f'Bearer {api_key}'
+
+    last_http_error: str | None = None
+    last_parse_error: str | None = None
+    for endpoint in endpoints:
+        req = urllib.request.Request(endpoint, data=body, headers=headers)
+        _ai_diag(cfg, f'尝试请求 endpoint={endpoint}')
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status_code = getattr(resp, 'status', None) or getattr(resp, 'code', None)
+                raw_bytes = resp.read()
+                raw_text = raw_bytes.decode('utf-8', errors='ignore').strip()
+                content_type = ''
+                try:
+                    content_type = resp.headers.get('Content-Type', '') or ''
+                except Exception:
+                    content_type = ''
+
+                _ai_diag(cfg, f'AI 响应成功 endpoint={endpoint} status={status_code} content-type={content_type}')
+
+                # 某些网关会在错误路径返回 HTML 200，这里做显式拦截并回退下一个候选地址。
+                if not raw_text:
+                    last_parse_error = f'空响应 @ {endpoint}'
+                    _ai_diag(cfg, f'AI 响应为空 endpoint={endpoint}', 'WARN')
+                    continue
+
+                try:
+                    data = json.loads(raw_text)
+                except JSONDecodeError:
+                    snippet = raw_text[:200].replace('\n', ' ')
+                    last_parse_error = f'非 JSON 响应 @ {endpoint}: {snippet}'
+                    _ai_diag(cfg, f'AI 非 JSON 响应 endpoint={endpoint} snippet={snippet}', 'WARN')
+                    continue
+
+                try:
+                    msg = data['choices'][0]['message']
+                    content = msg.get('content') or ''
+                    raw_tcs = msg.get('tool_calls') or []
+                    parsed_tcs = []
+                    for tc in raw_tcs:
+                        try:
+                            args = json.loads(tc['function']['arguments'])
+                        except Exception:
+                            args = {}
+                        parsed_tcs.append({
+                            'id': tc.get('id', ''),
+                            'name': tc['function']['name'],
+                            'arguments': args,
+                        })
+                    return {'content': content, 'tool_calls': parsed_tcs}
+                except Exception:
+                    preview = json.dumps(data, ensure_ascii=False)[:300]
+                    last_parse_error = f'JSON 结构非 OpenAI 格式 @ {endpoint}: {preview}'
+                    _ai_diag(cfg, f'AI JSON 结构异常 endpoint={endpoint} body={preview}', 'WARN')
+                    continue
+        except urllib.error.HTTPError as e:
+            detail = ''
+            try:
+                detail = e.read().decode('utf-8', errors='ignore')
+            except Exception:
+                pass
+
+            _ai_diag(cfg, f'AI 响应失败 endpoint={endpoint} status={e.code} reason={e.reason}', 'WARN')
+
+            if e.code == 404:
+                last_http_error = f'HTTP 404 Not Found @ {endpoint}'
+                continue
+
+            if detail:
+                return {'content': f'⚠️ AI 调用失败: HTTP {e.code} {e.reason} - {detail[:300]}', 'tool_calls': []}
+            return {'content': f'⚠️ AI 调用失败: HTTP {e.code} {e.reason}', 'tool_calls': []}
+        except Exception as e:
+            _ai_diag(cfg, f'AI 请求异常 endpoint={endpoint} error={e}', 'ERROR')
+            return {'content': f'⚠️ AI 调用失败: {e}', 'tool_calls': []}
+
+    if last_http_error:
+        _ai_diag(cfg, f'AI 请求最终失败: {last_http_error}', 'ERROR')
+        return {'content': f'⚠️ AI 调用失败: {last_http_error}（已尝试: {", ".join(endpoints)}）', 'tool_calls': []}
+    if last_parse_error:
+        _ai_diag(cfg, f'AI 请求最终失败: {last_parse_error}', 'ERROR')
+        return {'content': f'⚠️ AI 调用失败: {last_parse_error}', 'tool_calls': []}
+    _ai_diag(cfg, 'AI 请求最终失败: 未知错误', 'ERROR')
+    return {'content': '⚠️ AI 调用失败: 未知错误。', 'tool_calls': []}
 
 @v1.route('/ai/sessions', methods=['GET'])
 @require_auth
@@ -530,9 +840,21 @@ def ai_sessions():
 @v1.route('/ai/sessions/<int:session_id>/messages', methods=['GET'])
 @require_auth
 def ai_session_messages(session_id: int):
+    """返回会话消息列表，仅包含前端可展示的 user/assistant 消息。"""
     msgs = _chat_sessions.get(session_id, [])
-    return ok([{'role': m['role'], 'content': m['content'],
-                'created_at': m.get('ts', _now_iso())} for m in msgs])
+    out = []
+    for m in msgs:
+        role = m.get('role')
+        if role == 'system':
+            continue
+        if role == 'tool':
+            continue
+        content = m.get('content') or ''
+        if role == 'assistant' and not content and m.get('tool_calls'):
+            content = '🔧 已执行工具调用'
+        if role in ('user', 'assistant'):
+            out.append({'role': role, 'content': content, 'created_at': m.get('ts', _now_iso())})
+    return ok(out)
 
 @v1.route('/ai/sessions/<int:session_id>', methods=['DELETE'])
 @require_auth
@@ -544,6 +866,11 @@ def ai_session_delete(session_id: int):
 @require_auth
 def ai_chat():
     # 当前实现将上下文保存在进程内存，适合单实例轻量部署。
+    unified_log(
+        'AIChat',
+        f'收到 /api/v1/ai/chat 请求 from={request.remote_addr} pid={os.getpid()} config={CONFIG_FILE}',
+        'INFO'
+    )
     body       = _body()
     message    = body.get('message', '').strip()
     session_id = body.get('session_id')
@@ -551,23 +878,166 @@ def ai_chat():
         return err('消息不能为空')
 
     cfg_load = _load_cfg()
-    sys_prompt = cfg_load.get('ai', {}).get('system_prompt',
-                     '你是玄枢·AI攻防指挥官，专注于网络安全事件分析、漏洞评估和防御建议。用中文回答，简明扼要。')
+    sys_prompt, migrated = _read_chat_system_prompt(cfg_load)
+    if migrated:
+        _save_cfg(cfg_load)
 
     if session_id and session_id in _chat_sessions:
         sid     = session_id
         history = _chat_sessions[sid]
     else:
         sid     = _next_session_id()
-        history = [{'role': 'system', 'content': sys_prompt}]
+        history = [{'role': 'system', 'content': sys_prompt}] if sys_prompt else []
         _chat_sessions[sid] = history
 
     ts = _now_iso()
     history.append({'role': 'user', 'content': message, 'ts': ts})
 
     cfg_now = _load_cfg()
-    reply = _call_ai([{'role': m['role'], 'content': m['content']} for m in history], cfg_now)
-    history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
+
+    # ── 工具定义（可扩展：新增工具只需在此列表追加 schema 并在 _TOOL_HANDLERS 注册）
+    _TOOL_DEFS = [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'nmap_scan',
+                'description': '执行 Nmap 网络扫描，返回主机与端口信息',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'target': {
+                            'type': 'string',
+                            'description': '目标 IP、域名或网段，如 192.168.1.0/24'
+                        },
+                        'arguments': {
+                            'type': 'string',
+                            'description': 'nmap 参数，如 -sV -T4，默认 -sV -O -T4'
+                        }
+                    },
+                    'required': ['target']
+                }
+            }
+        }
+    ]
+
+    def _exec_nmap_scan(args: dict) -> str:
+        """执行真实 nmap 扫描并写库，返回 JSON 字符串。"""
+        try:
+            from nmap_plugin.network_scan import scan_hosts, parse_scan_results
+            from database.models import ScannerModel
+
+            target = (args.get('target') or '').strip()
+            raw_args = args.get('arguments', '-sV -O -T4')
+            nmap_args = str(raw_args) if raw_args else '-sV -O -T4'
+            if not target:
+                return json.dumps({'error': '缺少 target 参数'}, ensure_ascii=False)
+            nm = scan_hosts(target, nmap_args)
+            if not nm:
+                return json.dumps({'error': 'Nmap 执行失败'}, ensure_ascii=False)
+            hosts = parse_scan_results(nm)
+            # 写库（与 network_scan.save_to_db 逻辑一致）
+            try:
+                scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
+                count = 0
+                for host in hosts:
+                    try:
+                        open_ports_str = ','.join(map(str, host.get('open_ports', []) or []))
+                        services_list = []
+                        for svc in host.get('services', []) or []:
+                            svc_str = f"{svc.get('port', '')}/{svc.get('service', '')}"
+                            if svc.get('product'):
+                                svc_str += f" {svc['product']}"
+                            if svc.get('version'):
+                                svc_str += f" {svc['version']}"
+                            services_list.append(svc_str)
+                        services_str = '; '.join(services_list)
+                        ScannerModel.save_host(scan_id, host, scan_time, open_ports_str, services_str)
+                        ScannerModel.upsert_asset(scan_id, host, scan_time)
+                        count += 1
+                    except Exception:
+                        pass
+                if count > 0:
+                    ScannerModel.increment_hosts_count(scan_id, count)
+            except Exception as db_e:
+                unified_log('AIChat', f'nmap 结果写库失败: {db_e}', 'WARN')
+            return json.dumps(hosts[:15], ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({'error': str(e)}, ensure_ascii=False)
+
+    _TOOL_HANDLERS = {
+        'nmap_scan': _exec_nmap_scan,
+    }
+
+    # ── 第一次调用，携带工具定义
+    msgs_for_ai = [{'role': m['role'], 'content': m.get('content') or ''}
+                   for m in history
+                   if m['role'] in ('system', 'user', 'assistant')]
+    result = _call_ai(msgs_for_ai, cfg_now, tools=_TOOL_DEFS)
+    content = result.get('content', '')
+    tool_calls = result.get('tool_calls', [])
+
+    if content.startswith('⚠️'):
+        unified_log('AIChat', f'AI 回复异常: {content[:240]}', 'WARN')
+
+    if tool_calls:
+        # 将带 tool_calls 的 assistant 消息追加到历史
+        history.append({
+            'role': 'assistant',
+            'content': content,
+            'tool_calls': tool_calls,
+            'ts': _now_iso()
+        })
+        # 逐个执行工具调用
+        for tc in tool_calls:
+            func_name = tc.get('name', '')
+            handler = _TOOL_HANDLERS.get(func_name)
+            if handler:
+                tool_result = handler(tc.get('arguments', {}))
+            else:
+                tool_result = json.dumps({'error': f'未知工具: {func_name}'}, ensure_ascii=False)
+            history.append({
+                'role': 'tool',
+                'tool_call_id': tc.get('id', ''),
+                'name': func_name,
+                'content': tool_result,
+                'ts': _now_iso()
+            })
+        # 第二次调用，获取最终自然语言回答
+        msgs_for_ai2 = []
+        for m in history:
+            if m['role'] == 'tool':
+                msgs_for_ai2.append({
+                    'role': 'tool',
+                    'tool_call_id': m.get('tool_call_id', ''),
+                    'name': m.get('name', ''),
+                    'content': m.get('content', '')
+                })
+            elif m['role'] == 'assistant' and m.get('tool_calls'):
+                msgs_for_ai2.append({
+                    'role': 'assistant',
+                    'content': m.get('content') or '',
+                    'tool_calls': [
+                        {
+                            'id': t['id'],
+                            'type': 'function',
+                            'function': {
+                                'name': t['name'],
+                                'arguments': json.dumps(t['arguments'], ensure_ascii=False)
+                            }
+                        } for t in m['tool_calls']
+                    ]
+                })
+            else:
+                msgs_for_ai2.append({'role': m['role'], 'content': m.get('content') or ''})
+        result2 = _call_ai(msgs_for_ai2, cfg_now)
+        reply = result2.get('content', '')
+        if reply.startswith('⚠️'):
+            unified_log('AIChat', f'AI 二次回复异常: {reply[:240]}', 'WARN')
+        history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
+    else:
+        reply = content
+        history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
 
     # 额外做一份数据库持久化，失败不影响主流程。
     try:
@@ -627,8 +1097,10 @@ def system_ai_config_save():
 @require_auth
 def system_prompt_get():
     cfg = _load_cfg()
-    return ok({'prompt': cfg.get('ai', {}).get('system_prompt',
-        '你是玄枢·AI攻防指挥官，专注于网络安全事件分析、漏洞评估和防御建议。用中文回答，简明扼要。')})
+    prompt, migrated = _read_chat_system_prompt(cfg)
+    if migrated:
+        _save_cfg(cfg)
+    return ok({'prompt': prompt})
 
 @v1.route('/system/ai-prompt', methods=['POST'])
 @require_auth
@@ -638,7 +1110,9 @@ def system_prompt_save():
     if not prompt:
         return err('提示词不能为空')
     cfg = _load_cfg()
-    cfg.setdefault('ai', {})['system_prompt'] = prompt
+    ai_cfg = cfg.setdefault('ai', {})
+    ai_cfg.setdefault('analysis_map', {})['chat_system_prompt'] = prompt
+    ai_cfg.pop('system_prompt', None)
     _save_cfg(cfg)
     return ok()
 
@@ -854,8 +1328,6 @@ def v1_nmap_host(ip: str):
 
 # ─── Legacy /api compatibility layer ─────────────────────────────────────────
 # Keep old endpoints alive while moving implementation ownership into api_v1.
-_legacy_is_scanning = False
-_legacy_is_vuln_scanning = False
 
 
 def _legacy_module_status(cfg: dict) -> dict:
@@ -886,10 +1358,7 @@ def legacy_status():
 @legacy_api.route('/scan/status', methods=['GET'])
 @require_auth
 def legacy_scan_status():
-    return jsonify({
-        'is_scanning': _legacy_is_scanning,
-        'is_vuln_scanning': _legacy_is_vuln_scanning,
-    })
+    return jsonify(get_runtime_scan_status())
 
 
 @legacy_api.route('/settings', methods=['GET'])
@@ -984,35 +1453,17 @@ def legacy_nmap_mark_safe():
 @legacy_api.route('/nmap/vuln/scan', methods=['POST'])
 @require_auth
 def legacy_nmap_vuln_scan():
-    global _legacy_is_vuln_scanning
-    if _legacy_is_vuln_scanning:
+    if _is_vuln_scanning:
         return jsonify({'success': False, 'message': '漏洞扫描正在进行中，请稍后再试'})
 
-    def _do():
-        global _legacy_is_vuln_scanning
-        _legacy_is_vuln_scanning = True
-        try:
-            nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
-            if nmap_dir not in sys.path:
-                sys.path.insert(0, nmap_dir)
-            import network_scan
-            hosts_data = NmapModel.get_latest_up_hosts()
-            if hosts_data:
-                network_scan.run_vuln_scan(hosts_data)
-        except Exception:
-            pass
-        finally:
-            _legacy_is_vuln_scanning = False
-
-    _run_daemon(_do)
+    _run_daemon(run_vuln_scan_task)
     return jsonify({'success': True, 'message': '漏洞扫描任务已启动'})
 
 
 @legacy_api.route('/nmap/scan', methods=['POST'])
 @require_auth
 def legacy_nmap_scan():
-    global _legacy_is_scanning
-    if _legacy_is_scanning:
+    if _is_scanning:
         return jsonify({'success': False, 'message': '扫描正在进行中，请稍后再试'})
 
     body = _body()
@@ -1022,19 +1473,5 @@ def legacy_nmap_scan():
     if isinstance(ip_ranges, str):
         ip_ranges = [ip_ranges]
 
-    def _do():
-        global _legacy_is_scanning
-        _legacy_is_scanning = True
-        try:
-            nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
-            if nmap_dir not in sys.path:
-                sys.path.insert(0, nmap_dir)
-            import network_scan
-            network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
-        except Exception:
-            pass
-        finally:
-            _legacy_is_scanning = False
-
-    _run_daemon(_do)
+    _run_daemon(lambda: run_nmap_scan(ip_ranges, arguments))
     return jsonify({'success': True, 'message': '扫描任务已启动', 'ip_ranges': ip_ranges})
