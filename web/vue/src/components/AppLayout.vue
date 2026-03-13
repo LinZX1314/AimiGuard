@@ -7,7 +7,6 @@ const router = useRouter()
 const route  = useRoute()
 const auth   = useAuthStore()
 const drawer = ref(true)
-const rail   = ref(false)
 const logoUrl = new URL('@/assets/aimiguard-logo.png', import.meta.url).href
 
 const navItems = [
@@ -16,10 +15,7 @@ const navItems = [
   { title: 'Nmap 扫描',  icon: 'mdi-radar',                 to: '/nmap' },
   { title: '漏洞管理',   icon: 'mdi-bug-outline',           to: '/vuln' },
   { title: '防御事件',   icon: 'mdi-shield-alert-outline',  to: '/defense' },
-  { title: '蜜罐管理',   icon: 'mdi-pot-mix-outline',       to: '/honeypots' },
   { title: 'AI 助手',    icon: 'mdi-robot-outline',         to: '/ai' },
-  { title: '审计日志',   icon: 'mdi-clipboard-text-clock',  to: '/audit' },
-  { title: '威胁情报',   icon: 'mdi-earth',                 to: '/threat' },
   { title: '系统设置',   icon: 'mdi-cog-outline',           to: '/settings' },
 ]
 
@@ -39,25 +35,24 @@ function handleLogout() {
     <!-- ─── Navigation Drawer ─── -->
     <v-navigation-drawer
       v-model="drawer"
-      :rail="rail"
       permanent
       width="180"
       color="surface"
       style="border-right: 1px solid rgba(255,255,255,0.06);"
     >
       <!-- Logo 固定高度 64px 与顶部 App bar 完美对齐 -->
-      <div 
+      <div
         style="height: 64px; width: 100%; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; overflow: hidden; white-space: nowrap;"
       >
-        <div :style="{ width: rail ? '56px' : 'auto', display: 'flex', justifyContent: 'center', transition: 'width 0.2s ease' }">
-          <v-avatar 
-            :image="logoUrl" 
-            :size="30" 
-            :class="rail ? '' : 'ml-3 mr-2'"
+        <div style="display: flex; align-items: center;">
+          <v-avatar
+            :image="logoUrl"
+            size="30"
+            class="ml-3 mr-2"
             style="min-width: 30px; filter: drop-shadow(0 0 4px rgba(0,229,255,0.3));"
           ></v-avatar>
         </div>
-        <div style="display: flex; flex-direction: column; margin-inline-start: 5px;  justify-content: center; transition: opacity 0.2s ease, max-width 0.2s ease; overflow: hidden;" :style="{ opacity: rail ? 0 : 1, maxWidth: rail ? '0px' : '130px', pointerEvents: rail ? 'none' : 'auto' }">
+        <div style="display: flex; flex-direction: column; margin-inline-start: 5px; justify-content: center;">
           <div class="font-weight-black text-body-1" style="background: linear-gradient(120deg, #00E5FF 0%, #3B82F6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 1px; line-height: 1.2;">
             玄枢指挥官
           </div>
@@ -82,17 +77,6 @@ function handleLogout() {
       </v-list>
 
       <template #append>
-        <v-divider />
-        <div style="height: 48px; display: flex; justify-content: center; align-items: center;">
-          <v-btn
-            :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-            variant="text"
-            density="comfortable"
-            color="grey-lighten-1"
-            class="text-none"
-            @click="rail = !rail"
-          />
-        </div>
       </template>
     </v-navigation-drawer>
 
@@ -162,39 +146,5 @@ function handleLogout() {
 <style scoped>
 :deep(.v-list-item--active) {
   background: rgba(0, 229, 255, 0.08) !important;
-}
-
-/* 在收缩模式(rail)下，强行干预菜单的布局使其图标绝对正居中 */
-:deep(.v-navigation-drawer--rail .v-list-item) {
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  display: flex !important;
-  justify-content: center !important;
-}
-:deep(.v-navigation-drawer--rail .v-list-item__prepend) {
-  margin: 0 !important;
-  padding: 0 !important;
-  margin-inline-end: 0 !important;
-  width: 100% !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-}
-:deep(.v-navigation-drawer--rail .v-list-item__prepend > .v-icon) {
-  opacity: 1 !important;
-}
-/* rail 模式下隐藏文字内容，防止溢出和排版错乱 */
-:deep(.v-navigation-drawer--rail .v-list-item__content) {
-  display: none !important;
-}
-:deep(.v-navigation-drawer--rail .v-list-item__append) {
-  display: none !important;
-}
-/* rail 模式下底部 append 插槽内容强制居中 */
-:deep(.v-navigation-drawer--rail .v-navigation-drawer__append) {
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
 }
 </style>

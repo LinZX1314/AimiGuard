@@ -1,0 +1,161 @@
+"""
+Runtime Module - Background task functions
+"""
+import os, sys, json, time
+import threading
+from .helpers import BASE_DIR, _load_cfg
+
+# Global state
+_is_scanning = False
+_is_vuln_scanning = False
+_sync_thread_started = False
+_scan_thread_started = False
+
+
+def _run_daemon(task):
+    """将耗时任务以守护线程方式触发"""
+    threading.Thread(target=task, daemon=True).start()
+
+
+def _runtime_log(level: str, msg: str):
+    """统一后台任务日志输出"""
+    from utils.logger import log as unified_log
+    unified_log('Runtime', msg, level.upper())
+
+
+def get_runtime_scan_status() -> dict:
+    return {
+        'is_scanning': _is_scanning,
+        'is_vuln_scanning': _is_vuln_scanning,
+    }
+
+
+def run_nmap_scan(ip_ranges, arguments):
+    """后台执行一次 Nmap 扫描"""
+    global _is_scanning
+    if _is_scanning:
+        return
+
+    _is_scanning = True
+    try:
+        sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
+        import network_scan
+        network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
+    except Exception as e:
+        _runtime_log('error', f'Nmap 扫描执行失败: {e}')
+    finally:
+        _is_scanning = False
+
+
+def run_vuln_scan_task():
+    """后台执行一次漏洞扫描任务"""
+    global _is_vuln_scanning
+    if _is_vuln_scanning:
+        return
+
+    _is_vuln_scanning = True
+    try:
+        from database.models import NmapModel
+        hosts_data = NmapModel.get_latest_up_hosts()
+        if not hosts_data:
+            _runtime_log('warn', '漏洞扫描跳过: 没有在线主机')
+            return
+
+        sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
+        import network_scan
+        stats = network_scan.run_vuln_scan(hosts_data)
+        _runtime_log('info', f'漏洞扫描完成: {stats}')
+    except Exception as e:
+        _runtime_log('error', f'漏洞扫描执行失败: {e}')
+    finally:
+        _is_vuln_scanning = False
+
+
+def run_hfish_sync():
+    """执行一次 HFish 同步并触发 AI 分析"""
+    from database.models import HFishModel
+
+    try:
+        sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
+        from attack_log_sync import get_attack_logs
+        from plugin.ai_tools import analyze_and_ban
+
+        cfg = _load_cfg()
+        host_port = cfg.get('hfish', {}).get('host_port', '')
+        api_key = cfg.get('hfish', {}).get('api_key', '')
+        last_timestamp = HFishModel.get_last_timestamp()
+        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
+
+        if not logs:
+            _runtime_log('info', 'HFish 同步完成: 无新数据')
+            return {'success': True, 'total': 0, 'new': 0}
+
+        count = HFishModel.save_logs(logs)
+        _runtime_log('info', f'HFish 同步完成: 获取 {len(logs)} 条, 新增 {count} 条')
+
+        # AI 分析
+        ai_enabled = cfg.get('ai', {}).get('enabled', False)
+        if ai_enabled:
+            from database.models import AiModel
+            recent = HFishModel.get_recent_attack_ips(limit=10)
+            for item in recent:
+                ip = item.get('attack_ip')
+                if ip:
+                    logs_for_ip = HFishModel.get_logs_by_ip(ip, limit=20)
+                    analyze_and_ban(ip, logs_for_ip, cfg)
+
+        return {'success': True, 'total': len(logs), 'new': count}
+    except Exception as e:
+        _runtime_log('error', f'HFish 同步失败: {e}')
+        return {'success': False, 'error': str(e)}
+
+
+def run_hfish_sync_loop():
+    """HFish 定时同步循环"""
+    while True:
+        try:
+            cfg = _load_cfg()
+            sync_interval = cfg.get('hfish', {}).get('sync_interval', 300)
+            run_hfish_sync()
+            time.sleep(int(sync_interval))
+        except Exception as e:
+            _runtime_log('error', f'HFish 同步线程异常: {e}')
+            time.sleep(10)
+
+
+def run_nmap_scan_loop():
+    """Nmap 定时扫描循环"""
+    while True:
+        try:
+            cfg = _load_cfg()
+            nmap_cfg = cfg.get('nmap', {})
+            ip_ranges = nmap_cfg.get('ip_ranges', [])
+            arguments = nmap_cfg.get('arguments', '-sV -T4')
+            scan_interval = nmap_cfg.get('scan_interval', 0)
+
+            if not ip_ranges or not arguments:
+                _runtime_log('warn', 'Nmap 定时扫描跳过: 未配置 IP 范围或扫描参数')
+                time.sleep(60)
+                continue
+
+            run_nmap_scan(ip_ranges, arguments)
+            time.sleep(int(scan_interval))
+        except Exception as e:
+            _runtime_log('error', f'Nmap 定时扫描异常: {e}')
+            time.sleep(10)
+
+
+def start_runtime_workers():
+    """按配置启动后台同步与扫描线程"""
+    global _sync_thread_started, _scan_thread_started
+    cfg = _load_cfg()
+
+    if cfg.get('hfish', {}).get('sync_enabled', False) and not _sync_thread_started:
+        threading.Thread(target=run_hfish_sync_loop, daemon=True).start()
+        _sync_thread_started = True
+        _runtime_log('info', 'HFish 同步线程已启动')
+
+    if cfg.get('nmap', {}).get('scan_enabled', False) and not _scan_thread_started:
+        threading.Thread(target=run_nmap_scan_loop, daemon=True).start()
+        _scan_thread_started = True
+        _runtime_log('info', 'Nmap 扫描线程已启动')

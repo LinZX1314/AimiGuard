@@ -45,7 +45,7 @@ def main():
 
     # 构建 Flask 应用
     from web.flask_app import create_app, print_startup_banner
-    from web.api_v1 import start_runtime_workers
+    from web.api.runtime import start_runtime_workers
 
     app = create_app()
 

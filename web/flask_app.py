@@ -85,25 +85,8 @@ def create_app() -> Flask:
 
     # ── 注册 /api/v1/ 与 /api/ 蓝图 ──────────────────────────────────────
     try:
-        from api_v1 import (
-            v1 as v1_bp,
-            legacy_api as legacy_api_bp,
-            system_ai_config_get,
-            system_ai_config_save,
-        )
-        app.register_blueprint(v1_bp)
-        app.register_blueprint(legacy_api_bp)
-
-        # /api/system/ai-config 兼容路由
-        sys_compat = Blueprint("sys_compat", __name__, url_prefix="/api/system")
-
-        @sys_compat.route("/ai-config", methods=["GET", "POST"])
-        def sys_ai_config():
-            if request.method == "GET":
-                return system_ai_config_get()
-            return system_ai_config_save()
-
-        app.register_blueprint(sys_compat)
+        from api import register_blueprints
+        register_blueprints(app)
     except Exception as exc:
         import traceback
         traceback.print_exc()
