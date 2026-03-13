@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}系统日志 - 玄枢·AI攻防指挥官{% endblock %}
+{% block content %}
+{% raw %}
+<div id="app" v-cloak>
+    <v-app>
+        <v-main>
+            <v-container fluid>
+                <v-card>
+                    <v-card-title class="d-flex align-center">
+                        <v-icon start color="cyan">mdi-text-box-outline</v-icon>
+                        系统运行日志
+                        <v-spacer></v-spacer>
+                        <v-btn icon @click="loadLogs" :loading="loading">
+                            <v-icon>mdi-refresh</v-icon>
+                        </v-btn>
+                    </v-card-title>
+                    <v-card-text>
+                        <v-textarea
+                            :model-value="logContent"
+                            readonly auto-grow variant="outlined"
+                            style="font-family: monospace; font-size: 12px; background: #0B0F19;"
+                            rows="30"
+                        ></v-textarea>
+                    </v-card-text>
+                </v-card>
+            </v-container>
+        </v-main>
+    </v-app>
+</div>
+{% endraw %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/vue.global.prod.js"></script>
+<script src="/static/js/vuetify.min.js"></script>
+<script>
+const { createApp, ref, onMounted } = Vue;
+const { createVuetify } = Vuetify;
+const vuetify = createVuetify({ theme: { defaultTheme: 'dark', themes: { dark: { colors: { primary: '#00E5FF', background: '#0B0F19', surface: '#1A2235' } } } } });
+createApp({
+    setup() {
+        const logContent = ref('加载中...');
+        const loading = ref(false);
+        const loadLogs = async () => {
+            loading.value = true;
+            try {
+                const r = await fetch('/api/logs');
+                const d = await r.json();
+                logContent.value = Array.isArray(d.logs) ? d.logs.join('\n') : (d.logs || '暂无日志');
+            } catch(e) {
+                logContent.value = '加载失败: ' + e.message;
+            } finally { loading.value = false; }
+        };
+        onMounted(loadLogs);
+        return { logContent, loading, loadLogs };
+    }
+}).use(window.vuetify).mount('#app');
+</script>
+{% endblock %}

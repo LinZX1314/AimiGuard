@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}玄枢·AI攻防指挥官{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/vuetify.min.css">
+    <link rel="stylesheet" href="/static/css/materialdesignicons.min.css">
+    <style>
+        :root {
+            --bg-deep: #0B0F19;
+            --bg-card: #1A2235;
+            --accent-cyan: #00E5FF;
+            --accent-purple: #8B5CF6;
+            --nav-width: 220px;
+        }
+        html, body { margin: 0; padding: 0; background: var(--bg-deep); color: #e0e6f0; font-family: 'Inter', 'PingFang SC', sans-serif; height: 100%; }
+        [v-cloak] { display: none; }
+
+        /* ── Nav sidebar ── */
+        #nav-sidebar {
+            position: fixed; top: 0; left: 0; width: var(--nav-width); height: 100vh;
+            background: var(--bg-card);
+            border-right: 1px solid rgba(0,229,255,0.15);
+            display: flex; flex-direction: column; z-index: 100;
+            box-shadow: 2px 0 16px rgba(0,0,0,0.4);
+        }
+        #nav-sidebar .logo {
+            padding: 20px 16px 16px;
+            border-bottom: 1px solid rgba(0,229,255,0.1);
+            display: flex; align-items: center; gap: 10px;
+        }
+        #nav-sidebar .logo .logo-icon {
+            width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        #nav-sidebar .logo-text { font-size: 14px; font-weight: 700; color: var(--accent-cyan); letter-spacing: 0.5px; }
+        #nav-sidebar .logo-sub  { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+        #nav-sidebar nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+        #nav-sidebar .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 20px; color: rgba(255,255,255,0.65); text-decoration: none;
+            font-size: 13.5px; transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        #nav-sidebar .nav-item:hover { background: rgba(0,229,255,0.07); color: #fff; }
+        #nav-sidebar .nav-item.active {
+            background: rgba(0,229,255,0.12);
+            color: var(--accent-cyan);
+            border-left-color: var(--accent-cyan);
+        }
+        #nav-sidebar .nav-item .mdi { font-size: 18px; width: 20px; text-align: center; }
+        #nav-sidebar .nav-section {
+            padding: 10px 20px 4px; font-size: 10px; color: rgba(255,255,255,0.3);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        #nav-sidebar .nav-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 8px 0; }
+        #nav-sidebar .nav-footer {
+            padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.06);
+            font-size: 11px; color: rgba(255,255,255,0.3);
+        }
+
+        /* ── 主内容区 ── */
+        #main-content {
+            margin-left: var(--nav-width);
+            min-height: 100vh;
+            background: var(--bg-deep);
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
+        ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.25); border-radius: 3px; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- Navigation Sidebar -->
+<aside id="nav-sidebar">
+    <div class="logo">
+        <div class="logo-icon">⚔</div>
+        <div>
+            <div class="logo-text">玄枢</div>
+            <div class="logo-sub">AI 攻防指挥官</div>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-section">总览</div>
+        <a href="/"       class="nav-item {% if active == 'index'    %}active{% endif %}">
+            <span class="mdi mdi-view-dashboard-outline"></span> 安全总览
+        </a>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">威胁检测</div>
+        <a href="/hfish"  class="nav-item {% if active == 'hfish'    %}active{% endif %}">
+            <span class="mdi mdi-bug-outline"></span> 蜜罐攻击日志
+        </a>
+        <a href="/nmap"   class="nav-item {% if active == 'nmap'     %}active{% endif %}">
+            <span class="mdi mdi-radar"></span> 网络资产扫描
+        </a>
+        <a href="/vuln"   class="nav-item {% if active == 'vuln'     %}active{% endif %}">
+            <span class="mdi mdi-shield-bug-outline"></span> 漏洞扫描
+        </a>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">系统</div>
+        <a href="/logs"     class="nav-item {% if active == 'logs'     %}active{% endif %}">
+            <span class="mdi mdi-text-box-outline"></span> 系统日志
+        </a>
+        <a href="/settings" class="nav-item {% if active == 'settings' %}active{% endif %}">
+            <span class="mdi mdi-cog-outline"></span> 系统设置
+        </a>
+    </nav>
+
+    <div class="nav-footer">AimiGuard v1.0 · 2026</div>
+</aside>
+
+<!-- 主内容区 -->
+<div id="main-content">
+    {% block content %}{% endblock %}
+</div>
+
+<!-- 公共脚本：Vue + Vuetify CDN（所有子页面共用）-->
+<script src="/static/js/vue.global.prod.js"></script>
+<script src="/static/js/vuetify.min.js"></script>
+<script>
+// 全局 Vuetify 实例，深色主题统一配色
+window.vuetify = Vuetify.createVuetify({
+    theme: {
+        defaultTheme: 'dark',
+        themes: {
+            dark: {
+                colors: {
+                    primary:    '#00E5FF', // 青色 - 主色
+                    secondary:  '#8B5CF6', // 紫色 - 辅色
+                    accent:     '#F472B6', // 粉色
+                    error:      '#EF4444', // 红色
+                    warning:    '#F59E0B', // 橙色
+                    info:       '#3B82F6', // 蓝色
+                    success:    '#10B981', // 绿色
+                    background: '#0B0F19', // 深背景
+                    surface:    '#1A2235'  // 卡片背景
+                }
+            }
+        }
+    }
+});
+</script>
+
+<!-- 子页面专属脚本 -->
+{% block scripts %}{% endblock %}
+</body>
+</html>
