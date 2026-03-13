@@ -392,37 +392,6 @@ def scan_assets():
 def scan_asset_create():
     return ok({'id': 0, 'message': '已记录（仅只读）'})
 
-# ─── Firewall ─────────────────────────────────────────────────────────────────
-@v1.route('/firewall/config', methods=['GET'])
-@require_auth
-def firewall_config_get():
-    cfg = _load_cfg()
-    sw  = (cfg.get('switches') or [{}])[0]
-    return ok({
-        'enabled':            bool(sw.get('host')),
-        'api_base_url':       None,
-        'default_vendor':     sw.get('device_type', 'huawei_telnet'),
-        'default_policy_id':  str(sw.get('acl_number', '')),
-        'timeout_seconds':    30,
-        'has_custom_sign_secret': False,
-    })
-
-@v1.route('/firewall/config', methods=['POST'])
-@require_auth
-def firewall_config_save():
-    body = request.get_json(force=True) or {}
-    cfg  = _load_cfg()
-    switches = cfg.setdefault('switches', [{}])
-    if not switches:
-        switches.append({})
-    sw = switches[0]
-    if 'default_vendor'    in body: sw['device_type']  = body['default_vendor']
-    if 'default_policy_id' in body:
-        try: sw['acl_number'] = int(body['default_policy_id'])
-        except: pass
-    _save_cfg(cfg)
-    return ok()
-
 # ─── AI Chat ──────────────────────────────────────────────────────────────────
 _chat_sessions: dict[int, list] = {}
 _session_counter = 0
@@ -747,17 +716,6 @@ def honeypots_delete(hp_id: int):
 @v1.route('/honeypots/<int:hp_id>/alerts', methods=['GET'])
 @require_auth
 def honeypots_alerts(hp_id: int):
-    return ok({'items': [], 'total': 0})
-
-# ─── Workflows  (stubs) ───────────────────────────────────────────────────────
-@v1.route('/workflows', methods=['GET'])
-@require_auth
-def workflows_list():
-    return ok({'items': [], 'total': 0})
-
-@v1.route('/workflows/runs', methods=['GET'])
-@require_auth
-def workflow_runs():
     return ok({'items': [], 'total': 0})
 
 # ─── Nmap legacy bridge (/api/nmap/ wrappers under /api/v1/ namespace) ────────

@@ -8,6 +8,7 @@ const route  = useRoute()
 const auth   = useAuthStore()
 const drawer = ref(true)
 const rail   = ref(false)
+const logoUrl = new URL('@/assets/aimiguard-logo.png', import.meta.url).href
 
 const navItems = [
   { title: '总览大屏',   icon: 'mdi-view-dashboard',        to: '/' },
@@ -15,12 +16,10 @@ const navItems = [
   { title: 'Nmap 扫描',  icon: 'mdi-radar',                 to: '/nmap' },
   { title: '漏洞管理',   icon: 'mdi-bug-outline',           to: '/vuln' },
   { title: '防御事件',   icon: 'mdi-shield-alert-outline',  to: '/defense' },
-  { title: '防火墙',     icon: 'mdi-shield-lock-outline',   to: '/firewall' },
   { title: '蜜罐管理',   icon: 'mdi-pot-mix-outline',       to: '/honeypots' },
   { title: 'AI 助手',    icon: 'mdi-robot-outline',         to: '/ai' },
   { title: '审计日志',   icon: 'mdi-clipboard-text-clock',  to: '/audit' },
   { title: '威胁情报',   icon: 'mdi-earth',                 to: '/threat' },
-  { title: '工作流',     icon: 'mdi-sitemap-outline',       to: '/workflow' },
   { title: '系统设置',   icon: 'mdi-cog-outline',           to: '/settings' },
 ]
 
@@ -47,7 +46,7 @@ function handleLogout() {
     >
       <!-- Logo -->
       <v-list-item
-        :prepend-avatar="new URL('@/assets/aimiguard-logo.png', import.meta.url).href"
+        :prepend-avatar="logoUrl"
         title="玄枢·AI攻防指挥官"
         nav
         class="py-4"

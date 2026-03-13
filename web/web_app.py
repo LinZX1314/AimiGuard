@@ -2,7 +2,7 @@ import os
 import json
 import threading
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, jsonify, request
 
 # 导入nmap扫描模块 (位于 nmap_plugin 目录)
 import sys
@@ -356,7 +356,8 @@ def api_logs():
 
 
 # ======================================================
-# Vue SPA 入口 (替代旧 Jinja2 页面路由)
+# Vue SPA 入口（仅 SPA 模式）
+# 已移除旧 Jinja 页面与模板渲染路径。
 # Vue Router 使用 hash 历史 (如 /#/hfish)，Flask 只需返回 index.html
 # ======================================================
 from flask import send_from_directory as _sfd

@@ -12,7 +12,6 @@
 4. **全自动后台轮询**：扫描与蜜罐同步任务均在守护线程中静默运行，间隔可配置。
 5. **🤖 AI 驱动的"对话即扫描"**：集成大语言模型（LLM），支持自然语言指令触发扫描与报告生成。
 6. **JWT 鉴权 API**：全新 `/api/v1/` 路由体系，Bearer Token 保护，前后端彻底分离。
-7. **防火墙与蜜罐联动**：通过 Web 界面管理 iptables 规则、查看蜜罐部署状态与触发告警。
 
 ---
 
@@ -43,8 +42,7 @@ AimiGuard/
     │       ├── stores/      # Pinia 状态管理
     │       └── api/         # 前端 Axios API 封装层
     ├── static/
-    │   └── vue-dist/        # pnpm build 后的生产构建产物 (Flask 伺服于 /vue/)
-    └── templates/           # 旧版 Jinja2 模板 (遗留，保留兼容)
+    │   └── vue-dist/        # pnpm build 后的生产构建产物 (Flask 伺服于 /)
 ```
 
 ---
@@ -120,8 +118,7 @@ Vite 监听 `http://localhost:3001`，所有 `/api` 请求自动代理到 `:5000
 
 | 模式 | 地址 | 说明 |
 | :--- | :--- | :--- |
-| 快速体验（生产模式） | http://localhost:5000/vue/ | Flask 伺服已构建的 Vue SPA |
-| 旧版 Jinja2 界面 | http://localhost:5000/ | 遗留多页面模板（nmap/hfish 等） |
+| 快速体验（生产模式） | http://localhost:5000/ | Flask 伺服已构建的 Vue SPA |
 | 前端开发模式 | http://localhost:3001 | Vite HMR，支持热更新，代理后端 |
 
 **默认账号**：`admin` / `admin123`
@@ -199,7 +196,7 @@ ECharts 已通过 `manualChunks` 拆分，不再与 HFishView 合并打包，可
 - [x] 主机 OS 标签智能聚类
 - [x] 🤖 接入 LLM 安全分析
 - [x] JWT 鉴权 + RESTful API v1
-- [x] Vue 3 + Vuetify 全新前端（登录、仪表盘、资产、漏洞、防御、防火墙、蜜罐、AI 对话、审计、威胁情报、工作流、设置）
+- [x] Vue 3 + Vuetify 全新前端（登录、仪表盘、资产、漏洞、防御、蜜罐、AI 对话、审计、威胁情报、设置）
 - [x] 登录页粒子动画背景（Canvas requestAnimationFrame）
 - [x] Dashboard 30 秒自动刷新（setInterval + onUnmounted 清理）
 - [x] Nmap 扫描实时进度条（轮询 + v-progress-linear）
