@@ -6,7 +6,7 @@ from datetime import datetime
 from openai import OpenAI
 
 # 确保可以导入项目中的模块
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
@@ -14,7 +14,7 @@ try:
     from network_scan import scan_hosts, parse_scan_results
 except ImportError:
     # 针对在其他目录下运行时的路径调整
-    sys.path.append(os.path.join(BASE_DIR, "nmap_plugin"))
+    sys.path.append(os.path.join(BASE_DIR, "plugin", "nmap_plugin"))
     from network_scan import scan_hosts, parse_scan_results
 
 from database.models import ScannerModel

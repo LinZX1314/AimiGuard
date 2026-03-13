@@ -140,7 +140,7 @@ def run_nmap_scan(ip_ranges, arguments):
 
     _is_scanning = True
     try:
-        nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+        nmap_dir = os.path.join(BASE_DIR, 'plugin', 'nmap_plugin')
         if nmap_dir not in sys.path:
             sys.path.insert(0, nmap_dir)
         import network_scan
@@ -164,7 +164,7 @@ def run_vuln_scan_task():
             _runtime_log('warn', '漏洞扫描跳过: 没有在线主机')
             return
 
-        nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+        nmap_dir = os.path.join(BASE_DIR, 'plugin', 'nmap_plugin')
         if nmap_dir not in sys.path:
             sys.path.insert(0, nmap_dir)
         import network_scan
@@ -179,11 +179,11 @@ def run_vuln_scan_task():
 def run_hfish_sync():
     """执行一次 HFish 同步并触发 AI 分析。"""
     try:
-        hfish_dir = os.path.join(BASE_DIR, 'hfish')
+        hfish_dir = os.path.join(BASE_DIR, 'plugin', 'hfish')
         if hfish_dir not in sys.path:
             sys.path.insert(0, hfish_dir)
         from attack_log_sync import get_attack_logs
-        from hfish.ai_analyzer import analyze_and_ban
+        from plugin.hfish.ai_analyzer import analyze_and_ban
 
         cfg = _load_cfg()
         host_port = cfg.get('hfish', {}).get('host_port', '')
@@ -610,7 +610,7 @@ def scan_task_create():
 
     def _do():
         try:
-            nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+            nmap_dir = os.path.join(BASE_DIR, 'plugin', 'nmap_plugin')
             if nmap_dir not in sys.path:
                 sys.path.insert(0, nmap_dir)
             import network_scan
@@ -923,7 +923,7 @@ def ai_chat():
     def _exec_nmap_scan(args: dict) -> str:
         """执行真实 nmap 扫描并写库，返回 JSON 字符串。"""
         try:
-            from nmap_plugin.network_scan import scan_hosts, parse_scan_results
+            from plugin.nmap_plugin.network_scan import scan_hosts, parse_scan_results
             from database.models import ScannerModel
 
             target = (args.get('target') or '').strip()

@@ -13,13 +13,13 @@ import threading
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 添加项目根目录到 sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from database.db import get_connection
 from database.models import HFishModel
 from utils.logger import log
 
 # 配置文件路径 (从程序所在目录的上一级读取)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 
@@ -197,7 +197,7 @@ def main():
                 
                 # 开始分组和调用 AI 分析
                 try:
-                    from hfish.ai_analyzer import analyze_and_ban
+                    from plugin.hfish.ai_analyzer import analyze_and_ban
                     ip_logs = {}
                     for log in logs:
                         ip = log.get("attack_ip")

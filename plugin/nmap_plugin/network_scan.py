@@ -15,7 +15,7 @@ from datetime import datetime
 # 现在使用系统环境变量中的 nmap
 
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from database.db import get_connection
 from database.models import ScannerModel, VulnModel, NmapModel
 from utils.logger import log
@@ -24,7 +24,7 @@ import json
 
 def get_vuln_scripts_map():
     """获取系统标签与漏洞检测脚本的映射字典（优先从配置读取）"""
-    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config.json")
     try:
         if os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -338,7 +338,7 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
     """主函数"""
     # 读取配置
     import json
-    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config.json")
     if os.path.exists(config_file):
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
