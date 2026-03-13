@@ -1,13 +1,21 @@
-import sqlite3
 import os
 import sys
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 from database.db import get_connection
 
+def _time_str_to_timestamp(time_str: str) -> int:
+    """将 `%Y-%m-%d %H:%M:%S` 时间字符串转为秒级时间戳；失败返回 0。"""
+    try:
+        return int(datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S').timestamp())
+    except Exception:
+        return 0
+
 class NmapModel:
+    """Nmap 结果查询模型：仅封装读取类接口。"""
     @staticmethod
     def get_latest_scan_id():
         conn = get_connection()
@@ -157,6 +165,7 @@ class NmapModel:
         return dict(row) if row else None
 
 class ScannerModel:
+    """Nmap 扫描落库模型：负责 scans/hosts/assets 写入。"""
     @staticmethod
     def create_scan(ip_ranges, arguments, scan_time):
         conn = get_connection()
@@ -248,6 +257,7 @@ class ScannerModel:
         conn.close()
 
 class VulnModel:
+    """漏洞扫描结果模型。"""
     @staticmethod
     def get_vuln_results(limit=1000, offset=0):
         conn = get_connection()
@@ -328,13 +338,14 @@ class VulnModel:
             ''', (mac_address, ip, vuln_name, vuln_result, vuln_details, os_tags, scan_time))
             conn.commit()
             success = True
-        except Exception as e:
+        except Exception:
             success = False
         finally:
             conn.close()
         return success
 
 class HFishModel:
+    """HFish 攻击日志模型。"""
     @staticmethod
     def get_attack_logs(limit=100, offset=0, threat_level=None, service_name=None):
         conn = get_connection()
@@ -400,22 +411,16 @@ class HFishModel:
 
     @staticmethod
     def save_logs(logs):
+        """批量写入 HFish 日志；用关键字段去重，返回新增条数。"""
         if not logs:
             return 0
-        from datetime import datetime
-        def time_str_to_timestamp(time_str):
-            try:
-                dt = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
-                return int(dt.timestamp())
-            except:
-                return 0
 
         conn = get_connection()
         cursor = conn.cursor()
         count = 0
         for log in logs:
             try:
-                timestamp = time_str_to_timestamp(log.get("create_time_str", ""))
+                timestamp = _time_str_to_timestamp(log.get("create_time_str", ""))
                 cursor.execute('''
                     SELECT id FROM attack_logs
                     WHERE attack_ip = ? AND service_name = ? AND service_port = ? AND create_time_str = ?
@@ -437,13 +442,14 @@ class HFishModel:
                     log.get("create_time_str", ""), timestamp
                 ))
                 count += 1
-            except Exception as e:
+            except Exception:
                 pass
         conn.commit()
         conn.close()
         return count
 
 class StatsModel:
+    """首页汇总统计模型（保留给兼容接口调用）。"""
     @staticmethod
     def get_dashboard_summary():
         conn = get_connection()
@@ -471,6 +477,7 @@ class StatsModel:
         }
 
 class AiModel:
+    """AI 分析与会话历史模型。"""
     @staticmethod
     def save_analysis(ip, analysis_text, decision):
         from datetime import datetime
@@ -546,7 +553,7 @@ class AiModel:
                 # 尝试解析 JSON
                 if d['response'].startswith('{') or d['response'].startswith('['):
                     d['response'] = json.loads(d['response'])
-            except:
+            except Exception:
                 pass
             results.append(d)
         return results

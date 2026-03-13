@@ -1,6 +1,5 @@
 import json
 import re
-import threading
 from netmiko import ConnectHandler
 from openai import OpenAI
 import sys
@@ -23,6 +22,41 @@ def _error(message):
 def _debug(message):
     log("HFishAI", message, "DEBUG")
 
+def _group_logs_for_prompt(logs):
+    """将同一 IP 的日志按 service+port 聚合，缩短提示词并保留关键信息。"""
+    ip_location = logs[0].get("ip_location", "") if logs else ""
+    groups = {}
+    for item in logs:
+        service = item.get("service_name", "未知")
+        port = item.get("service_port", "未知")
+        key = f"{service}_{port}"
+        group = groups.setdefault(key, {"service": service, "port": port, "count": 0, "times": []})
+        group["count"] += 1
+        ctime = item.get("create_time_str", "")
+        if ctime:
+            group["times"].append(ctime)
+
+    simplified = []
+    for info in groups.values():
+        times = sorted(info["times"])
+        simplified.append({
+            "service_name": info["service"],
+            "port": info["port"],
+            "attack_count": info["count"],
+            "first_seen": times[0] if times else "",
+            "last_seen": times[-1] if times else "",
+        })
+    return ip_location, simplified
+
+def _extract_ban_decision(reply: str) -> str:
+    """从 AI 回复中提取 ban 标签；提取失败时默认 false。"""
+    match = re.search(r"<ban>(.*?)</ban>", reply or "", re.IGNORECASE)
+    return match.group(1).strip().lower() if match else "false"
+
+def _clean_reply(reply: str) -> str:
+    """移除模型内部标签，只保留可展示文本。"""
+    return re.sub(r'<ban>.*?</ban>|<think>.*?</think>', '', reply or '', flags=re.IGNORECASE | re.DOTALL).strip()
+
 def analyze_and_ban(ip, logs, config):
     """
     使用 AI 分析特定 IP 的攻击日志，并根据分析结果决定是否执行封禁。
@@ -40,40 +74,8 @@ def analyze_and_ban(ip, logs, config):
         _error("AI API 密钥或接口地址 (api_url) 未配置，跳过 AI 分析阶段。")
         return
 
-    # 精简及聚合日志数据，合并重复攻击，大幅缩小 Prompt 体积
-    ip_location = ""
-    if logs and "ip_location" in logs[0]:
-        ip_location = logs[0].get("ip_location", "")
-        
-    agg_logs = {}
-    for log in logs:
-        service = log.get("service_name", "未知")
-        port = log.get("service_port", "未知")
-        ctime = log.get("create_time_str", "")
-        
-        key = f"{service}_{port}"
-        if key not in agg_logs:
-            agg_logs[key] = {
-                "service": service,
-                "port": port,
-                "count": 0,
-                "times": []
-            }
-        
-        agg_logs[key]["count"] += 1
-        if ctime:
-            agg_logs[key]["times"].append(ctime)
-            
-    simplified_logs = []
-    for info in agg_logs.values():
-        times = sorted(info["times"])
-        simplified_logs.append({
-            "service_name": info["service"],
-            "port": info["port"],
-            "attack_count": info["count"],
-            "first_seen": times[0] if times else "",
-            "last_seen": times[-1] if len(times) > 1 else (times[0] if times else "")
-        })
+    # 精简并聚合日志，避免将大量重复记录直接发给模型。
+    ip_location, simplified_logs = _group_logs_for_prompt(logs)
         
 
     # 准备提示词 (Prompt)
@@ -107,32 +109,23 @@ def analyze_and_ban(ip, logs, config):
         reply = response.choices[0].message.content
         _info(f"AI 对 IP [{ip}] 的分析回复:\n{reply}")
         
-        # 匹配 <ban>true</ban> 或 <ban>false</ban> 标签
-        match = re.search(r"<ban>(.*?)</ban>", reply, re.IGNORECASE)
-        decision = "false"
-        if match:
-            decision = match.group(1).strip().lower()
-            if decision == "true":
-                auto_ban = ai_config.get("auto_ban", False)
-                if auto_ban:
-                    _warn(f"🚨 AI 决断结果: 必须封禁 IP [{ip}]! 准备执行多台交换机访问控制 ACL 更新...")
-                    
-                    switches = config.get("switches", [])
-                    
-                    if not switches:
-                        _error("未在 config.json 中找到 'switches' 配置。")
-                        
-                    for switch_config in switches:
-                        execute_switch_ban(ip, switch_config)
-                else:
-                    _warn(f"🚨 AI 决断结果: 建议封禁 IP [{ip}]，但设定的 'auto_ban' 自动封禁开关未开启，已跳过设备执行。")
-            else:
-                _info(f"ℹ️ AI 决断结果: 无需封禁 IP [{ip}]。")
+        decision = _extract_ban_decision(reply)
+        if decision != "true":
+            _info(f"ℹ️ AI 决断结果: 无需封禁 IP [{ip}]。")
         else:
-            _error(f"❌ 无法在 AI 的回复中提取到 <ban> 标签 (IP: {ip})，默认不封禁。")
+            auto_ban = ai_config.get("auto_ban", False)
+            if auto_ban:
+                _warn(f"🚨 AI 决断结果: 必须封禁 IP [{ip}]! 准备执行多台交换机访问控制 ACL 更新...")
+                switches = config.get("switches", [])
+                if not switches:
+                    _error("未在 config.json 中找到 'switches' 配置。")
+                for switch_config in switches:
+                    execute_switch_ban(ip, switch_config)
+            else:
+                _warn(f"🚨 AI 决断结果: 建议封禁 IP [{ip}]，但设定的 'auto_ban' 自动封禁开关未开启，已跳过设备执行。")
             
         # 隐藏 <ban> 和 <think> 标签内容并保存到数据库
-        clean_reply = re.sub(r'<ban>.*?</ban>|<think>.*?</think>', '', reply, flags=re.IGNORECASE | re.DOTALL).strip()
+        clean_reply = _clean_reply(reply)
         from database.models import AiModel
         AiModel.save_analysis(ip, clean_reply, decision)
 

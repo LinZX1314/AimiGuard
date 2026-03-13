@@ -22,13 +22,19 @@ const headers = [
 const SEV_COLOR: Record<string, string>  = { high: 'error', medium: 'warning', low: 'info', info: 'grey' }
 const STA_COLOR: Record<string, string>  = { pending: 'warning', approved: 'success', rejected: 'grey', false_positive: 'info' }
 
+function unwrap<T>(payload: any): T {
+  return (payload?.data ?? payload) as T
+}
+
 async function load() {
+  // 事件列表以分页查询为主，兼容后端返回 items 或 data.items 两种结构。
   loading.value = true
   try {
     const url = `/api/v1/defense/events?page=${page.value}&page_size=${pageSize}`
     const d   = await api.get<any>(url)
-    events.value = d.items ?? d.data?.items ?? []
-    total.value  = d.total ?? d.data?.total ?? events.value.length
+    const data = unwrap<any>(d)
+    events.value = data.items ?? []
+    total.value  = data.total ?? events.value.length
   } catch(e) { console.error(e) }
   loading.value = false
 }

@@ -19,7 +19,7 @@ if WEB_DIR not in sys.path:
     sys.path.insert(0, WEB_DIR)
 
 from database.models import (
-    NmapModel, VulnModel, HFishModel, StatsModel, AiModel, ScannerModel
+    NmapModel, VulnModel, HFishModel, AiModel
 )
 
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
@@ -34,10 +34,14 @@ def _save_cfg(cfg):
 
 # ─── Blueprint ────────────────────────────────────────────────────────────────
 v1 = Blueprint('v1', __name__, url_prefix='/api/v1')
+legacy_api = Blueprint('legacy_api', __name__, url_prefix='/api')
 
 # ─── Simple JWT (stdlib only) ─────────────────────────────────────────────────
 _JWT_SECRET = os.environ.get('AIMIGUARD_SECRET', 'aimiguard-secret-key-2026')
 _JWT_TTL    = 86400 * 7  # 7 days
+
+# 登录校验失败时使用的默认账号（仅用于首次启动或未配置 users 的场景）
+_DEFAULT_USERS = [{'username': 'admin', 'password': 'admin123', 'role': 'admin'}]
 
 def _b64e(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
@@ -45,6 +49,49 @@ def _b64e(data: bytes) -> str:
 def _b64d(s: str) -> bytes:
     pad = 4 - len(s) % 4
     return base64.urlsafe_b64decode(s + '=' * (pad % 4))
+
+def _now_iso() -> str:
+    """统一生成 ISO 时间戳，避免各处重复 datetime.now().isoformat()。"""
+    return datetime.now().isoformat()
+
+def _body() -> dict:
+    """统一读取 JSON 请求体；空体、解析失败均回落为空字典。"""
+    return request.get_json(force=True) or {}
+
+def _as_bool(value) -> bool:
+    """兼容多种布尔入参（字符串/数字/布尔）。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(value)
+
+def _parse_int_arg(name: str, default: int) -> int:
+    """读取 query 参数中的整数值；非法值自动回落默认值。"""
+    raw = request.args.get(name, default)
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+def _run_daemon(task):
+    """将耗时任务以守护线程方式触发，避免阻塞请求。"""
+    threading.Thread(target=task, daemon=True).start()
+
+def _normalize_host_fields(host: dict | None) -> dict | None:
+    """兼容 open_ports/services 字段的历史格式（JSON 字符串或逗号分隔）。"""
+    if not host:
+        return host
+    for key in ('open_ports', 'services'):
+        value = host.get(key)
+        if isinstance(value, str) and value:
+            try:
+                host[key] = json.loads(value)
+            except Exception:
+                host[key] = [p.strip() for p in value.split(',') if p.strip()]
+    return host
 
 def _make_token(payload: dict) -> str:
     hdr = _b64e(json.dumps({'typ': 'JWT', 'alg': 'HS256'}).encode())
@@ -69,6 +116,7 @@ def _decode_token(token: str) -> dict | None:
         return None
 
 def require_auth(f):
+    """简单 Bearer 认证装饰器：解码失败即返回 401。"""
     @wraps(f)
     def wrapped(*args, **kwargs):
         header = request.headers.get('Authorization', '')
@@ -81,21 +129,24 @@ def require_auth(f):
     return wrapped
 
 def ok(data=None, **extra):
+    """统一成功响应结构，便于前端一致处理。"""
     return jsonify({'code': 0, 'message': 'ok', 'data': data, **extra})
 
 def err(msg, code=400):
+    """统一错误响应结构。"""
     return jsonify({'code': code, 'message': msg}), code
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 @v1.route('/auth/login', methods=['POST'])
 def auth_login():
-    body = request.get_json(force=True) or {}
+    # 登录仅做本地配置校验，不依赖外部认证中心。
+    body = _body()
     username = body.get('username', '').strip()
     password = body.get('password', '').strip()
 
-    # Check credentials: config.json > default admin/admin123
+    # 凭据来源优先级：config.json 的 users > 默认管理员账号
     cfg = _load_cfg()
-    users = cfg.get('users', [{'username': 'admin', 'password': 'admin123', 'role': 'admin'}])
+    users = cfg.get('users', _DEFAULT_USERS)
     matched = next((u for u in users if u['username'] == username and u['password'] == password), None)
     if not matched:
         return err('用户名或密码错误', 401)
@@ -132,6 +183,7 @@ def auth_profile():
 @v1.route('/overview/metrics', methods=['GET'])
 @require_auth
 def overview_metrics():
+    # 该接口用于首页总览卡片，聚合多个模型统计结果。
     hfish = HFishModel.get_stats()
     nmap_stats = NmapModel.get_stats()
     vuln  = VulnModel.get_vuln_stats()
@@ -177,9 +229,10 @@ def overview_trends():
 @v1.route('/defense/hfish/logs', methods=['GET'])
 @require_auth
 def defense_hfish_logs():
-    limit       = int(request.args.get('limit', 200))
-    offset      = int(request.args.get('offset', 0))
-    aggregated  = request.args.get('aggregated', '0') in ('1', 'true', 'yes')
+    # 支持普通明细和按攻击 IP 聚合两种视图。
+    limit       = _parse_int_arg('limit', 200)
+    offset      = _parse_int_arg('offset', 0)
+    aggregated  = _as_bool(request.args.get('aggregated', '0'))
     service_name= request.args.get('service_name')
     threat_level= request.args.get('threat_level')
 
@@ -222,6 +275,7 @@ def defense_hfish_stats():
 @v1.route('/defense/hfish/sync', methods=['POST'])
 @require_auth
 def defense_hfish_sync():
+    # 手动触发一次同步，不等待执行结束（异步 best-effort）。
     def _do():
         try:
             cfg = _load_cfg()
@@ -229,10 +283,46 @@ def defense_hfish_sync():
             from hfish.attack_log_sync import HFishSyncer
             syncer = HFishSyncer(cfg)
             syncer.run_once()
-        except Exception as e:
+        except Exception:
             pass
-    threading.Thread(target=_do, daemon=True).start()
+    _run_daemon(_do)
     return ok({'message': '同步任务已触发'})
+
+@v1.route('/defense/hfish/test', methods=['POST'])
+@require_auth
+def defense_hfish_test():
+    """测试 HFish 连通性（不写库）。"""
+    body = _body()
+    cfg  = _load_cfg()
+    hcfg = cfg.get('hfish', {})
+    host_port = (body.get('host_port') or hcfg.get('host_port') or '').strip()
+    api_key   = (body.get('api_key') or hcfg.get('api_key') or '').strip()
+    if not host_port or not api_key:
+        return err('请先填写 HFish 地址和 API Key', 400)
+
+    try:
+        import requests
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        url = f"https://{host_port}/api/v1/attack/detail?api_key={api_key}"
+        payload = {
+            'start_time': int(time.time()) - 60,
+            'end_time': 0,
+            'page_no': 1,
+            'page_size': 1,
+            'intranet': -1,
+            'threat_label': [],
+            'client_id': [],
+            'service_name': [],
+            'info_confirm': '0',
+        }
+        resp = requests.post(url, json=payload, verify=False, timeout=15)
+        resp.raise_for_status()
+        _ = resp.json()
+        return ok({'reachable': True, 'host_port': host_port})
+    except Exception as e:
+        return err(f'HFish 连接失败: {e}', 502)
 
 @v1.route('/defense/hfish/config', methods=['GET'])
 @require_auth
@@ -249,13 +339,13 @@ def hfish_config_get():
 @v1.route('/defense/hfish/config', methods=['POST'])
 @require_auth
 def hfish_config_save():
-    body = request.get_json(force=True) or {}
+    body = _body()
     cfg  = _load_cfg()
     h    = cfg.setdefault('hfish', {})
     if 'host_port'     in body: h['host_port']      = body['host_port']
     if 'api_key'       in body: h['api_key']         = body['api_key']
     if 'sync_interval' in body: h['sync_interval']   = int(body['sync_interval'])
-    if 'enabled'       in body: h['sync_enabled']    = bool(body['enabled'])
+    if 'enabled'       in body: h['sync_enabled']    = _as_bool(body['enabled'])
     if 'api_base_url'  in body: h['api_base_url']    = body['api_base_url']
     _save_cfg(cfg)
     return ok()
@@ -327,7 +417,7 @@ def scan_tasks():
 @v1.route('/scan/tasks', methods=['POST'])
 @require_auth
 def scan_task_create():
-    body = request.get_json(force=True) or {}
+    body = _body()
     cfg  = _load_cfg()
     ip_ranges = [body.get('target', '')] if body.get('target') else cfg.get('nmap', {}).get('ip_ranges', [])
     arguments  = cfg.get('nmap', {}).get('arguments', '-sS -T4')
@@ -339,9 +429,9 @@ def scan_task_create():
                 sys.path.insert(0, nmap_dir)
             import network_scan
             network_scan.main(ip_ranges=ip_ranges, scan_args=arguments)
-        except Exception as e:
+        except Exception:
             pass
-    threading.Thread(target=_do, daemon=True).start()
+    _run_daemon(_do)
     return ok({'state': 'RUNNING', 'message': '扫描任务已启动'})
 
 @v1.route('/scan/findings', methods=['GET'])
@@ -398,12 +488,14 @@ _session_counter = 0
 _session_lock    = threading.Lock()
 
 def _next_session_id():
+    """线程安全地分配会话 ID。"""
     global _session_counter
     with _session_lock:
         _session_counter += 1
         return _session_counter
 
 def _call_ai(messages: list, cfg: dict) -> str:
+    """调用 OpenAI-compatible 接口，返回文本回复。"""
     import urllib.request
     ai_cfg  = cfg.get('ai', {})
     api_url = ai_cfg.get('api_url', '')
@@ -426,10 +518,11 @@ def _call_ai(messages: list, cfg: dict) -> str:
 @v1.route('/ai/sessions', methods=['GET'])
 @require_auth
 def ai_sessions():
+    # 会话为内存态，服务重启后会清空。
     sessions = [{'id': sid, 'title': f'对话 #{sid}',
                  'context_type': None, 'context_id': None,
                  'operator': g.user.get('username', ''),
-                 'started_at': datetime.now().isoformat(),
+                 'started_at': _now_iso(),
                  'expires_at': None}
                 for sid in _chat_sessions.keys()]
     return ok(sessions)
@@ -439,7 +532,7 @@ def ai_sessions():
 def ai_session_messages(session_id: int):
     msgs = _chat_sessions.get(session_id, [])
     return ok([{'role': m['role'], 'content': m['content'],
-                'created_at': m.get('ts', datetime.now().isoformat())} for m in msgs])
+                'created_at': m.get('ts', _now_iso())} for m in msgs])
 
 @v1.route('/ai/sessions/<int:session_id>', methods=['DELETE'])
 @require_auth
@@ -450,7 +543,8 @@ def ai_session_delete(session_id: int):
 @v1.route('/ai/chat', methods=['POST'])
 @require_auth
 def ai_chat():
-    body       = request.get_json(force=True) or {}
+    # 当前实现将上下文保存在进程内存，适合单实例轻量部署。
+    body       = _body()
     message    = body.get('message', '').strip()
     session_id = body.get('session_id')
     if not message:
@@ -468,14 +562,14 @@ def ai_chat():
         history = [{'role': 'system', 'content': sys_prompt}]
         _chat_sessions[sid] = history
 
-    ts = datetime.now().isoformat()
+    ts = _now_iso()
     history.append({'role': 'user', 'content': message, 'ts': ts})
 
     cfg_now = _load_cfg()
     reply = _call_ai([{'role': m['role'], 'content': m['content']} for m in history], cfg_now)
-    history.append({'role': 'assistant', 'content': reply, 'ts': datetime.now().isoformat()})
+    history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
 
-    # persist to DB (best effort)
+    # 额外做一份数据库持久化，失败不影响主流程。
     try:
         AiModel.save_chat_history(message, reply)
     except Exception:
@@ -497,22 +591,34 @@ def system_ai_config_get():
     cfg = _load_cfg()
     ai  = cfg.get('ai', {})
     return ok({
-        'provider':          'openai-compatible',
+        'provider':          ai.get('provider', 'openai-compatible'),
         'base_url':          ai.get('api_url', ''),
+        'model':             ai.get('model', ''),
         'model_name':        ai.get('model', ''),
         'enabled':           ai.get('enabled', False),
+        'auto_ban':          ai.get('auto_ban', False),
+        'ban_threshold':     ai.get('ban_threshold', 80),
         'api_key_configured':bool(ai.get('api_key', '')),
     })
 
 @v1.route('/system/ai-config', methods=['POST'])
 @require_auth
 def system_ai_config_save():
-    body = request.get_json(force=True) or {}
+    body = _body()
     cfg  = _load_cfg()
     ai   = cfg.setdefault('ai', {})
+    if 'provider'    in body: ai['provider'] = body['provider']
     if 'base_url'    in body: ai['api_url'] = body['base_url']
+    # 兼容前端两种命名：model / model_name
+    if 'model'       in body: ai['model']   = body['model']
     if 'model_name'  in body: ai['model']   = body['model_name']
-    if 'enabled'     in body: ai['enabled'] = bool(body['enabled'])
+    if 'enabled'     in body: ai['enabled'] = _as_bool(body['enabled'])
+    if 'auto_ban'    in body: ai['auto_ban'] = _as_bool(body['auto_ban'])
+    if 'ban_threshold' in body:
+        try:
+            ai['ban_threshold'] = int(body['ban_threshold'])
+        except Exception:
+            pass
     if 'api_key'     in body and body['api_key']: ai['api_key'] = body['api_key']
     _save_cfg(cfg)
     return ok()
@@ -527,7 +633,7 @@ def system_prompt_get():
 @v1.route('/system/ai-prompt', methods=['POST'])
 @require_auth
 def system_prompt_save():
-    body = request.get_json(force=True) or {}
+    body = _body()
     prompt = body.get('prompt', '').strip()
     if not prompt:
         return err('提示词不能为空')
@@ -543,6 +649,7 @@ def settings_get():
     return ok({
         'hfish': {
             'host_port':     cfg.get('hfish', {}).get('host_port', ''),
+            'api_base_url':  cfg.get('hfish', {}).get('api_base_url', ''),
             'sync_interval': cfg.get('hfish', {}).get('sync_interval', 60),
             'sync_enabled':  cfg.get('hfish', {}).get('sync_enabled', False),
         },
@@ -559,15 +666,18 @@ def settings_get():
 @v1.route('/settings', methods=['POST'])
 @require_auth
 def settings_save():
-    body = request.get_json(force=True) or {}
+    # 设置保存接口尽量兼容前端不同字段命名和布尔表达方式。
+    body = _body()
     cfg  = _load_cfg()
     if 'hfish' in body:
         h = body['hfish']
+        sync_enabled = h.get('sync_enabled', h.get('enabled', cfg.get('hfish', {}).get('sync_enabled', False)))
         cfg.setdefault('hfish', {}).update({
             'host_port':    h.get('host_port',    cfg.get('hfish', {}).get('host_port', '')),
             'sync_interval':int(h.get('sync_interval', 60)),
-            'sync_enabled': bool(h.get('sync_enabled', False)),
+            'sync_enabled': _as_bool(sync_enabled),
         })
+        if 'api_base_url' in h: cfg['hfish']['api_base_url'] = h.get('api_base_url', '')
         if h.get('api_key'): cfg['hfish']['api_key'] = h['api_key']
     if 'nmap' in body:
         n = body['nmap']
@@ -578,7 +688,7 @@ def settings_save():
             'ip_ranges':           ranges,
             'arguments':           n.get('arguments', '-sS -O -T4'),
             'scan_interval':       int(n.get('scan_interval', 604800)),
-            'scan_enabled':        bool(n.get('scan_enabled', False)),
+            'scan_enabled':        _as_bool(n.get('scan_enabled', False)),
             'vuln_scripts_by_tag': n.get('vuln_scripts_by_tag', {}),
         })
     if 'logging' in body:
@@ -683,26 +793,26 @@ def honeypots_list():
 @require_auth
 def honeypots_create():
     global _hp_counter
-    body = request.get_json(force=True) or {}
+    body = _body()
     _hp_counter += 1
     hp = {'id': _hp_counter, 'name': body.get('name', f'蜜罐#{_hp_counter}'),
           'honeypot_type': body.get('honeypot_type', 'custom'),
           'target_service': body.get('target_service', ''),
           'bait_data': body.get('bait_data', ''),
           'status': 'ACTIVE', 'managed_by': 'manual',
-          'created_at': datetime.now().isoformat(),
-          'updated_at': datetime.now().isoformat()}
+          'created_at': _now_iso(),
+          'updated_at': _now_iso()}
     _honeypots.append(hp)
     return ok(hp), 201
 
 @v1.route('/honeypots/<int:hp_id>', methods=['PUT'])
 @require_auth
 def honeypots_update(hp_id: int):
-    body = request.get_json(force=True) or {}
+    body = _body()
     for hp in _honeypots:
         if hp['id'] == hp_id:
             hp.update({k: v for k, v in body.items() if k != 'id'})
-            hp['updated_at'] = datetime.now().isoformat()
+            hp['updated_at'] = _now_iso()
             return ok(hp)
     return err('蜜罐不存在', 404)
 
@@ -727,27 +837,204 @@ def v1_nmap_scans():
 @v1.route('/nmap/hosts', methods=['GET'])
 @require_auth
 def v1_nmap_hosts():
-    limit   = int(request.args.get('limit', 500))
+    # 历史数据里端口/服务字段格式不一，这里做统一归一化。
+    limit   = _parse_int_arg('limit', 500)
     scan_id = request.args.get('scan_id')
     hosts   = NmapModel.get_hosts(scan_id=int(scan_id) if scan_id else None, limit=limit)
     for h in hosts:
-        for key in ('open_ports', 'services'):
-            if isinstance(h.get(key), str) and h[key]:
-                try:
-                    h[key] = json.loads(h[key])
-                except Exception:
-                    h[key] = [p.strip() for p in h[key].split(',') if p.strip()]
+        _normalize_host_fields(h)
     return ok(hosts)
 
 @v1.route('/nmap/host/<ip>', methods=['GET'])
 @require_auth
 def v1_nmap_host(ip: str):
     h = NmapModel.get_host_by_ip(ip)
-    if h:
-        for key in ('open_ports', 'services'):
-            if isinstance(h.get(key), str) and h[key]:
-                try:
-                    h[key] = json.loads(h[key])
-                except Exception:
-                    h[key] = [p.strip() for p in h[key].split(',') if p.strip()]
-    return ok(h)
+    return ok(_normalize_host_fields(h))
+
+
+# ─── Legacy /api compatibility layer ─────────────────────────────────────────
+# Keep old endpoints alive while moving implementation ownership into api_v1.
+_legacy_is_scanning = False
+_legacy_is_vuln_scanning = False
+
+
+def _legacy_module_status(cfg: dict) -> dict:
+    ai_cfg = cfg.get('ai', {})
+    ai_enabled = ai_cfg.get('enabled', False)
+    auto_ban = ai_cfg.get('auto_ban', False)
+    switches = cfg.get('switches', [])
+    return {
+        'hfish_sync': cfg.get('hfish', {}).get('sync_enabled', False),
+        'nmap_scan': cfg.get('nmap', {}).get('scan_enabled', False),
+        'ai_analysis': ai_enabled,
+        'acl_auto_ban': bool(ai_enabled and auto_ban and switches),
+    }
+
+
+def _legacy_safe_ai(cfg: dict) -> dict:
+    ai = cfg.get('ai', {}).copy()
+    ai.pop('api_key', None)
+    return ai
+
+
+@legacy_api.route('/status', methods=['GET'])
+@require_auth
+def legacy_status():
+    return jsonify(_legacy_module_status(_load_cfg()))
+
+
+@legacy_api.route('/scan/status', methods=['GET'])
+@require_auth
+def legacy_scan_status():
+    return jsonify({
+        'is_scanning': _legacy_is_scanning,
+        'is_vuln_scanning': _legacy_is_vuln_scanning,
+    })
+
+
+@legacy_api.route('/settings', methods=['GET'])
+@require_auth
+def legacy_settings_get():
+    cfg = _load_cfg()
+    hfish_config = cfg.get('hfish', {}).copy()
+    hfish_config.pop('api_key', None)
+    return jsonify({
+        'hfish': hfish_config,
+        'nmap': cfg.get('nmap', {}),
+        'ai': _legacy_safe_ai(cfg),
+        'logging': cfg.get('logging', {}),
+        'status': _legacy_module_status(cfg),
+    })
+
+
+@legacy_api.route('/settings', methods=['POST'])
+@require_auth
+def legacy_settings_save():
+    body = _body()
+    cfg = _load_cfg()
+    if 'hfish' in body:
+        new_hfish = body['hfish']
+        old_hfish = cfg.get('hfish', {})
+        if not new_hfish.get('api_key') and old_hfish.get('api_key'):
+            new_hfish['api_key'] = old_hfish['api_key']
+        cfg['hfish'] = new_hfish
+    if 'nmap' in body:
+        cfg['nmap'] = body['nmap']
+    if 'logging' in body:
+        cfg['logging'] = body['logging']
+    _save_cfg(cfg)
+    return jsonify({'success': True, 'message': '设置已保存', 'status': _legacy_module_status(cfg)})
+
+
+@legacy_api.route('/nmap/scans', methods=['GET'])
+@require_auth
+def legacy_nmap_scans():
+    return ok(NmapModel.get_scans())
+
+
+@legacy_api.route('/nmap/hosts', methods=['GET'])
+@require_auth
+def legacy_nmap_hosts():
+    scan_id = request.args.get('scan_id')
+    limit = _parse_int_arg('limit', 100)
+    offset = _parse_int_arg('offset', 0)
+    state = request.args.get('state')
+    hosts = NmapModel.get_hosts(scan_id=int(scan_id) if scan_id else None, limit=limit, offset=offset, state=state)
+    for h in hosts:
+        _normalize_host_fields(h)
+    return ok(hosts)
+
+
+@legacy_api.route('/nmap/host/<ip>', methods=['GET'])
+@require_auth
+def legacy_nmap_host(ip: str):
+    scan_id = request.args.get('scan_id')
+    host = NmapModel.get_host_by_ip(ip, int(scan_id) if scan_id else None)
+    return ok(_normalize_host_fields(host) or {})
+
+
+@legacy_api.route('/nmap/vuln', methods=['GET'])
+@require_auth
+def legacy_nmap_vuln():
+    limit = _parse_int_arg('limit', 1000)
+    offset = _parse_int_arg('offset', 0)
+    return ok(VulnModel.get_vuln_results(limit, offset))
+
+
+@legacy_api.route('/nmap/vuln/stats', methods=['GET'])
+@require_auth
+def legacy_nmap_vuln_stats():
+    return ok(VulnModel.get_vuln_stats())
+
+
+@legacy_api.route('/nmap/vuln/mark_safe', methods=['POST'])
+@require_auth
+def legacy_nmap_mark_safe():
+    body = _body()
+    mac_address = body.get('mac_address')
+    vuln_name = body.get('vuln_name')
+    if not mac_address or not vuln_name:
+        return jsonify({'success': False, 'message': '参数不全'})
+    success = VulnModel.mark_safe(mac_address, vuln_name)
+    if success:
+        return jsonify({'success': True, 'message': '已手动标记为安全'})
+    return jsonify({'success': False, 'message': '未找到对应记录'})
+
+
+@legacy_api.route('/nmap/vuln/scan', methods=['POST'])
+@require_auth
+def legacy_nmap_vuln_scan():
+    global _legacy_is_vuln_scanning
+    if _legacy_is_vuln_scanning:
+        return jsonify({'success': False, 'message': '漏洞扫描正在进行中，请稍后再试'})
+
+    def _do():
+        global _legacy_is_vuln_scanning
+        _legacy_is_vuln_scanning = True
+        try:
+            nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+            if nmap_dir not in sys.path:
+                sys.path.insert(0, nmap_dir)
+            import network_scan
+            hosts_data = NmapModel.get_latest_up_hosts()
+            if hosts_data:
+                network_scan.run_vuln_scan(hosts_data)
+        except Exception:
+            pass
+        finally:
+            _legacy_is_vuln_scanning = False
+
+    _run_daemon(_do)
+    return jsonify({'success': True, 'message': '漏洞扫描任务已启动'})
+
+
+@legacy_api.route('/nmap/scan', methods=['POST'])
+@require_auth
+def legacy_nmap_scan():
+    global _legacy_is_scanning
+    if _legacy_is_scanning:
+        return jsonify({'success': False, 'message': '扫描正在进行中，请稍后再试'})
+
+    body = _body()
+    cfg = _load_cfg()
+    ip_ranges = body.get('ip_ranges') or cfg.get('nmap', {}).get('ip_ranges', ['192.168.111.1/24'])
+    arguments = body.get('arguments') or cfg.get('nmap', {}).get('arguments', '-sS -O -T4')
+    if isinstance(ip_ranges, str):
+        ip_ranges = [ip_ranges]
+
+    def _do():
+        global _legacy_is_scanning
+        _legacy_is_scanning = True
+        try:
+            nmap_dir = os.path.join(BASE_DIR, 'nmap_plugin')
+            if nmap_dir not in sys.path:
+                sys.path.insert(0, nmap_dir)
+            import network_scan
+            network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
+        except Exception:
+            pass
+        finally:
+            _legacy_is_scanning = False
+
+    _run_daemon(_do)
+    return jsonify({'success': True, 'message': '扫描任务已启动', 'ip_ranges': ip_ranges})

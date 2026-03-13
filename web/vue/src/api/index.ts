@@ -1,10 +1,29 @@
 const BASE = ''
 
+type ApiEnvelope<T> = {
+  code?: number
+  message?: string
+  data?: T
+}
+
+function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
+  // 兼容后端统一格式：{ code, message, data }
+  if (payload && typeof payload === 'object' && 'code' in (payload as Record<string, unknown>)) {
+    const env = payload as ApiEnvelope<T>
+    if (typeof env.code === 'number' && env.code !== 0) {
+      throw new Error(env.message || '请求失败')
+    }
+    return env.data as T
+  }
+  return payload as T
+}
+
 function getToken() {
   return localStorage.getItem('token')
 }
 
 async function request<T>(method: string, url: string, body?: unknown, auth = true): Promise<T> {
+  // 统一请求入口：处理鉴权、错误归一化、信封解包。
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (auth) {
     const t = getToken()
@@ -32,7 +51,8 @@ async function request<T>(method: string, url: string, body?: unknown, auth = tr
     }
     throw new Error(msg)
   }
-  return resp.json() as Promise<T>
+  const payload = await resp.json() as ApiEnvelope<T> | T
+  return unwrapEnvelope(payload)
 }
 
 export const api = {

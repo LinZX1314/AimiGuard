@@ -55,7 +55,13 @@ const trendOptions = {
   scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } }
 }
 
+function unwrap<T>(payload: any): T {
+  // 兼容 api.ts 已解包和历史接口未解包两种返回。
+  return (payload?.data ?? payload) as T
+}
+
 async function load() {
+  // 仪表盘加载时并发拉取核心统计，减少首屏等待。
   loading.value = true
   try {
     const [m, cs, st] = await Promise.all([
@@ -63,7 +69,7 @@ async function load() {
       api.get<any>('/api/v1/overview/chain-status'),
       api.get<any>('/api/v1/defense/hfish/stats'),
     ])
-    const d = m.data ?? m
+    const d = unwrap<any>(m)
     metrics.value = {
       hfish_total:  d.hfish_total   ?? d.total_attacks ?? 0,
       hfish_high:   d.hfish_high    ?? 0,
@@ -72,9 +78,9 @@ async function load() {
       ai_decisions: d.ai_decisions  ?? 0,
       blocked_ips:  d.blocked_ips   ?? 0,
     }
-    chainStatus.value = cs.data ?? cs
+    chainStatus.value = unwrap<Record<string, boolean>>(cs)
 
-    const sd = st.data ?? st
+    const sd = unwrap<any>(st)
     const threat = sd.threat_stats ?? []
     hfishStats.value = {
       levels: threat.map((t: any) => t.level),
