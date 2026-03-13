@@ -1,13 +1,27 @@
-import requests
 import json
 import re
-import urllib3
 import threading
-import logging
 from netmiko import ConnectHandler
+from openai import OpenAI
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logger import log
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+def _info(message):
+    log("HFishAI", message, "INFO")
+
+
+def _warn(message):
+    log("HFishAI", message, "WARN")
+
+
+def _error(message):
+    log("HFishAI", message, "ERROR")
+
+
+def _debug(message):
+    log("HFishAI", message, "DEBUG")
 
 def analyze_and_ban(ip, logs, config):
     """
@@ -23,7 +37,7 @@ def analyze_and_ban(ip, logs, config):
     timeout = ai_config.get("timeout", 600)
     
     if not api_key or not api_url:
-        logger.error("AI API 密钥或接口地址 (api_url) 未配置，跳过 AI 分析阶段。")
+        _error("AI API 密钥或接口地址 (api_url) 未配置，跳过 AI 分析阶段。")
         return
 
     # 精简及聚合日志数据，合并重复攻击，大幅缩小 Prompt 体积
@@ -79,28 +93,19 @@ def analyze_and_ban(ip, logs, config):
 {json.dumps(simplified_logs, ensure_ascii=False, indent=2)}
 """
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "/no_think 你是一个专业的安全分析与自动化防御策略分配专家助手。"},
-            {"role": "user", "content": prompt}
-        ]
-    }
-
     try:
-        logger.info(f"正在将 IP [{ip}] 的 {len(logs)} 条日志发送给 AI 进行决断 (超时设置: {timeout}s)...")
-        logger.info(f"发送给 AI 的请求体:\n{json.dumps(payload, ensure_ascii=False, indent=2)}")
-        response = requests.post(api_url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()
-        
-        reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        logger.info(f"AI 对 IP [{ip}] 的分析回复:\n{reply}")
+        _info(f"正在将 IP [{ip}] 的 {len(logs)} 条日志发送给 AI 进行决断 (超时设置: {timeout}s)...")
+        client = OpenAI(api_key=api_key, base_url=api_url, timeout=timeout)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "你是一个专业的安全分析与自动化防御策略分配专家助手。"},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        reply = response.choices[0].message.content
+        _info(f"AI 对 IP [{ip}] 的分析回复:\n{reply}")
         
         # 匹配 <ban>true</ban> 或 <ban>false</ban> 标签
         match = re.search(r"<ban>(.*?)</ban>", reply, re.IGNORECASE)
@@ -110,21 +115,21 @@ def analyze_and_ban(ip, logs, config):
             if decision == "true":
                 auto_ban = ai_config.get("auto_ban", False)
                 if auto_ban:
-                    logger.warning(f"🚨 AI 决断结果: 必须封禁 IP [{ip}]! 准备执行多台交换机访问控制 ACL 更新...")
+                    _warn(f"🚨 AI 决断结果: 必须封禁 IP [{ip}]! 准备执行多台交换机访问控制 ACL 更新...")
                     
                     switches = config.get("switches", [])
                     
                     if not switches:
-                        logger.error("未在 config.json 中找到 'switches' 配置。")
+                        _error("未在 config.json 中找到 'switches' 配置。")
                         
                     for switch_config in switches:
                         execute_switch_ban(ip, switch_config)
                 else:
-                    logger.warning(f"🚨 AI 决断结果: 建议封禁 IP [{ip}]，但设定的 'auto_ban' 自动封禁开关未开启，已跳过设备执行。")
+                    _warn(f"🚨 AI 决断结果: 建议封禁 IP [{ip}]，但设定的 'auto_ban' 自动封禁开关未开启，已跳过设备执行。")
             else:
-                logger.info(f"ℹ️ AI 决断结果: 无需封禁 IP [{ip}]。")
+                _info(f"ℹ️ AI 决断结果: 无需封禁 IP [{ip}]。")
         else:
-            logger.error(f"❌ 无法在 AI 的回复中提取到 <ban> 标签 (IP: {ip})，默认不封禁。")
+            _error(f"❌ 无法在 AI 的回复中提取到 <ban> 标签 (IP: {ip})，默认不封禁。")
             
         # 隐藏 <ban> 和 <think> 标签内容并保存到数据库
         clean_reply = re.sub(r'<ban>.*?</ban>|<think>.*?</think>', '', reply, flags=re.IGNORECASE | re.DOTALL).strip()
@@ -132,7 +137,7 @@ def analyze_and_ban(ip, logs, config):
         AiModel.save_analysis(ip, clean_reply, decision)
 
     except Exception as e:
-        logger.error(f"❌ 调用 AI 分析 IP [{ip}] 时发生错误: {e}")
+        _error(f"❌ 调用 AI 分析 IP [{ip}] 时发生错误: {e}")
 
 def execute_switch_ban(ip, switch_config):
     """
@@ -146,11 +151,11 @@ def execute_switch_ban(ip, switch_config):
     device_type = switch_config.get("device_type")
     
     if not host or not username or not password or not device_type:
-        logger.error(f"某台交换机(Switch: {host})的配置不完整。必须包含 host, username, password 和 device_type。")
+        _error(f"某台交换机(Switch: {host})的配置不完整。必须包含 host, username, password 和 device_type。")
         return
         
     try:
-        logger.info(f"正在通过 Netmiko 连接到交换机 {host}:{port} ({device_type})...")
+        _info(f"正在通过 Netmiko 连接到交换机 {host}:{port} ({device_type})...")
         device = {
             'device_type': device_type,
             'host': host,
@@ -162,7 +167,7 @@ def execute_switch_ban(ip, switch_config):
         # 建立智能连接，自动处理登录和等待提示符
         net_connect = ConnectHandler(**device)
         
-        logger.info(f"成功登录交换机 {host}。正在下发 ACL {acl_number} 封禁 {ip} 的命令集...")
+        _info(f"成功登录交换机 {host}。正在下发 ACL {acl_number} 封禁 {ip} 的命令集...")
         
         # 定义要执行的策略命令集合
         config_commands = [
@@ -181,8 +186,8 @@ def execute_switch_ban(ip, switch_config):
             
         net_connect.disconnect()
         
-        logger.info(f"✅ 成功在交换机 {host} 的 ACL {acl_number} 中添加了对 IP {ip} 的封禁策略！")
-        logger.debug(f"交换机命令行输出记录:\n{output}")
+        _info(f"✅ 成功在交换机 {host} 的 ACL {acl_number} 中添加了对 IP {ip} 的封禁策略！")
+        _debug(f"交换机命令行输出记录:\n{output}")
         
     except Exception as e:
-        logger.error(f"❌ 自动化封禁 IP {ip} 到交换机时发生异常: {e}")
+        _error(f"❌ 自动化封禁 IP {ip} 到交换机时发生异常: {e}")

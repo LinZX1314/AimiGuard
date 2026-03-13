@@ -15,10 +15,11 @@
   "ai": {
     "enabled": true,
     "auto_ban": false,
-    "api_url": "http://127.0.0.1:1234/v1/chat/completions",
+    "api_url": "http://127.0.0.1:1234/v1",
     "api_key": "okoko",
     "model": "qwen/qwen3-4b-2507",
-    "timeout": 160
+    "timeout": 160,
+    "system_prompt": "你是玄枢·AI攻防指挥官，专注于网络安全事件分析、漏洞评估和防御建议。用中文回答，简明扼要。"
   },
   "switches": [
     {

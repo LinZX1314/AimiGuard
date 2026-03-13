@@ -16,6 +16,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db import get_connection
 from database.models import HFishModel
+from utils.logger import log
 
 # 配置文件路径 (从程序所在目录的上一级读取)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,19 +45,12 @@ def timestamp_to_time(timestamp):
 def _format_error(host_port, err_msg):
     """格式化控制台错误输出"""
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f"""
-╭─────────────────────────────────────────────────────────────────╮
-│ [{ts}] HFish 蜜罐连接异常
-├─────────────────────────────────────────────────────────────────┤
-│ 地址: {host_port}
-│ 错误: {err_msg}
-│
-│ 建议: 请确认 HFish 服务已启动，且地址与 config.json 中配置一致
-╰─────────────────────────────────────────────────────────────────╯
+    return f""" [{ts}] HFish 蜜罐连接异常，地址: {host_port} 
+    错误: {err_msg}
 """
 
 
-def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
+def get_attack_logs(start_time, end_time, host_port, api_key):
     """
     获取攻击详情列表
 
@@ -65,7 +59,6 @@ def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
         end_time: 结束时间戳 (0 表示最新时间)
         host_port: 主机地址和端口，如 "127.0.0.1:4433"
         api_key: API密钥
-        on_error: 可选，错误时回调 (host_port, err_msg) -> None
 
     返回:
         处理后的攻击详情列表
@@ -122,34 +115,22 @@ def get_attack_logs(start_time, end_time, host_port, api_key, on_error=None):
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
-            msg = _format_error(host_port, err_msg)
-            print(msg)
-            if on_error:
-                on_error(host_port, err_msg)
+            log("HFish", _format_error(host_port, err_msg), "ERROR")
             return []
 
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
-            err_msg = "请求超时，HFish 服务响应过慢"
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "ERROR")
             return []
 
         except requests.exceptions.HTTPError as e:
-            err_msg = f"HTTP 错误 {e.response.status_code}: {str(e)}"
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "ERROR")
             return []
 
         except Exception as e:
-            err_msg = str(e)
-            print(_format_error(host_port, err_msg))
-            if on_error:
-                on_error(host_port, err_msg)
+            log("HFish", _format_error(host_port, str(e)), "ERROR")
             return []
 
 
@@ -169,7 +150,7 @@ def main():
     parser.add_argument('--once', '-o', action='store_true', help='只同步一次，不循环')
     args = parser.parse_args()
 
-    print(f"[{datetime.now()}] 程序启动")
+    log("HFish", "程序启动")
 
     # 加载配置
     raw_config = load_config()
@@ -187,11 +168,11 @@ def main():
     api_key = hfish_config.get("api_key", "")
     interval = hfish_config.get("sync_interval", 60)
 
-    print(f"[{datetime.now()}] 配置加载: host={host_port}, interval={interval}秒")
+    log("HFish", f"配置加载: host={host_port}, interval={interval}秒")
 
     # 退出信号处理
     def signal_handler(sig, frame):
-        print(f"\n[{datetime.now()}] 收到退出信号，正在关闭...")
+        log("HFish", "收到退出信号，正在关闭...", "WARN")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -206,13 +187,13 @@ def main():
             else:
                 start_time = last_timestamp
 
-            print(f"[{datetime.now()}] 开始同步，从时间戳 {start_time} 开始")
+            log("HFish", f"开始同步，从时间戳 {start_time} 开始")
 
             logs = get_attack_logs(start_time, 0, host_port, api_key)
 
             if logs:
                 new_count = HFishModel.save_logs(logs)
-                print(f"[{datetime.now()}] 同步完成: 获取 {len(logs)} 条, 新增 {new_count} 条")
+                log("HFish", f"同步完成: 获取 {len(logs)} 条, 新增 {new_count} 条")
                 
                 # 开始分组和调用 AI 分析
                 try:
@@ -229,19 +210,19 @@ def main():
                         # 新建线程执行 AI 判定，避免阻塞全局同步日志任务
                         threading.Thread(target=analyze_and_ban, args=(ip, ip_log_list, raw_config), daemon=True).start()
                 except Exception as e:
-                    print(f"[{datetime.now()}] 调度 AI 分析线程时发生异常: {e}")
+                    log("HFish", f"调度 AI 分析线程时发生异常: {e}", "ERROR")
             else:
-                print(f"[{datetime.now()}] 无新数据")
+                log("HFish", "无新数据")
 
         except Exception as e:
-            print(f"[{datetime.now()}] 同步错误: {e}")
+            log("HFish", f"同步错误: {e}", "ERROR")
 
     if args.once:
         sync_once()
     else:
         while True:
             sync_once()
-            print(f"[{datetime.now()}] 等待 {interval} 秒后进行下一次同步")
+            log("HFish", f"等待 {interval} 秒后进行下一次同步")
             time.sleep(interval)
 
 

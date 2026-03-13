@@ -1,5 +1,9 @@
 import sqlite3
 import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logger import log
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_FILE = os.path.join(BASE_DIR, "aimiguard.db")
@@ -135,4 +139,4 @@ def init_db():
 
 if __name__ == "__main__":
     init_db()
-    print("Database aimiguard.db initialized.")
+    log("DB", "Database aimiguard.db initialized.")

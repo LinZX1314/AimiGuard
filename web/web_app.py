@@ -4,22 +4,45 @@ import threading
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
-# 导入nmap扫描模块
+# 导入nmap扫描模块 (位于 nmap_plugin 目录)
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap'))
+# nmap_plugin 包含 network_scan.py，确保其目录在 sys.path 中，以便直接导入
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
 import network_scan
 
 # 导入 MVC 模型层
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from database.db import get_connection, init_db
 from database.models import NmapModel, VulnModel, HFishModel, StatsModel, ScannerModel, AiModel
+from utils.logger import log as unified_log
 
 app = Flask(__name__)
 
 # 关闭Flask访问日志
 import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.WARNING)
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging.WARNING)
+
+# ── 注册 /api/v1/ Blueprint ──────────────────────────────────────────────────
+try:
+    from api_v1 import v1 as _v1_bp
+    app.register_blueprint(_v1_bp)
+    # /api/system/ai-config  ← reference frontend tries this prefix too
+    from flask import Blueprint as _BP
+    _sys = _BP('sys_compat', __name__, url_prefix='/api/system')
+
+    @_sys.route('/ai-config', methods=['GET', 'POST'])
+    def _sys_ai():
+        from flask import g, request as _req
+        from api_v1 import require_auth as _auth, system_ai_config_get, system_ai_config_save
+        if _req.method == 'GET':
+            return system_ai_config_get()
+        return system_ai_config_save()
+
+    app.register_blueprint(_sys)
+except Exception as _e:
+    import traceback; traceback.print_exc()
+    unified_log("WebApp", f"/api/v1/ Blueprint 注册失败: {_e}", "WARN")
 
 # 配置路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +61,7 @@ def reload_config():
         config = load_config()
         return config
     except Exception as e:
-        print(f"[{datetime.now()}] 配置重载失败: {e}")
+        unified_log("WebApp", f"配置重载失败: {e}", "ERROR")
         return config
 
 
@@ -84,7 +107,7 @@ init_db()
 
 def _log(level, msg, category="system"):
     """同时输出到控制台并追加到日志缓冲"""
-    print(msg)
+    unified_log("WebApp", msg, level.upper())
     append_log(level, msg, category)
 
 _log("info", f"[{datetime.now()}] 统一数据库初始化完成", "system")
@@ -168,10 +191,7 @@ def run_hfish_sync():
 
         last_timestamp = HFishModel.get_last_timestamp()
 
-        def on_hfish_error(hp, err):
-            _log("error", f"HFish 蜜罐连接异常 [{hp}]: {err}", "sync")
-
-        logs = get_attack_logs(last_timestamp, 0, host_port, api_key, on_error=on_hfish_error)
+        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
 
         if logs:
             count = HFishModel.save_logs(logs)
@@ -335,30 +355,28 @@ def api_logs():
     return jsonify(logs)
 
 
+# ======================================================
+# Vue SPA 入口 (替代旧 Jinja2 页面路由)
+# Vue Router 使用 hash 历史 (如 /#/hfish)，Flask 只需返回 index.html
+# ======================================================
+from flask import send_from_directory as _sfd
+
+_VUE_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'vue-dist')
+
 @app.route('/')
-def index():
-    """首页"""
-    return render_template('vuetify_index.html', active='index')
+def spa_index():
+    """Vue SPA 入口"""
+    return _sfd(_VUE_DIST, 'index.html')
 
-@app.route('/hfish')
-def hfish():
-    """攻击日志页面"""
-    return render_template('vuetify_hfish.html', active='hfish')
+@app.route('/assets/<path:filename>')
+def spa_assets(filename):
+    """Vue SPA 静态资源"""
+    return _sfd(os.path.join(_VUE_DIST, 'assets'), filename)
 
-@app.route('/nmap')
-def nmap_page():
-    """网络扫描页面"""
-    return render_template('vuetify_nmap.html', active='nmap')
-
-@app.route('/vuln')
-def vuln_page():
-    """漏洞扫描页面"""
-    return render_template('vuetify_vuln.html', active='vuln')
-
-@app.route('/logs')
-def logs_page():
-    """系统日志页面"""
-    return render_template('vuetify_logs.html', active='logs')
+@app.route('/favicon.ico')
+def spa_favicon():
+    try: return _sfd(_VUE_DIST, 'favicon.ico')
+    except: return '', 204
 
 # ==================== API接口 ====================
 
@@ -520,6 +538,15 @@ def api_vuln_mark_safe():
     return jsonify({"success": False, "message": "未找到对应记录"})
 
 
+@app.route('/api/scan/status')
+def api_scan_status():
+    """获取当前扫描状态"""
+    return jsonify({
+        "is_scanning": is_scanning,
+        "is_vuln_scanning": is_vuln_scanning,
+    })
+
+
 @app.route('/api/nmap/vuln/scan', methods=['POST'])
 def api_vuln_scan():
     """手动触发漏洞扫描"""
@@ -565,10 +592,7 @@ def api_nmap_host(ip):
     return jsonify({})
 
 
-@app.route('/settings')
-def settings_page():
-    """设置页面"""
-    return render_template('vuetify_settings.html', active='settings')
+# /settings 页面已由 Vue SPA 消费 /#/settings 路由提供
 
 @app.route('/api/settings', methods=['GET'])
 def api_settings_get():
@@ -679,7 +703,7 @@ def _print_status_update():
     """打印配置更新后的模块状态（动态更新提示）"""
     s = _get_module_status()
     msg = f"[{datetime.now()}] 配置已更新 | HFish: {'✓' if s['hfish_sync'] else '✗'} | Nmap: {'✓' if s['nmap_scan'] else '✗'} | AI: {'✓' if s['ai_analysis'] else '✗'} | ACL: {'✓' if s['acl_auto_ban'] else '✗'}"
-    print(msg)
+    unified_log("WebApp", msg)
     append_log("info", msg, "system")
 
 
@@ -694,15 +718,13 @@ def print_startup_banner():
     auto_ban = ai_cfg.get('auto_ban', False)
     switches = config.get('switches', [])
 
-    print()
-    print("=" * 58)
-    print("  [*] 玄枢·AI攻防指挥官 已启动")
-    print("=" * 58)
-    print(f"  控制台地址: http://{display_host}:{port}")
-    print(f"  HFish 同步: {'已启用' if config.get('hfish', {}).get('sync_enabled') else '已禁用'}  |  Nmap 扫描: {'已启用' if config.get('nmap', {}).get('scan_enabled') else '已禁用'}")
-    print(f"  AI 分析: {'已启用' if ai_enabled else '已禁用'}  |  ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and switches) else '已禁用'}")
-    print("=" * 58)
-    print()
+    unified_log("WebApp", "=" * 58)
+    unified_log("WebApp", "[*] 玄枢·AI攻防指挥官 已启动")
+    unified_log("WebApp", "=" * 58)
+    unified_log("WebApp", f"控制台地址: http://{display_host}:{port}")
+    unified_log("WebApp", f"HFish 同步: {'已启用' if config.get('hfish', {}).get('sync_enabled') else '已禁用'}  |  Nmap 扫描: {'已启用' if config.get('nmap', {}).get('scan_enabled') else '已禁用'}")
+    unified_log("WebApp", f"AI 分析: {'已启用' if ai_enabled else '已禁用'}  |  ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and switches) else '已禁用'}")
+    unified_log("WebApp", "=" * 58)
 
 
 if __name__ == '__main__':
@@ -714,20 +736,20 @@ if __name__ == '__main__':
 
     # 如果关键服务器配置缺失，则报错提示或退出
     if not host or not port:
-        print(f"[{datetime.now()}] 错误: 关键服务器配置缺失 (host, port)")
+        unified_log("WebApp", "关键服务器配置缺失 (host, port)", "ERROR")
         sys.exit(1)
 
     # Flask debug 模式会启动两个进程：
     # 只在主运行环境中启动后台线程，防止端口占用和重复启动
     if debug_mode:
         if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-            print(f"[{datetime.now()}] 主进程启动后台线程 (Debug模式)")
+            unified_log("WebApp", "主进程启动后台线程 (Debug模式)")
             start_sync_thread()
             print_startup_banner()
         else:
-            print(f"[{datetime.now()}] 初始进程，跳过后台线程 (等待主进程重载)")
+            unified_log("WebApp", "初始进程，跳过后台线程 (等待主进程重载)", "WARN")
     else:
-        print(f"[{datetime.now()}] 启动后台线程 (生产模式)")
+        unified_log("WebApp", "启动后台线程 (生产模式)")
         start_sync_thread()
         print_startup_banner()
 
