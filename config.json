@@ -2,34 +2,18 @@
   "hfish": {
     "host_port": "10.80.7.71:4433",
     "api_key": "IXsdweVjepwhtPgchSvDqaRIntolDoUncNGqiSZAFBLNbAUBnStLYchDClDytmaJ",
-    "sync_interval": 60,
+    "sync_interval": 120,
     "sync_enabled": true
   },
   "ai": {
     "enabled": true,
     "auto_ban": false,
-    "api_url": "http://127.0.0.1:1234/v1/chat/completions",
+    "api_url": "http://127.0.0.1:1234/v1",
     "api_key": "okoko",
     "model": "Qwen3.5-4B",
     "timeout": 160
   },
   "switches": [
-    {
-      "host": "192.168.1.1",
-      "port": 23,
-      "username": "admin",
-      "password": "password",
-      "acl_number": 3000,
-      "device_type": "huawei_telnet"
-    },
-    {
-      "host": "192.168.1.2",
-      "port": 23,
-      "username": "admin",
-      "password": "password",
-      "acl_number": 3000,
-      "device_type": "huawei_telnet"
-    }
   ],
   "nmap": {
     "ip_ranges": [

@@ -3,21 +3,14 @@ import json
 import threading
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
+import logging
 
 # ==================== 统一日志工具 ====================
-def log(module, message, level="INFO"):
-    """统一日志格式输出
-
-    Args:
-        module: 模块名称，如 WebApp, HFish, Nmap, AI
-        message: 日志消息
-        level: 日志级别，可选 INFO, WARN, ERROR, DEBUG
-    """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [{level:5}] [{module:10}] {message}")
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logger import log
 
 # 导入nmap扫描模块
-import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nmap_plugin'))
 import network_scan
 
@@ -31,8 +24,8 @@ app = Flask(__name__)
 
 # 关闭Flask访问日志
 import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.WARNING)
+werkzeug_log = logging.getLogger('werkzeug')
+werkzeug_log.setLevel(logging.WARNING)
 
 # 配置路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -545,8 +538,9 @@ def api_ai_scan():
         
         try:
             log("AI", f"启动流式生成器，用户查询: {query}")
+            packet_count = 0
             for delta in scanner.chat_and_scan_stream(query, history=history_context):
-                log("AI", f"发送数据包: {delta['type']}", "DEBUG")
+                packet_count += 1
                 if delta['type'] == 'text':
                     full_content += delta['content']
                 elif delta['type'] == 'scan':
@@ -555,7 +549,7 @@ def api_ai_scan():
                 # 发送 SSE 事件
                 yield f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
             
-            log("AI", f"流式处理完成，保存数据库. ID: {history_id}, ScanID: {scan_id}")
+            log("AI", f"流式处理完成，共 {packet_count} 个数据包，保存数据库. ID: {history_id}, ScanID: {scan_id}")
             # 2. 结束后，将完整回复存入数据库
             AiModel.save_chat_history(query, full_content, scan_id, history_id=history_id)
             

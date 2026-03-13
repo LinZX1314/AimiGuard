@@ -1,13 +1,12 @@
-import requests
 import json
 import re
-import urllib3
 import threading
-import logging
 from netmiko import ConnectHandler
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from openai import OpenAI
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logger import log as logger
 
 def analyze_and_ban(ip, logs, config):
     """
@@ -79,27 +78,20 @@ def analyze_and_ban(ip, logs, config):
 {json.dumps(simplified_logs, ensure_ascii=False, indent=2)}
 """
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "/no_think 你是一个专业的安全分析与自动化防御策略分配专家助手。"},
-            {"role": "user", "content": prompt}
-        ]
-    }
-
     try:
         logger.info(f"正在将 IP [{ip}] 的 {len(logs)} 条日志发送给 AI 进行决断 (超时设置: {timeout}s)...")
-        logger.info(f"发送给 AI 的请求体:\n{json.dumps(payload, ensure_ascii=False, indent=2)}")
-        response = requests.post(api_url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()
-        
-        reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        # 使用 OpenAI 库调用 AI
+        client = OpenAI(api_key=api_key, base_url=api_url, timeout=timeout)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "你是一个专业的安全分析与自动化防御策略分配专家助手。"},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        reply = response.choices[0].message.content
         logger.info(f"AI 对 IP [{ip}] 的分析回复:\n{reply}")
         
         # 匹配 <ban>true</ban> 或 <ban>false</ban> 标签

@@ -91,7 +91,7 @@ class AIScanner:
 
             # 收集完整回复和工具调用
             content_buffer = ""
-            tool_calls = []
+            tool_calls_dict = {}  # 用字典按 index 合并
 
             for chunk in response:
                 choice = chunk.choices[0]
@@ -102,75 +102,104 @@ class AIScanner:
                     content_buffer += delta.content
                     yield {"type": "text", "content": delta.content}
 
-                # 处理工具调用
+                # 处理工具调用 - 需要按 index 合并
                 if delta.tool_calls:
                     for tc in delta.tool_calls:
-                        # 收集工具调用
-                        tool_calls.append({
-                            "id": tc.id,
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        })
-                        yield {"type": "status", "content": "AI 正在构造扫描指令..."}
+                        idx = tc.index
+                        if idx not in tool_calls_dict:
+                            tool_calls_dict[idx] = {
+                                "id": tc.id,
+                                "name": tc.function.name or "",
+                                "arguments": tc.function.arguments or ""
+                            }
+                        else:
+                            # 合并分片的 arguments
+                            if tc.function.name:
+                                tool_calls_dict[idx]["name"] = tc.function.name
+                            if tc.function.arguments:
+                                tool_calls_dict[idx]["arguments"] += tc.function.arguments
+
+            # 转换为列表
+            tool_calls = list(tool_calls_dict.values())
 
             # 第二步：如果有工具调用，执行工具
             if tool_calls:
-                tool_call = tool_calls[0]
-                func_name = tool_call["name"]
+                yield {"type": "status", "content": f"AI 正在调用 {len(tool_calls)} 个工具..."}
 
-                if func_name == "nmap_scan":
-                    raw_args = tool_call.get("arguments", "{}")
-                    log("AI", f"准备执行工具: {func_name}, 参数: {raw_args}")
+                # 收集所有工具的执行结果
+                tool_results = []
 
-                    try:
-                        args = json.loads(raw_args)
-                    except json.JSONDecodeError:
-                        yield {"type": "error", "content": "AI 生成的扫描参数格式错误"}
-                        return
+                # 处理所有工具调用
+                for idx, tool_call in enumerate(tool_calls):
+                    func_name = tool_call["name"]
 
-                    target = args.get("target")
-                    nmap_args = args.get("arguments", "-sV -T4")
+                    if func_name == "nmap_scan":
+                        raw_args = tool_call.get("arguments", "{}")
+                        log("AI", f"执行工具 #{idx+1}: {func_name}, 参数: {raw_args}")
 
-                    yield {"type": "status", "content": f"正在启动 Nmap 扫描目标: {target}..."}
+                        try:
+                            args = json.loads(raw_args)
+                        except json.JSONDecodeError:
+                            yield {"type": "error", "content": f"工具 #{idx+1} 参数格式错误"}
+                            continue
 
-                    # 执行扫描
-                    nm = scan_hosts(target, nmap_args)
-                    if not nm:
-                        yield {"type": "error", "content": "Nmap 执行失败，请检查系统环境。"}
-                        return
+                        target = args.get("target")
+                        nmap_args = args.get("arguments", "-sV -T4")
 
-                    hosts_data = parse_scan_results(nm)
+                        yield {"type": "status", "content": f"正在启动 Nmap 扫描目标: {target}..."}
 
-                    # 保存入库
-                    scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
-                    save_to_db(scan_id, hosts_data)
+                        # 执行扫描
+                        nm = scan_hosts(target, nmap_args)
+                        if not nm:
+                            yield {"type": "error", "content": f"Nmap 执行失败: {target}"}
+                            continue
 
-                    yield {"type": "scan", "scan_id": scan_id}
-                    yield {"type": "status", "content": "扫描完成，分析中..."}
+                        hosts_data = parse_scan_results(nm)
 
-                    # 第三步：将结果发回 AI 继续对话
+                        # 保存入库
+                        scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
+                        save_to_db(scan_id, hosts_data)
+
+                        yield {"type": "scan", "scan_id": scan_id}
+                        yield {"type": "status", "content": f"扫描 {target} 完成，发现 {len(hosts_data)} 台主机"}
+
+                        # 记录工具结果
+                        tool_results.append({
+                            "tool_call_id": tool_call["id"],
+                            "name": func_name,
+                            "content": json.dumps(hosts_data[:15], ensure_ascii=False)
+                        })
+
+                # 所有工具调用完成后，将结果发回 AI 继续对话
+                if tool_results:
+                    # 构建 tool_calls 消息
+                    tool_calls_msg = []
+                    for tc in tool_calls:
+                        tc_id = tc["id"] or f"call_{tc.get('index', 0)}"
+                        tool_calls_msg.append({
+                            "id": tc_id,
+                            "type": "function",
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": tc["arguments"]
+                            }
+                        })
+
                     messages.append({
                         "role": "assistant",
                         "content": content_buffer if content_buffer else "",
-                        "tool_calls": [
-                            {
-                                "id": tc["id"],
-                                "type": "function",
-                                "function": {
-                                    "name": tc["name"],
-                                    "arguments": tc["arguments"]
-                                }
-                            }
-                            for tc in tool_calls
-                        ]
+                        "tool_calls": tool_calls_msg
                     })
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call["id"],
-                        "name": func_name,
-                        "content": json.dumps(hosts_data[:15], ensure_ascii=False)
-                    })
+
+                    # 添加所有工具的结果
+                    for result in tool_results:
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": result["tool_call_id"],
+                            "name": result["name"],
+                            "content": result["content"]
+                        })
 
                     log("AI", "发起结果解读请求...")
                     final_response = self.client.chat.completions.create(
