@@ -20,11 +20,11 @@ if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
 try:
-    from network_scan import scan_hosts, parse_scan_results
+    from network_scan import scan_hosts, scan_hosts_rustscan, parse_scan_results, check_rustscan_available
 except ImportError:
     # 针对在其他目录下运行时的路径调整
     sys.path.append(os.path.join(BASE_DIR, "plugin"))
-    from network_scan import scan_hosts, parse_scan_results
+    from network_scan import scan_hosts, scan_hosts_rustscan, parse_scan_results, check_rustscan_available
 
 from database.models import ScannerModel
 from utils.logger import log
@@ -172,7 +172,14 @@ class AIScanner:
 
                     yield {"type": "status", "content": f"正在启动 Nmap 扫描目标: {target}..."}
 
-                    nm = scan_hosts(target, nmap_args)
+                    # 使用 rustscan 加速模式（如果可用）
+                    rustscan_path = check_rustscan_available()
+                    if rustscan_path:
+                        yield {"type": "status", "content": "使用 RustScan 加速模式..."}
+                        nm = scan_hosts_rustscan(target, rustscan_path)
+                    else:
+                        nm = scan_hosts(target, nmap_args)
+
                     if not nm:
                         yield {"type": "error", "content": "Nmap 执行失败，请检查系统环境。"}
                         return
