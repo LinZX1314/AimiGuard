@@ -1,10 +1,14 @@
 """
 AI Module - AI Chat and analysis endpoints
 """
-import json
 import threading
-from datetime import datetime
 from flask import Blueprint, request, g
+from ai_runtime import (
+    build_openai_messages,
+    call_openai_chat_completion,
+    execute_tool_calls,
+    get_tool_definitions,
+)
 from database.models import AiModel
 from .helpers import (
     require_auth, ok, err, _body, _load_cfg, _save_cfg,
@@ -12,7 +16,7 @@ from .helpers import (
 )
 from utils.logger import log as unified_log
 
-ai_bp = Blueprint('ai', __name__, url_prefix='/ai')
+ai_bp = Blueprint('ai', __name__)
 
 # Chat sessions (in-memory)
 _chat_sessions: dict[int, list] = {}
@@ -28,126 +32,65 @@ def _next_session_id():
         return _session_counter
 
 
-def _ai_diag(cfg: dict, message: str, level: str = 'INFO'):
-    """统一 AI 诊断日志输出"""
-    try:
-        enabled = cfg.get('logging', {}).get('ai_log', True)
-    except Exception:
-        enabled = True
-    if enabled:
-        unified_log('AIChat', message, level)
-
-
 def _call_ai(messages: list, cfg: dict, tools: list | None = None) -> dict:
     """调用 OpenAI-compatible 接口，返回 {content, tool_calls}"""
-    import urllib.error
-    import urllib.request
-    from json import JSONDecodeError
+    return call_openai_chat_completion(messages, cfg, tools=tools)
 
-    def _candidate_chat_urls(raw_url: str) -> list[str]:
-        u = (raw_url or '').strip().rstrip('/')
-        if not u:
-            return []
-        low = u.lower()
-        cands: list[str] = []
 
-        if low.endswith('/chat/completions'):
-            cands.append(u)
-        elif low.endswith('/v1'):
-            cands.append(f'{u}/chat/completions')
-            cands.append(f'{u[:-3]}/chat/completions')
-        else:
-            cands.append(f'{u}/v1/chat/completions')
-            cands.append(f'{u}/chat/completions')
+def _serialize_tool_call(tool_call: dict) -> dict:
+    return {
+        'id': tool_call.get('id', ''),
+        'type': tool_call.get('type', 'function'),
+        'name': tool_call.get('name', ''),
+        'arguments': tool_call.get('arguments', {}),
+    }
 
-        seen = set()
-        ordered = []
-        for item in cands:
-            if item and item not in seen:
-                ordered.append(item)
-                seen.add(item)
-        return ordered
 
-    ai_cfg = cfg.get('ai', {})
-    api_url = ai_cfg.get('api_url', '')
-    api_key = ai_cfg.get('api_key', '')
-    model = ai_cfg.get('model', 'gpt-3.5-turbo')
-    timeout = int(ai_cfg.get('timeout', 60))
-    endpoints = _candidate_chat_urls(api_url)
+def _serialize_chat_message(message: dict) -> dict:
+    payload = {
+        'role': message.get('role', ''),
+        'content': message.get('content') or '',
+        'created_at': message.get('ts', _now_iso()),
+    }
+    if message.get('role') == 'assistant' and message.get('tool_calls'):
+        payload['tool_calls'] = [_serialize_tool_call(item) for item in (message.get('tool_calls') or [])]
+    if message.get('role') == 'tool':
+        payload['tool_call_id'] = message.get('tool_call_id', '')
+        payload['name'] = message.get('name', '')
+    return payload
 
-    if not endpoints:
-        return {'content': '⚠️ AI 接口未配置，请在设置中填写 api_url。', 'tool_calls': []}
 
-    req_body: dict = {'model': model, 'messages': messages, 'stream': False}
-    if tools:
-        req_body['tools'] = tools
-        req_body['tool_choice'] = 'auto'
-    body = json.dumps(req_body).encode()
-    headers = {'Content-Type': 'application/json'}
-    if api_key:
-        headers['Authorization'] = f'Bearer {api_key}'
+def _run_ai_tool_rounds(history: list[dict], cfg: dict, tool_defs: list[dict]) -> tuple[str, list[dict]]:
+    generated_messages: list[dict] = []
+    reply = ''
 
-    last_http_error = None
-    last_parse_error = None
-    for endpoint in endpoints:
-        req = urllib.request.Request(endpoint, data=body, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                status_code = getattr(resp, 'status', None) or getattr(resp, 'code', None)
-                raw_bytes = resp.read()
-                raw_text = raw_bytes.decode('utf-8', errors='ignore').strip()
+    for _ in range(5):
+        result = _call_ai(build_openai_messages(history), cfg, tools=tool_defs)
+        content = result.get('content', '')
+        tool_calls = result.get('tool_calls', [])
 
-                if not raw_text:
-                    last_parse_error = f'空响应 @ {endpoint}'
-                    continue
+        assistant_message = {'role': 'assistant', 'content': content, 'ts': _now_iso()}
+        if tool_calls:
+            assistant_message['tool_calls'] = tool_calls
+        history.append(assistant_message)
+        generated_messages.append(assistant_message)
 
-                try:
-                    data = json.loads(raw_text)
-                except JSONDecodeError:
-                    snippet = raw_text[:200].replace('\n', ' ')
-                    last_parse_error = f'非 JSON 响应 @ {endpoint}: {snippet}'
-                    continue
+        if not tool_calls:
+            reply = content
+            break
 
-                try:
-                    msg = data['choices'][0]['message']
-                    content = msg.get('content') or ''
-                    raw_tcs = msg.get('tool_calls') or []
-                    parsed_tcs = []
-                    for tc in raw_tcs:
-                        try:
-                            args = json.loads(tc['function']['arguments'])
-                        except Exception:
-                            args = {}
-                        parsed_tcs.append({
-                            'id': tc.get('id', ''),
-                            'name': tc['function']['name'],
-                            'arguments': args,
-                        })
-                    return {'content': content, 'tool_calls': parsed_tcs}
-                except Exception:
-                    preview = json.dumps(data, ensure_ascii=False)[:300]
-                    last_parse_error = f'JSON 结构非 OpenAI 格式 @ {endpoint}: {preview}'
-                    continue
-        except urllib.error.HTTPError as e:
-            detail = ''
-            try:
-                detail = e.read().decode('utf-8', errors='ignore')
-            except Exception:
-                pass
-            if e.code == 404:
-                last_http_error = f'HTTP 404 Not Found @ {endpoint}'
-                continue
-            if detail:
-                return {'content': f'⚠️ AI 调用失败: HTTP {e.code} {e.reason} - {detail[:300]}', 'tool_calls': []}
-            return {'content': f'⚠️ AI 调用失败: HTTP {e.code} {e.reason}', 'tool_calls': []}
-        except Exception as e:
-            return {'content': f'⚠️ AI 调用失败: {e}', 'tool_calls': []}
+        tool_messages = execute_tool_calls(tool_calls)
+        for item in tool_messages:
+            item['ts'] = _now_iso()
+            history.append(item)
+            generated_messages.append(item)
+    else:
+        reply = '⚠️ 工具调用轮次已达上限，请缩小问题范围后重试。'
+        fallback_message = {'role': 'assistant', 'content': reply, 'ts': _now_iso()}
+        history.append(fallback_message)
+        generated_messages.append(fallback_message)
 
-    if last_http_error:
-        return {'content': f'⚠️ AI 调用失败: {last_http_error}', 'tool_calls': []}
-    if last_parse_error:
-        return {'content': f'⚠️ AI 调用失败: {last_parse_error}', 'tool_calls': []}
-    return {'content': '⚠️ AI 调用失败: 未知错误。', 'tool_calls': []}
+    return reply, generated_messages
 
 
 @ai_bp.route('/sessions', methods=['GET'])
@@ -157,6 +100,7 @@ def ai_sessions():
     sessions = [{'id': sid, 'title': f'对话 #{sid}',
                  'context_type': None, 'context_id': None,
                  'operator': g.user.get('username', ''),
+                 'created_at': _chat_sessions.get(sid, [{}])[-1].get('ts', _now_iso()) if _chat_sessions.get(sid) else _now_iso(),
                  'started_at': _now_iso(),
                  'expires_at': None}
                 for sid in _chat_sessions.keys()]
@@ -173,13 +117,8 @@ def ai_session_messages(session_id: int):
         role = m.get('role')
         if role == 'system':
             continue
-        if role == 'tool':
-            continue
-        content = m.get('content') or ''
-        if role == 'assistant' and not content and m.get('tool_calls'):
-            content = '🔧 已执行工具调用'
-        if role in ('user', 'assistant'):
-            out.append({'role': role, 'content': content, 'created_at': m.get('ts', _now_iso())})
+        if role in ('user', 'assistant', 'tool'):
+            out.append(_serialize_chat_message(m))
     return ok(out)
 
 
@@ -222,108 +161,10 @@ def ai_chat():
     cfg_now = _load_cfg()
 
     # Tool definitions
-    _TOOL_DEFS = [
-        {
-            'type': 'function',
-            'function': {
-                'name': 'nmap_scan',
-                'description': '执行 Nmap 网络扫描，返回主机与端口信息',
-                'parameters': {
-                    'type': 'object',
-                    'properties': {
-                        'target': {'type': 'string', 'description': '目标 IP、域名或网段'},
-                        'arguments': {'type': 'string', 'description': 'nmap 参数'}
-                    },
-                    'required': ['target']
-                }
-            }
-        }
-    ]
-
-    def _exec_nmap_scan(args: dict) -> str:
-        """执行 nmap 扫描并写库"""
-        try:
-            from plugin.network_scan import scan_hosts, parse_scan_results
-            from database.models import ScannerModel
-
-            target = (args.get('target') or '').strip()
-            raw_args = args.get('arguments', '-sV -O -T4')
-            nmap_args = str(raw_args) if raw_args else '-sV -O -T4'
-            if not target:
-                return json.dumps({'error': '缺少 target 参数'}, ensure_ascii=False)
-
-            nm = scan_hosts(target, nmap_args)
-            if not nm:
-                return json.dumps({'error': 'Nmap 执行失败'}, ensure_ascii=False)
-
-            hosts = parse_scan_results(nm)
-            try:
-                scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
-                count = 0
-                for host in hosts:
-                    try:
-                        open_ports_str = ','.join(map(str, host.get('open_ports', []) or []))
-                        services_list = []
-                        for svc in host.get('services', []) or []:
-                            svc_str = f"{svc.get('port', '')}/{svc.get('service', '')}"
-                            if svc.get('product'):
-                                svc_str += f" {svc['product']}"
-                            if svc.get('version'):
-                                svc_str += f" {svc['version']}"
-                            services_list.append(svc_str)
-                        services_str = '; '.join(services_list)
-                        ScannerModel.save_host(scan_id, host, scan_time, open_ports_str, services_str)
-                        ScannerModel.upsert_asset(scan_id, host, scan_time)
-                        count += 1
-                    except Exception:
-                        pass
-                if count > 0:
-                    ScannerModel.increment_hosts_count(scan_id, count)
-            except Exception as db_e:
-                unified_log('AIChat', f'nmap 结果写库失败: {db_e}', 'WARN')
-            return json.dumps(hosts[:15], ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({'error': str(e)}, ensure_ascii=False)
-
-    _TOOL_HANDLERS = {
-        'nmap_scan': _exec_nmap_scan,
-    }
+    _TOOL_DEFS = get_tool_definitions()
 
     # First call with tools
-    msgs_for_ai = [{'role': m['role'], 'content': m.get('content') or ''}
-                   for m in history
-                   if m['role'] in ('system', 'user', 'assistant')]
-    result = _call_ai(msgs_for_ai, cfg_now, tools=_TOOL_DEFS)
-    content = result.get('content', '')
-    tool_calls = result.get('tool_calls', [])
-
-    if tool_calls:
-        history.append({'role': 'assistant', 'content': content, 'tool_calls': tool_calls, 'ts': _now_iso()})
-        for tc in tool_calls:
-            func_name = tc.get('name', '')
-            handler = _TOOL_HANDLERS.get(func_name)
-            if handler:
-                tool_result = handler(tc.get('arguments', {}))
-            else:
-                tool_result = json.dumps({'error': f'未知工具: {func_name}'}, ensure_ascii=False)
-            history.append({'role': 'tool', 'tool_call_id': tc.get('id', ''), 'name': func_name, 'content': tool_result, 'ts': _now_iso()})
-
-        # Second call
-        msgs_for_ai2 = []
-        for m in history:
-            if m['role'] == 'tool':
-                msgs_for_ai2.append({'role': 'tool', 'tool_call_id': m.get('tool_call_id', ''), 'name': m.get('name', ''), 'content': m.get('content', '')})
-            elif m['role'] == 'assistant' and m.get('tool_calls'):
-                msgs_for_ai2.append({'role': 'assistant', 'content': m.get('content') or '', 'tool_calls': [{'id': t['id'], 'type': 'function', 'function': {'name': t['name'], 'arguments': json.dumps(t['arguments'], ensure_ascii=False)}} for t in m['tool_calls']]})
-            else:
-                msgs_for_ai2.append({'role': m['role'], 'content': m.get('content') or ''})
-        result2 = _call_ai(msgs_for_ai2, cfg_now)
-        reply = result2.get('content', '')
-        history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
-    else:
-        reply = content
-        history.append({'role': 'assistant', 'content': reply, 'ts': _now_iso()})
+    reply, turn_messages = _run_ai_tool_rounds(history, cfg_now, _TOOL_DEFS)
 
     # Save to DB
     try:
@@ -331,4 +172,9 @@ def ai_chat():
     except Exception:
         pass
 
-    return ok({'session_id': sid, 'reply': reply, 'context': {'type': None, 'id': None}})
+    return ok({
+        'session_id': sid,
+        'reply': reply,
+        'messages': [_serialize_chat_message(item) for item in turn_messages],
+        'context': {'type': None, 'id': None},
+    })

@@ -197,7 +197,7 @@ def main():
                 
                 # 开始分组和调用 AI 分析
                 try:
-                    from plugin.hfish.ai_analyzer import analyze_and_ban
+                    from plugin.ai_tools import analyze_and_ban
                     ip_logs = {}
                     for log in logs:
                         ip = log.get("attack_ip")

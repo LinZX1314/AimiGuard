@@ -3,7 +3,22 @@ import { ref, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import { api } from '@/api/index'
 
-interface Message { role: 'user' | 'assistant'; content: string }
+interface ToolCall {
+  id: string
+  type?: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+interface Message {
+  role: 'user' | 'assistant' | 'tool'
+  content: string
+  created_at?: string
+  name?: string
+  tool_call_id?: string
+  tool_calls?: ToolCall[]
+}
+
 interface Session { id: number; title: string; created_at: string }
 
 const sessions = ref<Session[]>([])
@@ -51,6 +66,23 @@ function renderMd(text: string): string {
   return marked.parse(text) as string
 }
 
+function formatJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value ?? '')
+  }
+}
+
+function formatToolResult(content: string): string {
+  if (!content) return ''
+  try {
+    return JSON.stringify(JSON.parse(content), null, 2)
+  } catch {
+    return content
+  }
+}
+
 async function loadSessions() {
   try {
     const d = await api.get<any>('/api/v1/ai/sessions')
@@ -90,7 +122,8 @@ async function send() {
     const d = await api.post<any>('/api/v1/ai/chat', body)
     const res = d.data ?? d
     const reply = res.reply ?? res.message ?? JSON.stringify(res)
-    messages.value.push({ role: 'assistant', content: reply })
+    const turnMessages = Array.isArray(res.messages) ? res.messages : [{ role: 'assistant', content: reply }]
+    messages.value.push(...turnMessages)
     if (res.session_id && !currentSession.value) {
       currentSession.value = res.session_id
       await loadSessions()
@@ -172,21 +205,40 @@ onMounted(loadSessions)
                 :class="['d-flex', 'mb-4', msg.role === 'user' ? 'justify-end' : 'justify-start']"
               >
                 <v-card
-                  :color="msg.role === 'user' ? 'primary' : 'surface'"
-                  :style="`max-width:72%; border:1px solid rgba(255,255,255,${msg.role==='user'?'0':'.08'})`"
+                  :color="msg.role === 'user' ? 'primary' : msg.role === 'tool' ? 'rgba(0,229,255,.06)' : 'surface'"
+                  :style="`max-width:${msg.role === 'tool' ? '78%' : '72%'}; border:1px solid rgba(255,255,255,${msg.role==='user'?'0':'.08'})`"
                   class="pa-3"
                 >
-                  <!-- Plain text for user, rendered Markdown for assistant -->
                   <div
                     v-if="msg.role === 'user'"
                     style="white-space:pre-wrap; font-size:.9rem; line-height:1.6"
                   >{{ msg.content }}</div>
                   <div
-                    v-else
+                    v-else-if="msg.role === 'assistant'"
                     class="md-body"
                     style="font-size:.9rem; line-height:1.7"
                     v-html="renderMd(msg.content)"
                   />
+                  <div v-else class="tool-body">
+                    <div class="text-caption text-medium-emphasis mb-2">
+                      工具结果 · {{ msg.name || 'unknown_tool' }}
+                    </div>
+                    <pre class="tool-pre">{{ formatToolResult(msg.content) }}</pre>
+                  </div>
+                  <div
+                    v-if="msg.role === 'assistant' && msg.tool_calls?.length"
+                    class="tool-call-block mt-3"
+                  >
+                    <div class="text-caption text-medium-emphasis mb-2">工具调用</div>
+                    <div
+                      v-for="toolCall in msg.tool_calls"
+                      :key="toolCall.id"
+                      class="tool-call-item mb-2"
+                    >
+                      <div class="text-body-2 font-weight-medium mb-1">{{ toolCall.name }}</div>
+                      <pre class="tool-pre">{{ formatJson(toolCall.arguments) }}</pre>
+                    </div>
+                  </div>
                 </v-card>
               </div>
               <div v-if="sending" class="d-flex justify-start mb-4">
@@ -257,4 +309,7 @@ onMounted(loadSessions)
 .md-body :deep(th),
 .md-body :deep(td)         { border:1px solid rgba(255,255,255,.1); padding:.3em .6em; }
 .md-body :deep(th)         { background:rgba(0,229,255,.08); }
+.tool-call-block           { border-top:1px solid rgba(255,255,255,.08); padding-top:12px; }
+.tool-call-item            { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; }
+.tool-pre                  { margin:0; white-space:pre-wrap; word-break:break-word; font-size:.8rem; line-height:1.55; background:rgba(0,0,0,.28); border-radius:6px; padding:.7em .8em; overflow-x:auto; }
 </style>
