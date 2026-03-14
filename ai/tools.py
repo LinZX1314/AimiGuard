@@ -268,223 +268,164 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
     },
 )
 def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
-    """交换机ACL配置工具 - 嵌套AI自主调用telnet工具"""
+    """交换机ACL配置工具"""
     import time
     import telnetlib
     import socket
 
-    from .utils import _get_base_url
-    from utils.logger import log as unified_log
-    from openai import OpenAI
+    from database.models import SwitchAclModel
 
     host = args.get('host', '')
     port = args.get('port', 23)
-    username = args.get('username', '')
     password = args.get('password', '')
-    secret = args.get('secret', '')
-    acl_number = args.get('acl_number', 3000)
+    secret = args.get('secret', password)
+    acl_number = args.get('acl_number', 30)
     action = args.get('action', 'ban')
     target_ip = args.get('target_ip', '')
-    custom_commands = args.get('custom_commands', '')
     description = args.get('description', '')
 
-    if cfg is None:
-        return {'ok': False, 'error': '配置加载失败'}
+    if not host or not password:
+        return {'ok': False, 'error': '缺少必要参数: host, password'}
 
     if action in ['ban', 'unban'] and not target_ip:
-        return {'ok': False, 'error': 'ban/unban操作需要指定target_ip'}
+        return {'ok': False, 'error': '缺少目标IP: target_ip'}
 
-    unified_log('SwitchACL', f'开始配置交换机 {host}, action={action}', 'INFO')
-
-    # 获取AI配置
-    ai_cfg = cfg.get('ai', {})
-    api_url = ai_cfg.get('api_url', '')
-    api_key = ai_cfg.get('api_key', '')
-    model = ai_cfg.get('model', 'gpt-3.5-turbo')
-    timeout = int(ai_cfg.get('timeout', 60))
-    base_url = _get_base_url(api_url)
-
-    if not api_url or not api_key:
-        return {'ok': False, 'error': 'AI API未配置'}
-
-    # 构造嵌套AI的system prompt
-    system_prompt = f"""你是一个专业的网络设备配置助手。你可以通过telnet工具来配置交换机。
-
-可用工具：
-1. telnet - 用于连接交换机并执行命令
-   - mode=view: 查看配置（执行display命令）
-   - mode=exec: 执行配置命令
-
-你需要完成的任务："""
-
-    if action == 'ban':
-        system_prompt += f"在交换机 ACL {acl_number} 中封禁IP {target_ip}"
-    elif action == 'unban':
-        system_prompt += f"在交换机 ACL {acl_number} 中解封IP {target_ip}"
-    elif action == 'custom':
-        system_prompt += f"在交换机 ACL {acl_number} 中执行自定义配置: {custom_commands}"
-
-    system_prompt += f"""
-
-交换机信息：
-- IP: {host}
-- 端口: {port}
-- ACL编号: {acl_number}
-
-命令参考（锐捷交换机）：
-- 进入特权模式: en
-- 进入配置模式: config
-- 创建标准ACL: ip access-list standard <num> 或 access-list <num>
-- 在ACL内添加规则: deny host <ip> 或 permit any
-- 在全局添加规则: access-list <num> deny host <ip>
-- 绑定到接口: interface range gigabitethernet 0/1-24 然后 ip access-group <num> in
-- 保存配置: wr
-
-重要要求：
-1. 先使用telnet工具(mode=view)查看当前ACL配置: show access-list {acl_number}
-2. 分析现有配置：
-   - 如果ACL不存在，需要创建ACL并绑定到接口
-   - 如果ACL已存在，直接添加规则
-3. 使用telnet工具(mode=exec)执行配置命令
-4. 完成后用 'show access-list {acl_number}' 确认配置
-5. 最后用 'wr' 保存配置"""
-
-    # 准备工具定义给嵌套AI使用
-    telnet_tool_def = {
-        "type": "function",
-        "function": {
-            "name": "telnet",
-            "description": "通过Telnet连接交换机并执行命令。mode=view用于查看配置，mode=exec用于执行配置命令。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "host": {"type": "string", "description": "交换机IP地址"},
-                    "port": {"type": "integer", "description": "Telnet端口，默认23"},
-                    "username": {"type": "string", "description": "用户名"},
-                    "password": {"type": "string", "description": "登录密码"},
-                    "secret": {"type": "string", "description": "特权模式密码"},
-                    "command": {"type": "string", "description": "要执行的命令"},
-                    "mode": {"type": "string", "description": "模式：view(查看)或exec(执行)", "enum": ["view", "exec"]},
-                },
-                "required": ["host", "password", "command"],
-            },
-        }
-    }
-
-    # 构建初始消息
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "请开始配置交换机。"}
-    ]
-
-    max_iterations = 10  # 最多迭代次数，防止无限循环
-    iteration = 0
-    executed_commands = []
+    rule_id = None
 
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        socket.setdefaulttimeout(30)
+        tn = telnetlib.Telnet(host, port, 30)
 
-        while iteration < max_iterations:
-            iteration += 1
-            unified_log('SwitchACL', f'嵌套AI迭代 {iteration}', 'INFO')
+        # 步骤1: 连接并读取欢迎信息
+        time.sleep(2)
+        try:
+            tn.read_very_eager()
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤1失败: {e}'}
 
-            # 调用AI，判断是否需要调用工具
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=[telnet_tool_def],
-                    tool_choice="auto"
-                )
-            except Exception as e:
-                return {'ok': False, 'error': f'AI调用失败: {e}'}
+        # 步骤2: 登录
+        try:
+            tn.write((password + '\r').encode('utf-8'))
+            time.sleep(2)
+            tn.read_very_eager()
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤2(登录)失败: {e}'}
 
-            if not response.choices:
-                return {'ok': False, 'error': 'AI返回为空'}
+        # 步骤3: 进入特权模式
+        try:
+            tn.write(b'en\r')
+            time.sleep(1)
+            output = tn.read_very_eager().decode('utf-8', errors='ignore')
 
-            assistant_msg = response.choices[0].message
-            if assistant_msg is None:
-                return {'ok': False, 'error': 'AI返回消息为空'}
+            if 'Password' in output:
+                tn.write((secret + '\r').encode('utf-8'))
+                time.sleep(2)
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤3(en)失败: {e}'}
 
-            messages.append({
-                "role": "assistant",
-                "content": assistant_msg.content,
-                "tool_calls": assistant_msg.tool_calls if assistant_msg.tool_calls else None
-            })
+        # 步骤4: 获取规则ID并保存到数据库
+        try:
+            if action == 'ban':
+                used_ids = set()
+                rules = SwitchAclModel.get_rules(host, acl_number)
+                for r in rules:
+                    rid = r.get('rule_id')
+                    if rid and 1 <= rid < 20000:
+                        used_ids.add(rid)
 
-            # 检查是否有工具调用
-            if not assistant_msg.tool_calls:
-                # AI没有调用工具，说明任务完成，返回结果
-                result = assistant_msg.content or "操作完成"
-                break
+                rule_id = 1
+                while rule_id in used_ids and rule_id < 20000:
+                    rule_id += 1
 
-            # 处理工具调用
-            for tool_call in assistant_msg.tool_calls:
-                if tool_call.function is None:
-                    continue
-                tool_name = tool_call.function.name
-                tool_args = tool_call.function.arguments
+                if rule_id >= 20000:
+                    tn.close()
+                    return {'ok': False, 'error': '无可用规则ID（1-19999已用完）'}
 
-                # 解析参数
-                if tool_args is None:
-                    tool_args = {}
-                elif isinstance(tool_args, str):
-                    import json
-                    try:
-                        tool_args = json.loads(tool_args)
-                    except:
-                        tool_args = {}
+                rule_text = f'{rule_id} deny host {target_ip}'
+                SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
 
-                if not isinstance(tool_args, dict):
-                    tool_args = {}
+            elif action == 'unban':
+                rules = SwitchAclModel.get_rules(host, acl_number)
+                for r in rules:
+                    if r.get('target_ip') == target_ip and r.get('action') == 'ban':
+                        rule_id = r.get('rule_id')
+                        break
 
-                # 填充缺失的参数
-                tool_args.setdefault('host', host)
-                tool_args.setdefault('port', port)
-                tool_args.setdefault('username', username)
-                tool_args.setdefault('password', password)
-                tool_args.setdefault('secret', secret)
+                if rule_id is None:
+                    tn.close()
+                    return {'ok': False, 'error': f'未找到IP {target_ip} 的封禁规则'}
 
-                unified_log('SwitchACL', f'嵌套AI调用工具: {tool_name}, 参数: {tool_args}', 'INFO')
+                SwitchAclModel.remove_rule(host, acl_number, target_ip)
+            else:
+                tn.close()
+                return {'ok': False, 'error': f'未知操作: {action}'}
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤4(获取规则ID)失败: {e}'}
 
-                # 调用telnet工具
-                if tool_name == 'telnet':
-                    result = _telnet(tool_args, cfg)
-                else:
-                    result = {'ok': False, 'error': f'未知工具: {tool_name}'}
+        # 步骤5: 进入配置模式
+        try:
+            tn.write(b'config\r')
+            time.sleep(1)
+            tn.read_very_eager()
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤5(config)失败: {e}'}
 
-                # 记录执行的命令
-                if tool_args.get('mode') == 'exec':
-                    executed_commands.append(tool_args.get('command', ''))
+        # 步骤6: 进入ACL配置模式
+        try:
+            tn.write((f'ip access-list standard {acl_number}\r').encode('utf-8'))
+            time.sleep(2)
+            tn.read_very_eager()
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤6(ACL配置)失败: {e}'}
 
-                # 将工具结果返回给AI
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result, ensure_ascii=False)
-                })
+        # 步骤7: 执行封禁/解封命令
+        try:
+            if action == 'ban':
+                cmd = f'{rule_id} deny host {target_ip}'
+            else:
+                cmd = f'no {rule_id}'
 
-        else:
-            # 超过最大迭代次数
-            return {
-                'ok': False,
-                'error': '操作超时，已达到最大迭代次数',
-                'executed_commands': executed_commands
-            }
+            tn.write((cmd + '\r').encode('utf-8'))
+            time.sleep(2)
+            tn.read_very_eager()
+        except Exception as e:
+            tn.close()
+            return {'ok': False, 'error': f'步骤7(执行命令)失败: {e}'}
+
+        # 步骤8: 退出并保存
+        try:
+            tn.write(b'ex\r')
+            time.sleep(1)
+            tn.write(b'ex\r')
+            time.sleep(1)
+            tn.write(b'wr\r')
+            time.sleep(3)
+        except Exception as e:
+            pass  # 保存命令失败不返回错误
+
+        try:
+            tn.close()
+        except:
+            pass
 
         return {
             'ok': True,
-            'message': f'交换机 {host} 配置完成',
-            'action': action,
-            'target_ip': target_ip,
+            'host': host,
             'acl_number': acl_number,
-            'description': description,
-            'executed_commands': executed_commands,
-            'ai_response': result
+            'action': action,
+            'target_ip': target_ip if action != 'ban' else None,
+            'rule_id': rule_id if action in ['ban', 'unban'] else None,
+            'message': f"{'封禁' if action == 'ban' else '解封'}成功",
         }
 
     except Exception as e:
-        return {'ok': False, 'error': f'执行失败: {e}'}
+        return {'ok': False, 'error': f'ACL配置失败: {e}'}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

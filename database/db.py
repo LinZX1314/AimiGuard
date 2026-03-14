@@ -150,7 +150,25 @@ def init_db():
             FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id)
         )
     ''')
-    
+
+    # ================= 交换机ACL策略表 =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS switch_acl_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            switch_ip TEXT NOT NULL,
+            acl_number INTEGER NOT NULL,
+            rule_id INTEGER,
+            action TEXT NOT NULL,
+            target_ip TEXT,
+            rule_text TEXT NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    ''')
+
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_acl_switch ON switch_acl_rules(switch_ip, acl_number)')
+
     # 尝试为旧表增加字段（平滑升级）
     try:
         cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN session_id INTEGER')

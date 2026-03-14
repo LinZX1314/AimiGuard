@@ -596,3 +596,66 @@ class AiModel:
     @staticmethod
     def save_chat_history(query, response="", scan_id=None, history_id=None):
         return AiModel.save_message(None, 'user', query)
+
+
+class SwitchAclModel:
+    """交换机ACL策略管理"""
+
+    @staticmethod
+    def add_rule(switch_ip, acl_number, rule_id, action, target_ip, rule_text, description=''):
+        """添加ACL规则"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO switch_acl_rules
+            (switch_ip, acl_number, rule_id, action, target_ip, rule_text, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (switch_ip, acl_number, rule_id, action, target_ip, rule_text, description, now, now))
+        rule_id_db = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return rule_id_db
+
+    @staticmethod
+    def remove_rule(switch_ip, acl_number, target_ip):
+        """删除ACL规则"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE switch_acl_rules SET action = 'removed', updated_at = ?
+            WHERE switch_ip = ? AND acl_number = ? AND target_ip = ? AND action != 'removed'
+        ''', (now, switch_ip, acl_number, target_ip))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def get_rules(switch_ip=None, acl_number=None):
+        """获取ACL规则列表"""
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        sql = 'SELECT * FROM switch_acl_rules WHERE action != "removed"'
+        params = []
+        if switch_ip:
+            sql += ' AND switch_ip = ?'
+            params.append(switch_ip)
+        if acl_number:
+            sql += ' AND acl_number = ?'
+            params.append(acl_number)
+        sql += ' ORDER BY acl_number, rule_id'
+
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def clear_all():
+        """清空所有ACL规则"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM switch_acl_rules')
+        conn.commit()
+        conn.close()
