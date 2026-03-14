@@ -21,19 +21,19 @@
 AimiGuard/
 ├── config.json              # 核心配置文件 (服务端口、Nmap、HFish、AI、交换机等)
 ├── README.md
+├── main.py                  # 项目启动入口
 ├── database/                # 数据层 [Model]
 │   ├── db.py                # SQLite 连接与建表初始化
 │   ├── models.py            # 面向对象查询/写入接口
 │   └── aimiguard.db         # (运行后自动生成) 统一数据库
-├── hfish/                   # 蜜罐子系统
+├── plugin/                  # 扫描与蜜罐插件
 │   ├── attack_log_sync.py   # HFish API 对接与日志格式化
-│   └── ai_analyzer.py       # AI 联动分析与交换机封堵
-├── nmap_plugin/             # 扫描子系统
-│   ├── network_scan.py      # 主机探活、端口扫描、NSE 漏洞执行
-│   └── ai_scanner.py        # AI 扫描指令解析引擎
+│   ├── ai_tools.py          # AI 攻击日志分析与自动封禁
+│   └── network_scan.py      # 主机探活、端口扫描、NSE 漏洞执行
 └── web/                     # Web 层 [Controller + View]
-    ├── web_app.py           # Flask 主入口，注册 Blueprint，启动后台线程
-    ├── api_v1.py            # ★ RESTful API Blueprint (/api/v1)  ← stdlib-only JWT
+    ├── flask_app.py         # Flask 主入口，注册 Blueprint，启动后台线程
+    ├── api/                 # ★ RESTful API Blueprint (/api/v1)
+    ├── ai_runtime/          # AI tools/tool_calls 通用运行时
     ├── vue/                 # ★ Vue 3 + Vuetify 3 + Vite 6 前端源码
     │   ├── package.json
     │   ├── vite.config.ts   # 开发端口 3001，代理 /api → :5000，ECharts 分包
@@ -61,7 +61,7 @@ AimiGuard/
 ### 第一步：安装 Python 依赖
 
 ```bash
-pip install flask flask-sock python-nmap requests netmiko
+pip install -r requirements.txt
 ```
 
 ### 第二步：配置 config.json
@@ -85,7 +85,7 @@ pip install flask flask-sock python-nmap requests netmiko
   },
   "ai": {
     "api_key": "YOUR_LLM_KEY",
-    "base_url": "https://api.openai.com/v1",
+    "api_url": "https://api.openai.com/v1",
     "model": "gpt-4o"
   }
 }
@@ -94,8 +94,7 @@ pip install flask flask-sock python-nmap requests netmiko
 ### 第三步：启动后端（Flask）
 
 ```bash
-cd web
-python web_app.py
+python .\main.py
 ```
 
 > Flask 监听 `http://localhost:5000`，首次运行会自动创建 `database/aimiguard.db`。
