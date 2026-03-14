@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api/index'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const loading  = ref(false)
 const scanning = ref(false)
 const hosts    = ref<any[]>([])
@@ -97,13 +99,23 @@ async function startScan() {
   }
 }
 
-onUnmounted(() => clearInterval(progressTimer))
-
 async function openDetail(host: any) {
   detailHost.value = host
   detailDlg.value = true
 }
 
+function analyzeWithAi(host: any) {
+  detailDlg.value = false
+  router.push({
+    path: '/ai',
+    query: {
+      context_type: 'host',
+      context_id: host.ip
+    }
+  })
+}
+
+onUnmounted(() => clearInterval(progressTimer))
 onMounted(async () => { await loadScans(); await loadHosts() })
 </script>
 
@@ -225,7 +237,13 @@ onMounted(async () => { await loadScans(); await loadHosts() })
             </v-table>
           </div>
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn color="primary" variant="text" @click="detailDlg = false">关闭</v-btn></v-card-actions>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-robot" @click="analyzeWithAi(detailHost)">
+            AI 深度分析
+          </v-btn>
+          <v-btn color="primary" variant="text" @click="detailDlg = false">关闭</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </v-container>

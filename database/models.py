@@ -477,7 +477,7 @@ class StatsModel:
         }
 
 class AiModel:
-    """AI 分析与会话历史模型。"""
+    """AI 分析与会话历史持久化模型。"""
     @staticmethod
     def save_analysis(ip, analysis_text, decision):
         from datetime import datetime
@@ -509,51 +509,90 @@ class AiModel:
         conn.close()
         return {r["ip"]: dict(r) for r in rows}
 
-    @staticmethod
-    def save_chat_history(query, response="", scan_id=None, history_id=None):
-        from datetime import datetime
-        import json
-        conn = get_connection()
-        cursor = conn.cursor()
-        create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        resp_str = json.dumps(response, ensure_ascii=False) if isinstance(response, dict) else response
-        
-        if history_id:
-            cursor.execute('''
-                UPDATE ai_chat_history 
-                SET response = ?, scan_id = ?
-                WHERE id = ?
-            ''', (resp_str, scan_id, history_id))
-            last_id = history_id
-        else:
-            cursor.execute('''
-                INSERT INTO ai_chat_history (query, response, scan_id, create_time)
-                VALUES (?, ?, ?, ?)
-            ''', (query, resp_str, scan_id, create_time))
-            last_id = cursor.lastrowid
-            
-        conn.commit()
-        conn.close()
-        return last_id
+    # --- 会话持久化管理 ---
 
     @staticmethod
-    def get_chat_history(limit=50):
+    def create_session(title="新对话", context_type=None, context_id=None):
+        from datetime import datetime
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO ai_chat_sessions (title, context_type, context_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (title, context_type, context_id, now, now))
+        sid = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return sid
+
+    @staticmethod
+    def get_sessions(limit=50):
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM ai_chat_sessions ORDER BY updated_at DESC LIMIT ?', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def delete_session(session_id):
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM ai_chat_history WHERE session_id = ?', (session_id,))
+        cursor.execute('DELETE FROM ai_chat_sessions WHERE id = ?', (session_id,))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def save_message(session_id, role, content, tool_calls=None):
+        """保存单条消息到指定会话"""
+        from datetime import datetime
+        import json
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        tc_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
+        
+        cursor.execute('''
+            INSERT INTO ai_chat_history (session_id, role, content, tool_calls, create_time, query, response)
+            VALUES (?, ?, ?, ?, ?, '', '')
+        ''', (session_id, role, content, tc_json, now))
+        
+        # 更新会话最后活跃时间
+        if session_id:
+            cursor.execute('UPDATE ai_chat_sessions SET updated_at = ? WHERE id = ?', (now, session_id))
+        
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def get_messages(session_id):
+        """获取指定会话的所有消息历史"""
         import json
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM ai_chat_history ORDER BY create_time DESC LIMIT ?', (limit,))
+        cursor.execute('SELECT * FROM ai_chat_history WHERE session_id = ? ORDER BY id ASC', (session_id,))
         rows = cursor.fetchall()
         conn.close()
         
-        results = []
-        for row in rows:
-            d = dict(row)
-            try:
-                resp = d.get('response')
-                if resp and isinstance(resp, str) and (resp.startswith('{') or resp.startswith('[')):
-                    d['response'] = json.loads(resp)
-            except Exception:
-                pass
-            results.append(d)
-        return results
+        history = []
+        for r in rows:
+            d = dict(r)
+            msg = {
+                'role': d['role'],
+                'content': d['content'] or d['response'] or d['query'], # 兼容旧字段
+                'ts': d['create_time']
+            }
+            if d.get('tool_calls'):
+                try:
+                    msg['tool_calls'] = json.loads(d['tool_calls'])
+                except: pass
+            history.append(msg)
+        return history
+
+    # 为兼容旧版保留的 save_chat_history
+    @staticmethod
+    def save_chat_history(query, response="", scan_id=None, history_id=None):
+        return AiModel.save_message(None, 'user', query)

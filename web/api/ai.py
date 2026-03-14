@@ -1,5 +1,5 @@
 """
-AI Module - AI Chat endpoints
+AI Module - AI Chat endpoints（含上下文/会话持久化与 Tool Use 支持）
 """
 import json
 import threading
@@ -8,6 +8,9 @@ from ai import (
     build_openai_messages,
     call_openai_chat_completion,
     stream_openai_chat_completion,
+    stream_openai_chat_with_tools,
+    AI_TOOLS,
+    execute_tool,
 )
 from database.models import AiModel
 from .helpers import (
@@ -18,168 +21,191 @@ from utils.logger import log as unified_log
 
 ai_bp = Blueprint('ai', __name__)
 
-# Chat sessions (in-memory)
+# 运行时会话缓存（LRU 结构或简单字典，用于加速当前对话）
 _chat_sessions: dict[int, list] = {}
-_session_counter = 0
 _session_lock = threading.Lock()
 
 
-def _next_session_id():
-    """线程安全地分配会话 ID"""
-    global _session_counter
+def _get_system_context() -> str:
+    """获取实时系统摘要，作为 AI 的底座背景知识"""
+    from database.models import StatsModel, HFishModel, VulnModel
+    try:
+        summary = StatsModel.get_dashboard_summary()
+        hfish_stats = HFishModel.get_stats()
+        vuln_stats = VulnModel.get_vuln_stats()
+        
+        ctx = [
+            "### 当前系统态势摘要 ###",
+            f"- 在线设备数: {summary.get('online_devices', 0)}",
+            f"- 存疑/有风险设备: {vuln_stats.get('vulnerable_devices', 0)}",
+            f"- 24小时内遭受攻击次数: {summary.get('attacks_24h', 0)}",
+            f"- 最近扫描时间: {summary.get('last_scan', '尚未扫描')}",
+            f"- 高危威胁统计: " + ", ".join([f"{s['level']}: {s['count']}" for s in hfish_stats.get('threat_stats', [])]),
+            "\n你不仅是一个安服专家，还具备调用本地扫描工具的能力。你可以通过调用 nmap_scan 工具来主动探测网络资产、验证漏洞或分析特定 IP。"
+        ]
+        return "\n".join(ctx)
+    except Exception as e:
+        return f"系统摘要获取失败: {e}"
+
+
+def _get_history(session_id: int) -> list:
+    """从内存或数据库获取会话历史"""
     with _session_lock:
-        _session_counter += 1
-        return _session_counter
+        if session_id in _chat_sessions:
+            return _chat_sessions[session_id]
+        
+        # 内存没有，尝试从 DB 加载
+        history = AiModel.get_messages(session_id)
+        if history:
+            _chat_sessions[session_id] = history
+            return history
+    return []
 
 
-def _call_ai(messages: list, cfg: dict) -> dict:
-    """调用 OpenAI-compatible 接口，返回 {content}"""
-    return call_openai_chat_completion(messages, cfg)
-
-
-def _serialize_chat_message(message: dict) -> dict:
-    payload = {
-        'role': message.get('role', ''),
-        'content': message.get('content') or '',
-        'created_at': message.get('ts', _now_iso()),
-    }
-    return payload
-
+# ──────────────────────────────────────────────────────────────────────────────
+# 路由接口
+# ──────────────────────────────────────────────────────────────────────────────
 
 @ai_bp.route('/sessions', methods=['GET'])
 @require_auth
 def ai_sessions():
-    """Get AI sessions"""
-    sessions = [{'id': sid, 'title': f'对话 #{sid}',
-                 'context_type': None, 'context_id': None,
-                 'operator': g.user.get('username', ''),
-                 'created_at': _chat_sessions.get(sid, [{}])[-1].get('ts', _now_iso()) if _chat_sessions.get(sid) else _now_iso(),
-                 'started_at': _now_iso(),
-                 'expires_at': None}
-                for sid in _chat_sessions.keys()]
+    """从数据库获取持久化的会话列表"""
+    sessions = AiModel.get_sessions()
     return ok(sessions)
 
 
 @ai_bp.route('/sessions/<int:session_id>/messages', methods=['GET'])
 @require_auth
 def ai_session_messages(session_id: int):
-    """Get session messages"""
-    msgs = _chat_sessions.get(session_id, [])
-    out = []
-    for m in msgs:
-        role = m.get('role')
-        if role == 'system':
-            continue
-        if role in ('user', 'assistant'):
-            out.append(_serialize_chat_message(m))
+    """获取指定会话的历史记录（含持久化数据）"""
+    history = _get_history(session_id)
+    # 过滤掉系统消息，只返回给前端对话部分
+    out = [m for m in history if m.get('role') != 'system']
     return ok(out)
 
 
 @ai_bp.route('/sessions/<int:session_id>', methods=['DELETE'])
 @require_auth
 def ai_session_delete(session_id: int):
-    """Delete session"""
-    _chat_sessions.pop(session_id, None)
-    return ok()
-
-
-@ai_bp.route('/chat', methods=['POST'])
-@require_auth
-def ai_chat():
-    """AI Chat endpoint"""
-    unified_log('AIChat', f'收到 /api/v1/ai/chat 请求 from={request.remote_addr}', 'INFO')
-
-    body = _body()
-    message = body.get('message', '').strip()
-    session_id = body.get('session_id')
-
-    if not message:
-        return err('消息不能为空')
-
-    if session_id and session_id in _chat_sessions:
-        sid = session_id
-        history = _chat_sessions[sid]
-    else:
-        sid = _next_session_id()
-        history = []
-        _chat_sessions[sid] = history
-
-    ts = _now_iso()
-    history.append({'role': 'user', 'content': message, 'ts': ts})
-    cfg_now = _load_cfg()
-
-    # 调用 AI（无工具）
-    result = _call_ai(build_openai_messages(history), cfg_now)
-    reply = result.get('content', '')
-
-    assistant_message = {'role': 'assistant', 'content': reply, 'ts': _now_iso()}
-    history.append(assistant_message)
-
-    # Save to DB
-    try:
-        AiModel.save_chat_history(message, reply)
-    except Exception:
-        pass
-
+    """从数据库和缓存中删除会话"""
+    AiModel.delete_session(session_id)
+    with _session_lock:
+        _chat_sessions.pop(session_id, None)
     return ok()
 
 
 @ai_bp.route('/chat/stream', methods=['POST'])
 @require_auth
 def ai_chat_stream():
-    """AI Chat streaming endpoint"""
-    unified_log('AIChat', f'收到 /api/v1/ai/chat/stream 请求 from={request.remote_addr}', 'INFO')
+    """
+    AI 聊天流式接口（增加持久化深度和上下文感知）
+    """
+    unified_log('AIChat', f'Stream Request from={request.remote_addr}', 'INFO')
 
-    body = _body()
-    message = body.get('message', '').strip()
-    session_id = body.get('session_id')
+    body         = _body()
+    message      = body.get('message', '').strip()
+    session_id   = body.get('session_id')
+    context_type = body.get('context_type')
+    context_id   = body.get('context_id')
 
     if not message:
-        return err('消息不能为空')
+        return err('消息内容不能为空')
 
-    if session_id and session_id in _chat_sessions:
-        sid = session_id
-        history = _chat_sessions[sid]
+    # 1. 确定会话 ID
+    if session_id:
+        sid = int(session_id)
+        history = _get_history(sid)
     else:
-        sid = _next_session_id()
+        # 创建新会话
+        title = message[:20] + "..." if len(message) > 20 else message
+        sid = AiModel.create_session(title=title, context_type=context_type, context_id=context_id)
         history = []
-        _chat_sessions[sid] = history
+        
+        # 注入初始上下文
+        sys_info = _get_system_context()
+        if context_type and context_id:
+            sys_info += f"\n当前焦点上下文: {context_type} = {context_id}"
+            if context_type == 'host':
+                from database.models import NmapModel
+                host = NmapModel.get_host_by_ip(context_id)
+                if host: sys_info += f"\n详细资产数据: {json.dumps(host, ensure_ascii=False)}"
+        
+        history.append({'role': 'system', 'content': f"你是一个专业的网络安全助手。背景：\n{sys_info}", 'ts': _now_iso()})
+        with _session_lock:
+            _chat_sessions[sid] = history
 
-    ts = _now_iso()
-    history.append({'role': 'user', 'content': message, 'ts': ts})
+    # 2. 保存并追加用户消息
+    history.append({'role': 'user', 'content': message, 'ts': _now_iso()})
+    AiModel.save_message(sid, 'user', message)
+    
     cfg_now = _load_cfg()
 
-    full_reply = []
-
     def generate():
-        import time
-        nonlocal full_reply
         full_reply = []
+        tool_calls_received = []
 
-        for chunk, error in stream_openai_chat_completion(
+        # 第一轮：LLM 判断内容或调用工具
+        for chunk, error, tool_call in stream_openai_chat_with_tools(
             build_openai_messages(history),
-            cfg_now
+            cfg_now,
+            tools=AI_TOOLS
         ):
             if error:
-                yield f"data: {json.dumps({'error': error})}\n\n"
+                yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
                 return
             if chunk:
                 full_reply.append(chunk)
-                data = f"data: {json.dumps({'content': chunk})}\n\n"
-                yield data
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            if tool_call:
+                tool_calls_received.append(tool_call)
+                yield f"data: {json.dumps({'tool_call': tool_call}, ensure_ascii=False)}\n\n"
 
-        # 保存到历史
-        reply_text = ''.join(full_reply)
-        assistant_message = {'role': 'assistant', 'content': reply_text, 'ts': _now_iso()}
-        history.append(assistant_message)
+        # 如果没有工具调用，保存回复并结束
+        if not tool_calls_received:
+            res_content = "".join(full_reply)
+            history.append({'role': 'assistant', 'content': res_content, 'ts': _now_iso()})
+            AiModel.save_message(sid, 'assistant', res_content)
+            yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
+            return
 
-        # 保存到数据库
-        try:
-            AiModel.save_chat_history(message, reply_text)
-        except Exception:
-            pass
+        # 执行工具并处理
+        # assistant 消息持久化（包含 tool_calls）
+        assistant_tc_msg = {
+            'role': 'assistant',
+            'content': "".join(full_reply) or None,
+            'tool_calls': [
+                {
+                    'id': tc['id'],
+                    'type': 'function',
+                    'function': {'name': tc['name'], 'arguments': json.dumps(tc['arguments'], ensure_ascii=False)}
+                } for tc in tool_calls_received
+            ]
+        }
+        history.append(assistant_tc_msg)
+        AiModel.save_message(sid, 'assistant', assistant_tc_msg['content'], tool_calls=assistant_tc_msg['tool_calls'])
 
-        yield f"data: {json.dumps({'done': True, 'session_id': sid})}\n\n"
+        for tc in tool_calls_received:
+            res = execute_tool(tc['name'], tc['arguments'], cfg_now)
+            yield f"data: {json.dumps({'tool_result': res[:1000] + '...' if len(res)>1000 else res}, ensure_ascii=False)}\n\n"
+            
+            # 保存工具执行结果
+            history.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': res, 'ts': _now_iso()})
+            AiModel.save_message(sid, 'tool', res)
+
+        # 第二轮：整合结果
+        second_reply = []
+        for chunk, error in stream_openai_chat_completion(build_openai_messages(history), cfg_now):
+            if error:
+                yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
+                return
+            if chunk:
+                second_reply.append(chunk)
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+
+        final_content = "".join(second_reply)
+        history.append({'role': 'assistant', 'content': final_content, 'ts': _now_iso()})
+        AiModel.save_message(sid, 'assistant', final_content)
+        yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -195,5 +221,5 @@ def ai_chat_stream():
 
 
 def new_chat():
-    """Clear current session"""
+    """清空缓存，强制重新从数据库加载"""
     _chat_sessions.clear()

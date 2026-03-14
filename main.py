@@ -62,6 +62,12 @@ def main():
         start_runtime_workers()
         print_startup_banner(config)
 
+    # 屏蔽 Flask 启动横幅（"* Serving Flask app ..." 等提示）
+    # 该输出由 flask.cli.show_server_banner 通过 click.secho 写入 stdout，
+    # 与 Python logging 无关，必须 monkey-patch 才能屏蔽
+    import flask.cli
+    flask.cli.show_server_banner = lambda *a, **kw: None
+
     app.run(host=host, port=port, debug=debug, threaded=True)
 
 

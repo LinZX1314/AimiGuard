@@ -118,7 +118,7 @@ def run_nmap_scan_loop():
             cfg = _load_cfg()
             nmap_cfg = cfg.get('nmap', {})
             ip_ranges = nmap_cfg.get('ip_ranges', [])
-            arguments = nmap_cfg.get('arguments', '-sV -T4')
+            arguments = nmap_cfg.get('arguments', '-sV -T5')
             scan_interval = nmap_cfg.get('scan_interval', 0)
 
             if not ip_ranges or not arguments:

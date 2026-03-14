@@ -73,7 +73,7 @@ pip install -r requirements.txt
   "server": { "host": "0.0.0.0", "port": 5000, "debug": false },
   "nmap": {
     "ip_ranges": ["192.168.1.0/24"],
-    "arguments": "-sS -O -T4",
+    "arguments": "-sS -O -T5",
     "scan_interval": 86400,
     "scan_enabled": true
   },

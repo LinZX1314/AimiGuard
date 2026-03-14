@@ -1,48 +1,29 @@
 import json
 from typing import Generator
 from openai import OpenAI
-def _get_base_url(raw_url: str) -> str:
-    url = (raw_url or '').strip().rstrip('/')
-    if not url:
-        return ''
-    # 直接添加 /v1
-    return url.rstrip('/v1') + '/v1'
+
+from .utils import _get_base_url, _content_to_text
 
 
-def _content_to_text(content) -> str:
-    if isinstance(content, str):
-        return content
-    if content is None:
-        return ''
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if isinstance(item, dict):
-                text = item.get('text')
-                if isinstance(text, str):
-                    parts.append(text)
-                    continue
-                if isinstance(text, dict) and isinstance(text.get('value'), str):
-                    parts.append(text['value'])
-        if parts:
-            return ''.join(parts)
-    try:
-        return json.dumps(content, ensure_ascii=False)
-    except Exception:
-        return str(content)
-
+# ── 公开 API ───────────────────────────────────────────────────────────────────
 
 def build_openai_messages(history: list[dict]) -> list[dict]:
+    """将内部 history（含 ts 等字段）转换成 OpenAI messages 格式"""
     messages: list[dict] = []
     for item in history:
         role = item.get('role')
-        if role in ('system', 'user', 'assistant'):
+        if role in ('system', 'user', 'assistant', 'tool'):
+            msg: dict = {'role': role, 'content': item.get('content') or ''}
+            # tool 消息需要附带 tool_call_id
+            if role == 'tool' and item.get('tool_call_id'):
+                msg['tool_call_id'] = item['tool_call_id']
+            messages.append(msg)
+        elif role == 'assistant_with_tool_calls':
+            # 还原带 tool_calls 字段的 assistant 消息
             messages.append({
-                'role': role,
-                'content': item.get('content') or '',
+                'role': 'assistant',
+                'content': item.get('content') or None,
+                'tool_calls': item.get('tool_calls', []),
             })
     return messages
 
@@ -51,7 +32,7 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
     ai_cfg = cfg.get('ai', {})
     api_url = ai_cfg.get('api_url', '')
     api_key = ai_cfg.get('api_key', '')
-    model = ai_cfg.get('model', 'gpt-3.5-turbo')
+    model   = ai_cfg.get('model', 'gpt-3.5-turbo')
     timeout = int(ai_cfg.get('timeout', 60))
     base_url = _get_base_url(api_url)
 
@@ -61,10 +42,7 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-        )
+        response = client.chat.completions.create(model=model, messages=messages)
         content = _content_to_text(response.choices[0].message.content)
         return {'content': content}
     except Exception as e:
@@ -73,17 +51,16 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
 
 def stream_openai_chat_completion(
     messages: list[dict],
-    cfg: dict
+    cfg: dict,
 ) -> Generator[tuple[str, str], None, None]:
     """
-    流式调用 OpenAI-compatible 接口
-    返回生成器，每项为 (chunk_content, error_message)
+    流式调用（无工具），每项为 (chunk_content, error_message)。
     """
-    ai_cfg = cfg.get('ai', {})
-    api_url = ai_cfg.get('api_url', '')
-    api_key = ai_cfg.get('api_key', '')
-    model = ai_cfg.get('model', 'gpt-3.5-turbo')
-    timeout = int(ai_cfg.get('timeout', 60))
+    ai_cfg   = cfg.get('ai', {})
+    api_url  = ai_cfg.get('api_url', '')
+    api_key  = ai_cfg.get('api_key', '')
+    model    = ai_cfg.get('model', 'gpt-3.5-turbo')
+    timeout  = int(ai_cfg.get('timeout', 60))
     base_url = _get_base_url(api_url)
 
     if not base_url:
@@ -94,9 +71,7 @@ def stream_openai_chat_completion(
 
     try:
         response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True
+            model=model, messages=messages, stream=True
         )
         for chunk in response:
             delta = chunk.choices[0].delta
@@ -104,3 +79,87 @@ def stream_openai_chat_completion(
                 yield (delta.content, '')
     except Exception as e:
         yield ('', f'⚠️ AI 调用失败: {e}')
+
+
+def stream_openai_chat_with_tools(
+    messages: list[dict],
+    cfg: dict,
+    tools: list[dict] | None = None,
+) -> Generator[tuple[str, str, dict | None], None, None]:
+    """
+    支持 function calling 的流式对话。
+    每项为 (chunk_content, error_message, tool_call | None)。
+
+    当 AI 请求调用工具时，chunk_content / error_message 均为空，
+    tool_call 为 {'id': str, 'name': str, 'arguments': dict}。
+
+    正常文本流时，tool_call 为 None。
+    """
+    ai_cfg   = cfg.get('ai', {})
+    api_url  = ai_cfg.get('api_url', '')
+    api_key  = ai_cfg.get('api_key', '')
+    model    = ai_cfg.get('model', 'gpt-3.5-turbo')
+    timeout  = int(ai_cfg.get('timeout', 60))
+    base_url = _get_base_url(api_url)
+
+    if not base_url:
+        yield ('', '⚠️ AI 接口未配置，请在设置中填写 api_url。', None)
+        return
+
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+
+    kwargs: dict = {'model': model, 'messages': messages, 'stream': True}
+    if tools:
+        kwargs['tools'] = tools
+        kwargs['tool_choice'] = 'auto'
+
+    try:
+        response = client.chat.completions.create(**kwargs)
+
+        # 用于累积 tool_calls（delta 是增量，需要拼接）
+        pending_tool_calls: dict[int, dict] = {}   # index -> {id, name, arguments_str}
+        finish_reason = None
+
+        for chunk in response:
+            choice = chunk.choices[0]
+            finish_reason = choice.finish_reason or finish_reason
+            delta = choice.delta
+
+            # ── 普通文本内容 ────────────────────────────────────────────────
+            if delta.content:
+                yield (delta.content, '', None)
+
+            # ── 工具调用增量 ────────────────────────────────────────────────
+            if delta.tool_calls:
+                for tc_delta in delta.tool_calls:
+                    idx = tc_delta.index
+                    if idx not in pending_tool_calls:
+                        pending_tool_calls[idx] = {
+                            'id': '',
+                            'name': '',
+                            'arguments_str': '',
+                        }
+                    tc = pending_tool_calls[idx]
+                    if tc_delta.id:
+                        tc['id'] += tc_delta.id
+                    if tc_delta.function:
+                        if tc_delta.function.name:
+                            tc['name'] += tc_delta.function.name
+                        if tc_delta.function.arguments:
+                            tc['arguments_str'] += tc_delta.function.arguments
+
+        # ── 流结束，若有工具调用则 yield ────────────────────────────────────
+        if finish_reason == 'tool_calls' and pending_tool_calls:
+            for tc in pending_tool_calls.values():
+                try:
+                    arguments = json.loads(tc['arguments_str'] or '{}')
+                except json.JSONDecodeError:
+                    arguments = {'raw': tc['arguments_str']}
+                yield ('', '', {
+                    'id': tc['id'],
+                    'name': tc['name'],
+                    'arguments': arguments,
+                })
+
+    except Exception as e:
+        yield ('', f'⚠️ AI 调用失败: {e}', None)

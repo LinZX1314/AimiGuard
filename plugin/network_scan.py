@@ -3,17 +3,13 @@
 """
 IP 范围扫描脚本
 自动扫描指定 IP 范围，将存活的电脑信息存储到数据库
-支持两种扫描模式：
-1. rustscan + nmap（快速模式）：先用 rustscan 快速发现端口，再用 nmap 做服务识别
-2. nmap（普通模式）：直接使用 nmap 扫描
+使用 nmap 扫描模式：直接使用 nmap 扫描
 """
 
 import nmap
 import sqlite3
 import time
 import os
-import subprocess
-import re
 from datetime import datetime
 
 # nmap 路径配置
@@ -27,10 +23,7 @@ from utils.logger import log
 
 import json
 
-# 扫描模式配置
-USE_RUSTSCAN = True  # 是否使用 rustscan 加速
-RUSTSCAN_TIMEOUT = 1500  # rustscan 超时时间(毫秒)
-RUSTSCAN_BATCH_SIZE = 4500  # rustscan 批量大小
+
 
 def get_vuln_scripts_map():
     """获取系统标签与漏洞检测脚本的映射字典（优先从配置读取）"""
@@ -41,13 +34,14 @@ def get_vuln_scripts_map():
                 config = json.load(f)
                 vuln_map = config.get('nmap', {}).get('vuln_scripts_by_tag')
                 if vuln_map:
-                    return vuln_map
+                    # 将所有键转换为小写，确保匹配时不受大小写影响
+                    return {k.lower(): v for k, v in vuln_map.items()}
     except Exception:
         pass
     return {}
 
 
-def scan_hosts(ip_range, arguments='-sV -O -T4'):
+def scan_hosts(ip_range, arguments='-sV -O -T5'):
     """
     扫描指定 IP 范围
 
@@ -65,120 +59,6 @@ def scan_hosts(ip_range, arguments='-sV -O -T4'):
         return nm
     except Exception as e:
         log("Nmap", f"Nmap Scan Error: {str(e)}", "ERROR")
-        return None
-
-
-def check_rustscan_available():
-    """检查 rustscan 是否可用"""
-    # 检查多个可能的路径
-    possible_paths = ['rustscan', 'rustscan.exe',
-                      'C:/Users/lzx78/rustscan.exe',
-                      os.path.expanduser('~/rustscan.exe')]
-
-    for path in possible_paths:
-        try:
-            result = subprocess.run([path, '-V'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                return path  # 返回找到的路径
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            continue
-    return False
-
-
-def scan_hosts_rustscan(ip_range, rustscan_path='rustscan'):
-    """
-    使用 rustscan 快速扫描端口，再用 nmap 做服务识别
-
-    参数:
-        ip_range: IP 范围，如 '192.168.1.1/24'
-        rustscan_path: rustscan 可执行文件路径
-
-    返回:
-        nmap.PortScanner 对象
-    """
-    try:
-        # 1. 用 rustscan 快速发现开放端口
-        log("RustScan", f"快速端口扫描: {ip_range}")
-
-        rustscan_cmd = [
-            rustscan_path,
-            '-a', ip_range,
-            '--',  # 分隔符，之后的参数传给 nmap
-            '-p-',  # 扫描所有端口
-            '-oG', '-'  # grepable 输出格式
-        ]
-
-        result = subprocess.run(
-            rustscan_cmd,
-            capture_output=True,
-            text=True,
-            timeout=RUSTSCAN_TIMEOUT / 1000 * 2  # 稍微增加超时
-        )
-
-        # 2. 解析 rustscan 结果，提取开放端口
-        open_ports = {}  # {ip: [ports]}
-
-        for line in result.stdout.split('\n'):
-            if 'Ports:' in line:
-                # 解析 grepable 格式: Host: 192.168.1.1 ()	Status: Up
-                # Host: 192.168.1.1 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///
-
-                # 提取 IP
-                ip_match = re.search(r'Host: (\d+\.\d+\.\d+\.\d+)', line)
-                if not ip_match:
-                    continue
-
-                ip = ip_match.group(1)
-
-                # 提取端口
-                ports_match = re.search(r'Ports: (.+)', line)
-                if not ports_match:
-                    continue
-
-                ports_str = ports_match.group(1)
-                ports = []
-
-                for port_info in ports_str.split(', '):
-                    # 格式: 22/open/tcp//ssh///
-                    parts = port_info.split('/')
-                    if len(parts) >= 2 and parts[1] == 'open':
-                        try:
-                            ports.append(int(parts[0]))
-                        except ValueError:
-                            pass
-
-                if ports:
-                    open_ports[ip] = ports
-                    log("RustScan", f"发现主机 {ip} 开放端口: {ports}")
-
-        if not open_ports:
-            log("RustScan", "未发现开放主机")
-            return None
-
-        # 3. 对开放端口的主机用 nmap 做服务版本识别
-        log("Nmap", "开始服务版本识别...")
-
-        # 构造 nmap 扫描参数
-        for ip, ports in open_ports.items():
-            ports_str = ','.join(map(str, ports))
-            log("Nmap", f"扫描 {ip} 端口: {ports_str}")
-
-        nm = nmap.PortScanner()
-        # 批量扫描所有发现的主机
-        hosts_list = ','.join(open_ports.keys())
-        ports_list = ','.join(str(p) for ports in open_ports.values() for p in ports)
-
-        if hosts_list and ports_list:
-            nm.scan(hosts=hosts_list, arguments=f'-sV -p {ports_list} -T4')
-            return nm
-        else:
-            return None
-
-    except subprocess.TimeoutExpired:
-        log("RustScan", "扫描超时", "ERROR")
-        return None
-    except Exception as e:
-        log("RustScan", f"扫描错误: {str(e)}", "ERROR")
         return None
 
 
@@ -254,7 +134,7 @@ def auto_detect_os_tags(osmatch):
         逗号分隔的系统标签字符串，如 "win7,windows,workstation"
     """
     if not osmatch:
-        return ''
+        return 'unknown'
 
     tags = set()
     os_name = osmatch.get('name', '').lower()
@@ -342,7 +222,7 @@ def scan_vuln(nm, host_ip, vuln_script):
     """
     try:
         # 使用 --script 参数执行漏洞检测
-        nm.scan(hosts=host_ip, arguments=f'--script {vuln_script} -T4')
+        nm.scan(hosts=host_ip, arguments=f'--script {vuln_script} -T5')
 
         if host_ip in nm.all_hosts():
             # 检查脚本输出
@@ -491,22 +371,10 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
 
             log("Nmap", f"开始扫描 #{scan_id}: {ip_ranges}")
 
-            # 检查是否使用 rustscan 加速模式
-            rustscan_path = USE_RUSTSCAN and check_rustscan_available()
-            use_rustscan = bool(rustscan_path)
-
-            if use_rustscan:
-                log("ScanMode", "使用 RustScan + Nmap 加速模式")
-            else:
-                log("ScanMode", "使用纯 Nmap 扫描模式")
+            log("ScanMode", "使用纯 Nmap 扫描模式")
 
             for ip_range in ip_ranges:
-                if use_rustscan:
-                    # 使用 rustscan 快速扫描 + nmap 服务识别
-                    nm = scan_hosts_rustscan(ip_range, rustscan_path)
-                else:
-                    # 使用纯 nmap 扫描
-                    nm = scan_hosts(ip_range, scan_args)
+                nm = scan_hosts(ip_range, scan_args)
 
                 if nm:
                     hosts_data = parse_scan_results(nm)

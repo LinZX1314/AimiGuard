@@ -8,7 +8,7 @@ const status  = ref({ hfish_sync: false, nmap_scan: false, ai_analysis: false, a
 let statusTimer: ReturnType<typeof setInterval>
 
 const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60,     sync_enabled: false })
-const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T4', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
+const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T5', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
 const logging = ref({ api_request_log: true, sync_log: true, scan_log: true, ai_log: true, error_log: true })
 const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false, ban_threshold: 80 })
 
@@ -49,7 +49,7 @@ async function loadSettings() {
     if (sd.hfish) { Object.assign(hfish.value, sd.hfish); hfish.value.api_key = '' }
     if (sd.nmap)  {
       nmap.value.ip_ranges        = Array.isArray(sd.nmap.ip_ranges) ? sd.nmap.ip_ranges.join(', ') : (sd.nmap.ip_ranges ?? '')
-      nmap.value.arguments        = sd.nmap.arguments   ?? '-sS -O -T4'
+      nmap.value.arguments        = sd.nmap.arguments   ?? '-sS -O -T5'
       nmap.value.scan_interval    = sd.nmap.scan_interval ?? 604800
       nmap.value.scan_enabled     = sd.nmap.scan_enabled  ?? false
       nmap.value.vuln_scripts_text = JSON.stringify(sd.nmap.vuln_scripts_by_tag ?? {}, null, 2)
@@ -172,7 +172,7 @@ const chainItems = [
             <v-text-field v-model="nmap.ip_ranges" label="扫描网段" placeholder="192.168.1.0/24" hint="多个用逗号分隔" persistent-hint class="mb-2" />
           </v-col>
           <v-col cols="12" md="6">
-            <v-text-field v-model="nmap.arguments" label="扫描参数" placeholder="-sS -O -T4" class="mb-2" />
+            <v-text-field v-model="nmap.arguments" label="扫描参数" placeholder="-sS -O -T5" class="mb-2" />
           </v-col>
           <v-col cols="12" md="6">
             <v-text-field v-model.number="nmap.scan_interval" label="扫描间隔（秒）" type="number" hint="默认 604800 秒（一周）" persistent-hint />

@@ -154,7 +154,7 @@ def legacy_nmap_scan():
     body = _body()
     cfg = _load_cfg()
     ip_ranges = body.get('ip_ranges') or cfg.get('nmap', {}).get('ip_ranges', ['192.168.111.1/24'])
-    arguments = body.get('arguments') or cfg.get('nmap', {}).get('arguments', '-sS -O -T4')
+    arguments = body.get('arguments') or cfg.get('nmap', {}).get('arguments', '-sS -O -T5')
     if isinstance(ip_ranges, str):
         ip_ranges = [ip_ranges]
 

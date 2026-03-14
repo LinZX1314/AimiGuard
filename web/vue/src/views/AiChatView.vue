@@ -233,7 +233,7 @@ async function deleteSession(sid: number) {
   } catch {}
 }
 
-async function send() {
+async function send(extraParams: any = {}) {
   const text = input.value.trim()
   if (!text || sending.value) return
   input.value = ''
@@ -242,12 +242,12 @@ async function send() {
   sending.value = true
 
   // 使用 reactive 包装，确保闭包内的修改能触发 Vue 响应式更新
-  const assistantMsg = reactive<{ role: 'assistant', content: string }>({ role: 'assistant', content: '' })
+  const assistantMsg = reactive<Message>({ role: 'assistant', content: '' })
   messages.value.push(assistantMsg as any)
   await nextTick(); scrollBottom()
 
   try {
-    const body: any = { message: text }
+    const body: any = { message: text, ...extraParams }
     if (currentSession.value) body.session_id = currentSession.value
 
     const token = localStorage.getItem('token')
@@ -272,6 +272,7 @@ async function send() {
       throw new Error('无法读取响应')
     }
 
+    let isNewSession = !currentSession.value
     let sessionId = currentSession.value
     let buffer = '' // 添加缓冲区
 
@@ -298,6 +299,27 @@ async function send() {
             assistantMsg.content += parsed.content
             await nextTick(); scrollBottom()
           }
+          // 工具调用：AI 正在调用工具
+          if (parsed.tool_call) {
+            if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
+            ;(assistantMsg as any).tool_calls.push({
+              id: parsed.tool_call.name + '_' + Date.now(),
+              name: parsed.tool_call.name,
+              arguments: parsed.tool_call.arguments,
+            })
+            await nextTick(); scrollBottom()
+          }
+          // 工具结果：扫描/执行完毕
+          if (parsed.tool_result) {
+            if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
+            // 找到最后一个 tool_call，把结果关联过去
+            const lastToolCall = (assistantMsg as any).tool_calls?.slice(-1)[0]
+            ;(assistantMsg as any).tool_results.push({
+              name: lastToolCall?.name || 'tool',
+              content: parsed.tool_result,
+            })
+            await nextTick(); scrollBottom()
+          }
           if (parsed.session_id && !sessionId) {
             sessionId = parsed.session_id
             currentSession.value = sessionId
@@ -309,7 +331,7 @@ async function send() {
     }
 
     // 更新会话列表
-    if (sessionId && !currentSession.value) {
+    if (isNewSession && sessionId) {
       currentSession.value = sessionId
       await loadSessions()
     }
@@ -331,7 +353,25 @@ function scrollBottom() {
   if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
 }
 
-onMounted(loadSessions)
+import { useRoute } from 'vue-router'
+const route = useRoute()
+
+async function onPageLoad() {
+  await loadSessions()
+  
+  // 处理 URL传参上下文
+  const { context_type, context_id } = route.query
+  if (context_type && context_id) {
+    // 自动发起一个分析请求
+    input.value = `请帮我深度分析一下这个目标：${context_id}`
+    await send({ 
+      context_type: context_type as string, 
+      context_id: context_id as string 
+    })
+  }
+}
+
+onMounted(onPageLoad)
 </script>
 
 <template>

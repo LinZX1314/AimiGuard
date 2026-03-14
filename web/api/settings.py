@@ -23,7 +23,7 @@ def settings_get():
         },
         'nmap': {
             'ip_ranges': cfg.get('nmap', {}).get('ip_ranges', []),
-            'arguments': cfg.get('nmap', {}).get('arguments', '-sS -O -T4'),
+            'arguments': cfg.get('nmap', {}).get('arguments', '-sS -O -T5'),
             'scan_interval': cfg.get('nmap', {}).get('scan_interval', 604800),
             'scan_enabled': cfg.get('nmap', {}).get('scan_enabled', False),
             'vuln_scripts_by_tag': cfg.get('nmap', {}).get('vuln_scripts_by_tag', {}),
@@ -59,7 +59,7 @@ def settings_save():
             ranges = [r.strip() for r in ranges.split(',') if r.strip()]
         cfg.setdefault('nmap', {}).update({
             'ip_ranges': ranges,
-            'arguments': n.get('arguments', '-sS -O -T4'),
+            'arguments': n.get('arguments', '-sS -O -T5'),
             'scan_interval': int(n.get('scan_interval', 604800)),
             'scan_enabled': _as_bool(n.get('scan_enabled', False)),
             'vuln_scripts_by_tag': n.get('vuln_scripts_by_tag', {}),

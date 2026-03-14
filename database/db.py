@@ -125,15 +125,45 @@ def init_db():
         )
     ''')
 
+    # ================= AI 聊天与会话持久化表 =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            context_type TEXT,
+            context_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    ''')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ai_chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            query TEXT NOT NULL,
-            response TEXT NOT NULL,
-            scan_id INTEGER,
-            create_time TEXT NOT NULL
+            session_id INTEGER,
+            role TEXT DEFAULT 'user',
+            query TEXT,           -- 旧版兼容：query
+            response TEXT,        -- 旧版兼容：response
+            content TEXT,         -- 新版统一：content
+            tool_calls TEXT,      -- 存储 JSON 格式的工具库调用
+            create_time TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id)
         )
     ''')
+    
+    # 尝试为旧表增加字段（平滑升级）
+    try:
+        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN session_id INTEGER')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN role TEXT DEFAULT "user"')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN content TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN tool_calls TEXT')
+    except: pass
     
     conn.commit()
     conn.close()
