@@ -7,48 +7,35 @@
     "error_log": true
   },
   "hfish": {
-    "host_port": "10.80.7.71:4433",
-    "api_key": "IXsdweVjepwhtPgchSvDqaRIntolDoUncNGqiSZAFBLNbAUBnStLYchDClDytmaJ",
+    "host_port": "192.168.0.4:4433",
+    "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
     "sync_interval": 60,
-    "sync_enabled": true
+    "sync_enabled": true,
+    "api_base_url": ""
   },
   "ai": {
     "enabled": true,
     "auto_ban": false,
-    "api_url": "https://npi.linzzx.top/",
+    "api_url": "http://192.168.0.4:1234/",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
-    "model": "MiniMax-M2.5",
-    "timeout": 160,
-    "analysis_map": {
-      "chat_system_prompt": "你是玄枢·AI攻防指挥官，专注于网络安全事件分析、漏洞评估和防御建议。用中文回答，简明扼要。",
-      "nmap_scan_system_prompt": "你是专业网络安全助手，擅长根据用户意图调用 nmap_scan 工具完成主机发现与端口服务识别。先给出简短执行说明，再在需要时准确调用工具。"
-    }
+    "model": "lmstudio-community/Qwen3.5-4B-GGUF-no-thinking",
+    "timeout": 160
   },
   "switches": [
     {
-      "host": "192.168.1.1",
+      "host": "192.168.0.1",
       "port": 23,
-      "username": "admin",
-      "password": "password",
-      "acl_number": 3000,
-      "device_type": "huawei_telnet"
-    },
-    {
-      "host": "192.168.1.2",
-      "port": 23,
-      "username": "admin",
-      "password": "password",
-      "acl_number": 3000,
-      "device_type": "huawei_telnet"
+      "password": "admin",
+      "acl_number": 3000
     }
   ],
   "nmap": {
     "ip_ranges": [
-      "10.24.101.97/24"
+      "192.168.0.1/24"
     ],
     "arguments": "-sS -T4 -O -sV ",
     "scan_interval": 604800,
-    "scan_enabled": false,
+    "scan_enabled": true,
     "vuln_scripts_by_tag": {
       "Windows 10": [
         "smb-vuln-ms17-010"

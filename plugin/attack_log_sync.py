@@ -194,23 +194,6 @@ def main():
             if logs:
                 new_count = HFishModel.save_logs(logs)
                 log("HFish", f"同步完成: 获取 {len(logs)} 条, 新增 {new_count} 条")
-                
-                # 开始分组和调用 AI 分析
-                try:
-                    from plugin.ai_tools import analyze_and_ban
-                    ip_logs = {}
-                    for log in logs:
-                        ip = log.get("attack_ip")
-                        if ip:
-                            if ip not in ip_logs:
-                                ip_logs[ip] = []
-                            ip_logs[ip].append(log)
-                            
-                    for ip, ip_log_list in ip_logs.items():
-                        # 新建线程执行 AI 判定，避免阻塞全局同步日志任务
-                        threading.Thread(target=analyze_and_ban, args=(ip, ip_log_list, raw_config), daemon=True).start()
-                except Exception as e:
-                    log("HFish", f"调度 AI 分析线程时发生异常: {e}", "ERROR")
             else:
                 log("HFish", "无新数据")
 

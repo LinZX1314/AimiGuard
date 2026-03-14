@@ -62,7 +62,7 @@ def main():
         start_runtime_workers()
         print_startup_banner(config)
 
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == "__main__":

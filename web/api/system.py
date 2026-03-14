@@ -4,7 +4,7 @@ System Module - System configuration and profile endpoints
 from flask import Blueprint
 from .helpers import (
     require_auth, ok, err, _body, _load_cfg, _save_cfg,
-    _as_bool, _read_chat_system_prompt
+    _as_bool
 )
 
 system_bp = Blueprint('system', __name__, url_prefix='/system')
@@ -17,7 +17,6 @@ def system_ai_config_get():
     cfg = _load_cfg()
     ai = cfg.get('ai', {})
     return ok({
-        'provider': ai.get('provider', 'openai-compatible'),
         'base_url': ai.get('api_url', ''),
         'model': ai.get('model', ''),
         'model_name': ai.get('model', ''),
@@ -35,8 +34,6 @@ def system_ai_config_save():
     body = _body()
     cfg = _load_cfg()
     ai = cfg.setdefault('ai', {})
-    if 'provider' in body:
-        ai['provider'] = body['provider']
     if 'base_url' in body:
         ai['api_url'] = body['base_url']
     if 'model' in body:
@@ -58,28 +55,3 @@ def system_ai_config_save():
     return ok()
 
 
-@system_bp.route('/ai-prompt', methods=['GET'])
-@require_auth
-def system_prompt_get():
-    """Get AI prompt"""
-    cfg = _load_cfg()
-    prompt, migrated = _read_chat_system_prompt(cfg)
-    if migrated:
-        _save_cfg(cfg)
-    return ok({'prompt': prompt})
-
-
-@system_bp.route('/ai-prompt', methods=['POST'])
-@require_auth
-def system_prompt_save():
-    """Save AI prompt"""
-    body = _body()
-    prompt = body.get('prompt', '').strip()
-    if not prompt:
-        return err('提示词不能为空')
-    cfg = _load_cfg()
-    ai_cfg = cfg.setdefault('ai', {})
-    ai_cfg.setdefault('analysis_map', {})['chat_system_prompt'] = prompt
-    ai_cfg.pop('system_prompt', None)
-    _save_cfg(cfg)
-    return ok()

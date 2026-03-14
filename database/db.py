@@ -120,7 +120,8 @@ def init_db():
             ip TEXT PRIMARY KEY,
             analysis_text TEXT,
             decision TEXT,
-            scan_time TEXT
+            scan_time TEXT,
+            status TEXT DEFAULT 'pending'
         )
     ''')
 

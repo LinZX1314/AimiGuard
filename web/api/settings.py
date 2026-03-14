@@ -6,7 +6,7 @@ from .helpers import (
     require_auth, ok, _body, _load_cfg, _save_cfg, _as_bool
 )
 
-settings_bp = Blueprint('settings', __name__)
+settings_bp = Blueprint('settings', __name__, url_prefix='')
 
 
 @settings_bp.route('/settings', methods=['GET'])

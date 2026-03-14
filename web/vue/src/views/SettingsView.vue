@@ -10,9 +10,7 @@ let statusTimer: ReturnType<typeof setInterval>
 const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60,     sync_enabled: false })
 const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T4', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
 const logging = ref({ api_request_log: true, sync_log: true, scan_log: true, ai_log: true, error_log: true })
-const aiCfg   = ref({ enabled: false, provider: 'openai', model: '', api_key: '', base_url: '', auto_ban: false, ban_threshold: 80 })
-const aiPrompt = ref('')
-const promptSaving = ref(false)
+const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false, ban_threshold: 80 })
 
 // Vuln rules UI
 const newRuleTag     = ref('')
@@ -66,10 +64,6 @@ async function loadSettings() {
     aiCfg.value.api_key = ''
   } catch {}
 
-  try {
-    const p = await api.get<any>('/api/v1/system/ai-prompt')
-    aiPrompt.value = (p.data ?? p).prompt ?? ''
-  } catch {}
 }
 
 async function saveSettings() {
@@ -105,17 +99,6 @@ async function testHfish() {
   } catch {
     snack.value = { show: true, text: '连接失败，请检查地址和 API Key', color: 'error' }
   }
-}
-
-async function savePrompt() {
-  promptSaving.value = true
-  try {
-    await api.post('/api/v1/system/ai-prompt', { prompt: aiPrompt.value })
-    snack.value = { show: true, text: '提示词已保存', color: 'success' }
-  } catch(e) {
-    snack.value = { show: true, text: `保存失败: ${e instanceof Error ? e.message : ''}`, color: 'error' }
-  }
-  promptSaving.value = false
 }
 
 onMounted(() => {
@@ -253,9 +236,6 @@ const chainItems = [
             <v-switch v-model="aiCfg.auto_ban" label="AI 自动封禁" color="error" hide-details />
           </v-col>
           <v-col cols="12" md="6">
-            <v-select v-model="aiCfg.provider" :items="['openai','azure','ollama','custom']" label="服务商" class="mb-2" />
-          </v-col>
-          <v-col cols="12" md="6">
             <v-text-field v-model="aiCfg.model" label="模型名称" placeholder="gpt-4o-mini" class="mb-2" />
           </v-col>
           <v-col cols="12" md="6">
@@ -274,38 +254,6 @@ const chainItems = [
             />
           </v-col>
         </v-row>
-      </v-card-text>
-    </v-card>
-
-    <!-- AI System Prompt -->
-    <v-card class="mb-4">
-      <v-card-title class="d-flex align-center">
-        <v-icon start>mdi-robot-outline</v-icon>
-        AI 系统提示词
-        <v-chip size="x-small" color="primary" class="ml-2">对话人格</v-chip>
-      </v-card-title>
-      <v-card-text>
-        <p class="text-body-2 text-medium-emphasis mb-3">
-          设定 AI 对话的角色定位，每次新会话都会以此提示词作为系统消息注入上下文。
-        </p>
-        <v-textarea
-          v-model="aiPrompt"
-          label="系统提示词"
-          rows="5"
-          auto-grow
-          variant="outlined"
-          placeholder="你是玄枢·AI攻防指挥官，专注于网络安全事件分析、漏洞评估和防御建议。用中文回答，简明扼要。"
-          style="font-family: monospace; font-size: 0.87rem"
-        />
-        <v-btn
-          color="primary" variant="tonal"
-          class="mt-2"
-          :loading="promptSaving"
-          prepend-icon="mdi-content-save-outline"
-          @click="savePrompt"
-        >
-          保存提示词
-        </v-btn>
       </v-card-text>
     </v-card>
 

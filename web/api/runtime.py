@@ -72,13 +72,12 @@ def run_vuln_scan_task():
 
 
 def run_hfish_sync():
-    """执行一次 HFish 同步并触发 AI 分析"""
+    """执行一次 HFish 同步"""
     from database.models import HFishModel
 
     try:
         sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
         from attack_log_sync import get_attack_logs
-        from plugin.ai_tools import analyze_and_ban
 
         cfg = _load_cfg()
         host_port = cfg.get('hfish', {}).get('host_port', '')
@@ -92,17 +91,6 @@ def run_hfish_sync():
 
         count = HFishModel.save_logs(logs)
         _runtime_log('info', f'HFish 同步完成: 获取 {len(logs)} 条, 新增 {count} 条')
-
-        # AI 分析
-        ai_enabled = cfg.get('ai', {}).get('enabled', False)
-        if ai_enabled:
-            from database.models import AiModel
-            recent = HFishModel.get_recent_attack_ips(limit=10)
-            for item in recent:
-                ip = item.get('attack_ip')
-                if ip:
-                    logs_for_ip = HFishModel.get_logs_by_ip(ip, limit=20)
-                    analyze_and_ban(ip, logs_for_ip, cfg)
 
         return {'success': True, 'total': len(logs), 'new': count}
     except Exception as e:

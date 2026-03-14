@@ -140,18 +140,3 @@ def _normalize_host_fields(host: dict | None) -> dict | None:
                 host[key] = [p.strip() for p in value.split(',') if p.strip()]
     return host
 
-def _read_chat_system_prompt(cfg: dict) -> tuple[str, bool]:
-    ai_cfg = cfg.setdefault('ai', {})
-    analysis_map = ai_cfg.setdefault('analysis_map', {})
-
-    prompt = (analysis_map.get('chat_system_prompt') or '').strip()
-    if prompt:
-        return prompt, False
-
-    legacy_prompt = (ai_cfg.get('system_prompt') or '').strip()
-    if legacy_prompt:
-        analysis_map['chat_system_prompt'] = legacy_prompt
-        ai_cfg.pop('system_prompt', None)
-        return legacy_prompt, True
-
-    return '', False

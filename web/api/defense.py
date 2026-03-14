@@ -118,3 +118,97 @@ def defense_hfish_test():
     except Exception as e:
         return err(f'HFish 连接失败: {e}', 502)
 
+
+@defense_bp.route('/events', methods=['GET'])
+@require_auth
+def defense_events():
+    """Get defense events with pagination"""
+    page = _parse_int_arg('page', 1)
+    page_size = _parse_int_arg('page_size', 50)
+    offset = (page - 1) * page_size
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    # 确保status字段存在
+    try:
+        c.execute("ALTER TABLE ai_analysis_logs ADD COLUMN status TEXT DEFAULT 'pending'")
+        conn.commit()
+    except Exception:
+        pass  # 字段可能已存在
+
+    # 查询events，关联AI分析结果
+    q = """
+        SELECT
+            al.id,
+            al.attack_ip,
+            al.service_name as event_type,
+            al.threat_level as severity,
+            al.create_time_str as created_at,
+            am.decision as ai_decision,
+            am.analysis_text as ai_analysis,
+            COALESCE(am.status, 'pending') as status
+        FROM attack_logs al
+        LEFT JOIN ai_analysis_logs am ON al.attack_ip = am.ip
+        ORDER BY al.id DESC
+        LIMIT ? OFFSET ?
+    """
+    c.execute(q, [page_size, offset])
+    rows = [dict(r) for r in c.fetchall()]
+
+    # 获取总数
+    c.execute("SELECT COUNT(*) as total FROM attack_logs")
+    total = c.fetchone()['total']
+
+    conn.close()
+    return ok({'items': rows, 'total': total})
+
+
+@defense_bp.route('/events/<int:event_id>/approve', methods=['POST'])
+@require_auth
+def defense_event_approve(event_id: int):
+    """Approve a defense event"""
+    conn = get_connection()
+    c = conn.cursor()
+    # 通过event_id获取attack_ip，然后更新ai_analysis_logs表
+    c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
+    row = c.fetchone()
+    if row:
+        attack_ip = row['attack_ip']
+        c.execute("UPDATE ai_analysis_logs SET status = 'approved' WHERE ip = ?", (attack_ip,))
+        conn.commit()
+    conn.close()
+    return ok({'message': '已批准'})
+
+
+@defense_bp.route('/events/<int:event_id>/reject', methods=['POST'])
+@require_auth
+def defense_event_reject(event_id: int):
+    """Reject a defense event"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
+    row = c.fetchone()
+    if row:
+        attack_ip = row['attack_ip']
+        c.execute("UPDATE ai_analysis_logs SET status = 'rejected' WHERE ip = ?", (attack_ip,))
+        conn.commit()
+    conn.close()
+    return ok({'message': '已拒绝'})
+
+
+@defense_bp.route('/events/<int:event_id>/false-positive', methods=['POST'])
+@require_auth
+def defense_event_false_positive(event_id: int):
+    """Mark event as false positive"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
+    row = c.fetchone()
+    if row:
+        attack_ip = row['attack_ip']
+        c.execute("UPDATE ai_analysis_logs SET status = 'false_positive' WHERE ip = ?", (attack_ip,))
+        conn.commit()
+    conn.close()
+    return ok({'message': '已标记为误报'})
+

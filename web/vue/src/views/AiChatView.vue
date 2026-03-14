@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import { api } from '@/api/index'
 
@@ -237,27 +237,87 @@ async function send() {
   const text = input.value.trim()
   if (!text || sending.value) return
   input.value = ''
-  messages.value.push({ role: 'user', content: text })
-  await nextTick(); scrollBottom()
+  const userMsg = { role: 'user' as const, content: text }
+  messages.value.push(userMsg)
   sending.value = true
+
+  // 使用 reactive 包装，确保闭包内的修改能触发 Vue 响应式更新
+  const assistantMsg = reactive<{ role: 'assistant', content: string }>({ role: 'assistant', content: '' })
+  messages.value.push(assistantMsg as any)
+  await nextTick(); scrollBottom()
+
   try {
     const body: any = { message: text }
     if (currentSession.value) body.session_id = currentSession.value
-    const d = await api.post<any>('/api/v1/ai/chat', body)
-    const res = d.data ?? d
-    const reply = res.reply ?? res.message ?? JSON.stringify(res)
-    const turnMessages = Array.isArray(res.messages)
-      ? normalizeMessages(res.messages as ApiMessage[], reply)
-      : [{ role: 'assistant', content: reply } as Message]
-    messages.value.push(...turnMessages)
-    if (res.session_id && !currentSession.value) {
-      currentSession.value = res.session_id
+
+    const token = localStorage.getItem('token')
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch('/api/v1/ai/chat/stream', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+
+    if (!reader) {
+      throw new Error('无法读取响应')
+    }
+
+    let sessionId = currentSession.value
+    let buffer = '' // 添加缓冲区
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      
+      // 保留最后一个可能不完整的行
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        
+        const data = trimmed.slice(6)
+        if (data === '[DONE]') continue
+        
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.content) {
+            assistantMsg.content += parsed.content
+            await nextTick(); scrollBottom()
+          }
+          if (parsed.session_id && !sessionId) {
+            sessionId = parsed.session_id
+            currentSession.value = sessionId
+          }
+        } catch (e) {
+          console.error('SSE JSON 解析失败:', e, data)
+        }
+      }
+    }
+
+    // 更新会话列表
+    if (sessionId && !currentSession.value) {
+      currentSession.value = sessionId
       await loadSessions()
     }
-    speak(reply)
-    await nextTick(); scrollBottom()
+
+    // 语音播报
+    speak(assistantMsg.content)
   } catch(e: unknown) {
-    messages.value.push({ role: 'assistant', content: `⚠️ ${e instanceof Error ? e.message : '请求失败'}` })
+    assistantMsg.content = `⚠️ ${e instanceof Error ? e.message : '请求失败'}`
   }
   sending.value = false
 }
@@ -402,12 +462,6 @@ onMounted(loadSessions)
                   </template>
                 </v-card>
               </div>
-              <div v-if="sending" class="d-flex justify-start mb-4">
-                <v-card color="surface" class="pa-3" style="border:1px solid rgba(255,255,255,.08)">
-                  <v-progress-circular indeterminate size="16" width="2" color="primary" />
-                  <span class="ml-2 text-caption text-medium-emphasis">AI 正在分析中…</span>
-                </v-card>
-              </div>
             </template>
           </div>
 
@@ -427,14 +481,15 @@ onMounted(loadSessions)
             />
             <v-textarea
               v-model="input"
-              placeholder="输入指令或问题，Ctrl+Enter 发送…"
+              placeholder="输入指令或问题，Enter 发送，Shift+Enter 换行"
               rows="2"
               auto-grow
               max-rows="5"
               hide-details
               no-resize
               style="flex:1"
-              @keydown.ctrl.enter="send"
+              @keydown.enter.exact.prevent="send"
+              @keydown.enter.shift="() => {}"
             />
             <!-- TTS toggle -->
             <v-btn

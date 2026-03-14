@@ -23,7 +23,7 @@ def register_blueprints(app):
     """Register all blueprints to Flask app"""
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(overview_bp, url_prefix='/api/v1')
-    app.register_blueprint(defense_bp, url_prefix='/api/v1')
+    app.register_blueprint(defense_bp, url_prefix='/api/v1/defense')
     app.register_blueprint(scan_bp, url_prefix='/api/v1')
     app.register_blueprint(ai_bp, url_prefix='/api/v1/ai')
     app.register_blueprint(system_bp, url_prefix='/api/v1')
