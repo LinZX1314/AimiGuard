@@ -76,6 +76,13 @@ function speak(text: string) {
   utt.rate = 1.1
   window.speechSynthesis.speak(utt)
 }
+function toggleTts() {
+  // 切换 TTS 开关时，停止当前正在播放的语音
+  if (ttsEnabled.value && window.speechSynthesis) {
+    window.speechSynthesis.cancel()
+  }
+  ttsEnabled.value = !ttsEnabled.value
+}
 
 // ── Markdown ─────────────────────────────────────────────────────────────
 function renderMd(text: string): string {
@@ -527,9 +534,10 @@ onMounted(onPageLoad)
               max-rows="5"
               hide-details
               no-resize
+              :disabled="sending"
               style="flex:1"
               @keydown.enter.exact.prevent="send"
-              @keydown.enter.shift="() => {}"
+              @keydown.enter.shift.stop
             />
             <!-- TTS toggle -->
             <v-btn
@@ -539,7 +547,7 @@ onMounted(onPageLoad)
               height="56"
               width="44"
               title="AI 语音播报"
-              @click="ttsEnabled = !ttsEnabled"
+              @click="toggleTts"
             />
             <v-btn color="primary" height="56" :loading="sending" @click="send" icon>
               <v-icon>mdi-send</v-icon>
