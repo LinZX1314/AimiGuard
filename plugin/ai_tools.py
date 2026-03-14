@@ -108,7 +108,9 @@ def _extract_ban_decision(reply):
 def _clean_reply(reply):
     """清理 AI 回复，移除 <ban> 和 <think> 标签"""
     import re
-    return re.sub(r'<(/?ban|/?</think>)>', '', reply, flags=re.IGNORECASE | re.DOTALL).strip()
+    cleaned = re.sub(r'<think>.*?</think>', '', reply, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r'</?ban>', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 
 def analyze_and_ban(ip, logs, config):

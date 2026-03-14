@@ -22,6 +22,8 @@
 当前与 AI 工具调用最相关的目录如下：
 
 ```text
+plugin/
+├─ ai_tools.py
 web/
 ├─ api/
 │  └─ ai.py
@@ -58,6 +60,21 @@ web/
 - 统一执行 `tool_calls`
 - 当前内置 `nmap_scan`
 - 后续新增功能时，只需要继续注册新的工具函数
+
+### `plugin/ai_tools.py`
+
+负责 HFish 攻击日志的 AI 分析与自动封禁：
+
+- `analyze_and_ban(...)` 用于蜜罐日志判定
+- 不再承担聊天扫描工具调用职责
+- 聊天扫描工具调用已经统一迁移到 `web/ai_runtime/`
+
+### `plugin/nmap_plugin`
+
+该目录当前是空遗留目录，不参与现有 AI 聊天或扫描主流程。
+
+- 如果后续没有重新启用其中内容，可以直接删除
+- 当前真正生效的扫描能力来自 `plugin/network_scan.py`
 
 ## 3. 当前采用的 OpenAI tools 标准格式
 
