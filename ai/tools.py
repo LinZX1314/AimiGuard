@@ -242,44 +242,48 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
 @tool_registry.register(
     name='switch_acl_config',
     description=(
-        '通过Telnet连接交换机并配置ACL访问控制列表。'
-        '用于封禁/解封IP、配置访问控制策略。'
-        '此工具会智能生成配置命令并执行。'
+        '封禁或解封IP地址。'
+        '用于防御攻击时封禁恶意IP，或解封已封的IP。'
+        '只需要传入action(ban/unban)和target_ip即可。'
     ),
     parameters={
         'type': 'object',
         'properties': {
-            'host': {'type': 'string', 'description': '交换机IP地址'},
-            'port': {'type': 'integer', 'description': 'Telnet端口，默认23', 'default': 23},
-            'username': {'type': 'string', 'description': '用户名（Telnet可为空）', 'default': ''},
-            'password': {'type': 'string', 'description': '登录密码'},
-            'secret': {'type': 'string', 'description': '特权模式密码', 'default': ''},
-            'acl_number': {'type': 'integer', 'description': 'ACL编号，默认3000', 'default': 3000},
             'action': {
                 'type': 'string',
-                'description': '操作类型',
-                'enum': ['ban', 'unban', 'custom'],
+                'description': '操作类型：ban(封禁) 或 unban(解封)',
+                'enum': ['ban', 'unban'],
             },
-            'target_ip': {'type': 'string', 'description': '目标IP（ban/unban时使用）', 'default': ''},
-            'custom_commands': {'type': 'string', 'description': '自定义命令（custom时使用）', 'default': ''},
-            'description': {'type': 'string', 'description': '配置描述', 'default': ''},
+            'target_ip': {'type': 'string', 'description': '要封禁/解封的目标IP地址'},
         },
-        'required': ['host', 'password', 'action'],
+        'required': ['action', 'target_ip'],
     },
 )
 def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
     """交换机ACL配置工具"""
     import time
     import telnetlib
-    import socket
 
     from database.models import SwitchAclModel
 
-    host = args.get('host', '')
-    port = args.get('port', 23)
-    password = args.get('password', '')
-    secret = args.get('secret', password)
-    acl_number = args.get('acl_number', 30)
+    # 从cfg配置文件中读取交换机信息
+    action = args.get('action', 'ban')
+    target_ip = args.get('target_ip', '')
+
+    if cfg is None:
+        return {'ok': False, 'error': '缺少配置信息'}
+
+    # 从配置获取交换机信息
+    switches = cfg.get('switches', [])
+    if not switches:
+        return {'ok': False, 'error': '配置文件中未找到交换机信息'}
+
+    switch = switches[0]
+    host = switch.get('host', '')
+    port = switch.get('port', 23)
+    password = switch.get('password', '')
+    secret = switch.get('secret', password)
+    acl_number = switch.get('acl_number', 30)
     action = args.get('action', 'ban')
     target_ip = args.get('target_ip', '')
     description = args.get('description', '')
@@ -293,126 +297,73 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
     rule_id = None
 
     try:
-        socket.setdefaulttimeout(30)
+        # 获取规则ID
+        if action == 'ban':
+            used_ids = set()
+            rules = SwitchAclModel.get_rules(host, acl_number)
+            for r in rules:
+                rid = r.get('rule_id')
+                if rid and 1 <= rid < 20000:
+                    used_ids.add(rid)
+
+            rule_id = 1
+            while rule_id in used_ids and rule_id < 20000:
+                rule_id += 1
+
+            if rule_id >= 20000:
+                return {'ok': False, 'error': '无可用规则ID（1-19999已用完）'}
+
+            rule_text = f'{rule_id} deny host {target_ip}'
+            SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
+
+        elif action == 'unban':
+            rules = SwitchAclModel.get_rules(host, acl_number)
+            for r in rules:
+                if r.get('target_ip') == target_ip and r.get('action') == 'ban':
+                    rule_id = r.get('rule_id')
+                    break
+
+            if rule_id is None:
+                return {'ok': False, 'error': f'未找到IP {target_ip} 的封禁规则'}
+
+            SwitchAclModel.remove_rule(host, acl_number, target_ip)
+        else:
+            return {'ok': False, 'error': f'未知操作: {action}'}
+
+        # 构建命令序列，一次性发送
+        if action == 'ban':
+            cmd = f'{rule_id} deny host {target_ip}'
+        else:
+            cmd = f'no {rule_id}'
+
+        # 一次性发送所有命令
+        commands = f'''{password}
+en
+{secret}
+config
+ip access-list standard {acl_number}
+{cmd}
+exit
+exit
+wr
+'''
+
         tn = telnetlib.Telnet(host, port, 30)
+        time.sleep(3)
 
-        # 步骤1: 连接并读取欢迎信息
-        time.sleep(2)
-        try:
-            tn.read_very_eager()
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤1失败: {e}'}
+        # 读取欢迎信息
+        tn.read_very_eager()
 
-        # 步骤2: 登录
-        try:
-            tn.write((password + '\r').encode('utf-8'))
-            time.sleep(2)
-            tn.read_very_eager()
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤2(登录)失败: {e}'}
+        # 一次性发送命令，每个命令之间等待
+        for line in commands.strip().split('\n'):
+            tn.write((line + '\r').encode('utf-8'))
+            time.sleep(1.5)
 
-        # 步骤3: 进入特权模式
-        try:
-            tn.write(b'en\r')
-            time.sleep(1)
-            output = tn.read_very_eager().decode('utf-8', errors='ignore')
+        # 等待命令执行完成
+        time.sleep(5)
+        output = tn.read_very_eager().decode('utf-8', errors='ignore')
 
-            if 'Password' in output:
-                tn.write((secret + '\r').encode('utf-8'))
-                time.sleep(2)
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤3(en)失败: {e}'}
-
-        # 步骤4: 获取规则ID并保存到数据库
-        try:
-            if action == 'ban':
-                used_ids = set()
-                rules = SwitchAclModel.get_rules(host, acl_number)
-                for r in rules:
-                    rid = r.get('rule_id')
-                    if rid and 1 <= rid < 20000:
-                        used_ids.add(rid)
-
-                rule_id = 1
-                while rule_id in used_ids and rule_id < 20000:
-                    rule_id += 1
-
-                if rule_id >= 20000:
-                    tn.close()
-                    return {'ok': False, 'error': '无可用规则ID（1-19999已用完）'}
-
-                rule_text = f'{rule_id} deny host {target_ip}'
-                SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
-
-            elif action == 'unban':
-                rules = SwitchAclModel.get_rules(host, acl_number)
-                for r in rules:
-                    if r.get('target_ip') == target_ip and r.get('action') == 'ban':
-                        rule_id = r.get('rule_id')
-                        break
-
-                if rule_id is None:
-                    tn.close()
-                    return {'ok': False, 'error': f'未找到IP {target_ip} 的封禁规则'}
-
-                SwitchAclModel.remove_rule(host, acl_number, target_ip)
-            else:
-                tn.close()
-                return {'ok': False, 'error': f'未知操作: {action}'}
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤4(获取规则ID)失败: {e}'}
-
-        # 步骤5: 进入配置模式
-        try:
-            tn.write(b'config\r')
-            time.sleep(1)
-            tn.read_very_eager()
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤5(config)失败: {e}'}
-
-        # 步骤6: 进入ACL配置模式
-        try:
-            tn.write((f'ip access-list standard {acl_number}\r').encode('utf-8'))
-            time.sleep(2)
-            tn.read_very_eager()
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤6(ACL配置)失败: {e}'}
-
-        # 步骤7: 执行封禁/解封命令
-        try:
-            if action == 'ban':
-                cmd = f'{rule_id} deny host {target_ip}'
-            else:
-                cmd = f'no {rule_id}'
-
-            tn.write((cmd + '\r').encode('utf-8'))
-            time.sleep(2)
-            tn.read_very_eager()
-        except Exception as e:
-            tn.close()
-            return {'ok': False, 'error': f'步骤7(执行命令)失败: {e}'}
-
-        # 步骤8: 退出并保存
-        try:
-            tn.write(b'ex\r')
-            time.sleep(1)
-            tn.write(b'ex\r')
-            time.sleep(1)
-            tn.write(b'wr\r')
-            time.sleep(3)
-        except Exception as e:
-            pass  # 保存命令失败不返回错误
-
-        try:
-            tn.close()
-        except:
-            pass
+        tn.close()
 
         return {
             'ok': True,
@@ -422,6 +373,7 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
             'target_ip': target_ip if action != 'ban' else None,
             'rule_id': rule_id if action in ['ban', 'unban'] else None,
             'message': f"{'封禁' if action == 'ban' else '解封'}成功",
+            'debug': output[:500],
         }
 
     except Exception as e:

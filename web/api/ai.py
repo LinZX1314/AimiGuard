@@ -41,7 +41,7 @@ def _get_system_context() -> str:
             f"- 24小时内遭受攻击次数: {summary.get('attacks_24h', 0)}",
             f"- 最近扫描时间: {summary.get('last_scan', '尚未扫描')}",
             f"- 高危威胁统计: " + ", ".join([f"{s['level']}: {s['count']}" for s in hfish_stats.get('threat_stats', [])]),
-            "\n你不仅是一个安服专家，还具备调用本地扫描工具的能力。你可以通过调用 nmap_scan 工具来主动探测网络资产、验证漏洞或分析特定 IP。"
+            "\n你不仅是一个安服专家，还具备调用本地工具的能力。"
         ]
         return "\n".join(ctx)
     except Exception as e:
@@ -130,7 +130,7 @@ def ai_chat_stream():
                 host = NmapModel.get_host_by_ip(context_id)
                 if host: sys_info += f"\n详细资产数据: {json.dumps(host, ensure_ascii=False)}"
         
-        history.append({'role': 'system', 'content': f"你是一个专业的网络安全助手。背景：\n{sys_info}", 'ts': _now_iso()})
+        history.append({'role': 'system', 'content': f"你叫玄枢指挥官，你是一个专业的网络安全助手。背景：\n{sys_info}", 'ts': _now_iso()})
         with _session_lock:
             _chat_sessions[sid] = history
 
