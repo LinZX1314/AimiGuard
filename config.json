@@ -16,9 +16,9 @@
   "ai": {
     "enabled": true,
     "auto_ban": false,
-    "api_url": "http://192.168.0.4:1234/",
+    "api_url": "https://npi.linzzx.top",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
-    "model": "lmstudio-community/Qwen3.5-4B-GGUF-no-thinking",
+    "model": "MiniMax-M2.5",
     "timeout": 160
   },
   "switches": [

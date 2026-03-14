@@ -43,7 +43,6 @@ const loading  = ref(false)
 const sending  = ref(false)
 const currentSession = ref<number | null>(null)
 const chatBox  = ref<HTMLElement | null>(null)
-const expandedBlocks = ref<Record<string, boolean>>({})
 
 // ── STT ──────────────────────────────────────────────────────────────────
 const listening = ref(false)
@@ -192,26 +191,12 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
   return normalized
 }
 
-function shouldCollapse(text: string): boolean {
-  if (!text) return false
-  const lineCount = (text.match(/\n/g)?.length ?? 0) + 1
-  return text.length > 700 || lineCount > 12
-}
-
 function messageKey(message: Message, index: number): string {
   return `${message.role}-${message.created_at || 'no-ts'}-${index}`
 }
 
 function toolResultKey(parentKey: string, result: ToolResult, index: number): string {
   return `${parentKey}-tool-${result.tool_call_id || result.name || index}`
-}
-
-function isExpanded(key: string): boolean {
-  return !!expandedBlocks.value[key]
-}
-
-function toggleExpanded(key: string) {
-  expandedBlocks.value[key] = !expandedBlocks.value[key]
 }
 
 async function loadSessions() {
@@ -282,6 +267,23 @@ async function send(extraParams: any = {}) {
     let isNewSession = !currentSession.value
     let sessionId = currentSession.value
     let buffer = '' // 添加缓冲区
+    
+    // 用于打字机效果的队列
+    let typeQueue = ''
+    let typeInterval: any = null
+
+    const startTypewriter = () => {
+      if (typeInterval) return
+      typeInterval = setInterval(() => {
+        if (typeQueue.length > 0) {
+          // 根据队列长度动态输出，防止积压导致过长延迟
+          const popCount = Math.max(1, Math.ceil(typeQueue.length / 15))
+          assistantMsg.content += typeQueue.slice(0, popCount)
+          typeQueue = typeQueue.slice(popCount)
+          nextTick(() => scrollBottom())
+        }
+      }, 30) // 30ms 刷新频率体验最佳
+    }
 
     while (true) {
       const { done, value } = await reader.read()
@@ -303,21 +305,29 @@ async function send(extraParams: any = {}) {
         try {
           const parsed = JSON.parse(data)
           if (parsed.content) {
-            assistantMsg.content += parsed.content
-            await nextTick(); scrollBottom()
+            typeQueue += parsed.content
+            startTypewriter()
           }
           // 工具调用：AI 正在调用工具
           if (parsed.tool_call) {
+            if (typeQueue) {
+              assistantMsg.content += typeQueue
+              typeQueue = ''
+            }
             if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
             ;(assistantMsg as any).tool_calls.push({
               id: parsed.tool_call.name + '_' + Date.now(),
               name: parsed.tool_call.name,
               arguments: parsed.tool_call.arguments,
             })
-            await nextTick(); scrollBottom()
+            nextTick(() => scrollBottom())
           }
           // 工具结果：扫描/执行完毕
           if (parsed.tool_result) {
+            if (typeQueue) {
+              assistantMsg.content += typeQueue
+              typeQueue = ''
+            }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
             // 找到最后一个 tool_call，把结果关联过去
             const lastToolCall = (assistantMsg as any).tool_calls?.slice(-1)[0]
@@ -325,7 +335,7 @@ async function send(extraParams: any = {}) {
               name: lastToolCall?.name || 'tool',
               content: parsed.tool_result,
             })
-            await nextTick(); scrollBottom()
+            nextTick(() => scrollBottom())
           }
           if (parsed.session_id && !sessionId) {
             sessionId = parsed.session_id
@@ -450,19 +460,9 @@ onMounted(onPageLoad)
                     <div
                       v-if="msg.content"
                       class="md-body"
-                      :class="{ 'collapsible-content': shouldCollapse(msg.content) && !isExpanded(messageKey(msg, i)) }"
                       style="font-size:.9rem; line-height:1.7"
                       v-html="renderMd(msg.content)"
                     />
-                    <v-btn
-                      v-if="msg.content && shouldCollapse(msg.content)"
-                      variant="text"
-                      size="small"
-                      class="mt-2 px-0"
-                      @click="toggleExpanded(messageKey(msg, i))"
-                    >
-                      {{ isExpanded(messageKey(msg, i)) ? '收起' : '展开全文' }}
-                    </v-btn>
                     <div
                       v-if="msg.tool_calls?.length"
                       class="tool-call-block"
@@ -493,17 +493,7 @@ onMounted(onPageLoad)
                         </div>
                         <pre
                           class="tool-pre"
-                          :class="{ 'collapsible-pre': shouldCollapse(formatToolResult(toolResult.content)) && !isExpanded(toolResultKey(messageKey(msg, i), toolResult, toolIndex)) }"
                         >{{ formatToolResult(toolResult.content) }}</pre>
-                        <v-btn
-                          v-if="shouldCollapse(formatToolResult(toolResult.content))"
-                          variant="text"
-                          size="small"
-                          class="mt-2 px-0"
-                          @click="toggleExpanded(toolResultKey(messageKey(msg, i), toolResult, toolIndex))"
-                        >
-                          {{ isExpanded(toolResultKey(messageKey(msg, i), toolResult, toolIndex)) ? '收起' : '展开详情' }}
-                        </v-btn>
                       </div>
                     </div>
                   </template>
@@ -575,10 +565,7 @@ onMounted(onPageLoad)
 .md-body :deep(td)         { border:1px solid rgba(255,255,255,.1); padding:.3em .6em; }
 .md-body :deep(th)         { background:rgba(0,229,255,.08); }
 .md-body :deep(a)          { color:#7ad7ff; text-decoration:underline; overflow-wrap:anywhere; word-break:break-all; }
-.collapsible-content       { position:relative; max-height:320px; overflow:hidden; }
-.collapsible-content::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:72px; background:linear-gradient(180deg, rgba(18,18,18,0) 0%, rgba(18,18,18,.95) 100%); pointer-events:none; }
 .tool-call-block           { border-top:1px solid rgba(255,255,255,.08); padding-top:12px; }
 .tool-call-item            { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:10px; }
 .tool-pre                  { margin:0; white-space:pre-wrap; word-break:break-word; font-size:.8rem; line-height:1.55; background:rgba(0,0,0,.28); border-radius:6px; padding:.7em .8em; overflow-x:auto; }
-.collapsible-pre           { max-height:220px; overflow:hidden; }
 </style>
