@@ -41,6 +41,7 @@ desktop.ini
 # ── 项目专属 ──
 .claude/
 err.txt
+lib/
 
 # 资料/
 资料/
