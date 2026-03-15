@@ -1,11 +1,4 @@
 {
-  "logging": {
-    "api_request_log": true,
-    "sync_log": true,
-    "scan_log": true,
-    "ai_log": true,
-    "error_log": true
-  },
   "hfish": {
     "host_port": "192.168.0.5:4433",
     "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",

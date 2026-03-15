@@ -5,7 +5,7 @@ create_app() -> Flask  —— 构建并返回完整配置的 Flask 实例。
 所有路由、蓝图、中间件、SPA 静态文件均在此完成注册。
 """
 import os
-import json
+
 import logging
 import threading
 from datetime import datetime
@@ -23,13 +23,8 @@ for _p in (BASE_DIR, WEB_DIR):
 from database.db import init_db
 from utils.logger import log as unified_log
 
-# ── 配置路径 ──────────────────────────────────────────────────────────────────
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 
-def _load_config():
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 # ── 日志缓冲（供 Web /api/logs 展示） ────────────────────────────────────────
@@ -40,19 +35,6 @@ _log_lock = threading.Lock()
 
 def append_log(level: str, message: str, category: str = "system"):
     """追加日志到内存缓冲，供前端日志页轮询拉取。"""
-    cfg = _load_config()
-    log_cfg = cfg.get("logging", {})
-    filter_map = {
-        "sync":  "sync_log",
-        "scan":  "scan_log",
-        "ai":    "ai_log",
-        "error": "error_log",
-        "api":   "api_request_log",
-    }
-    key = filter_map.get(category)
-    if key and not log_cfg.get(key, True):
-        return
-
     with _log_lock:
         _log_buffer.append({
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -95,11 +77,9 @@ def create_app() -> Flask:
     # ── API 请求日志中间件 ────────────────────────────────────────────────
     @app.before_request
     def log_api_request():
-        cfg = _load_config()
         if (
             request.path.startswith("/api/")
             and request.path != "/api/logs"
-            and cfg.get("logging", {}).get("api_request_log", False)
         ):
             append_log("info", f"API {request.method} {request.path}", "api")
 

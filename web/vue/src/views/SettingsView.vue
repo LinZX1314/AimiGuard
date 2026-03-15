@@ -9,7 +9,7 @@ let statusTimer: ReturnType<typeof setInterval>
 
 const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60,     sync_enabled: false })
 const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T5', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
-const logging = ref({ api_request_log: true, sync_log: true, scan_log: true, ai_log: true, error_log: true })
+
 const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false, ban_threshold: 80 })
 
 // Vuln rules UI
@@ -54,7 +54,7 @@ async function loadSettings() {
       nmap.value.scan_enabled     = sd.nmap.scan_enabled  ?? false
       nmap.value.vuln_scripts_text = JSON.stringify(sd.nmap.vuln_scripts_by_tag ?? {}, null, 2)
     }
-    if (sd.logging) Object.assign(logging.value, sd.logging)
+
     if (sd.status)  Object.assign(status.value,  sd.status)
   } catch(e) { console.error(e) }
 
@@ -76,7 +76,7 @@ async function saveSettings() {
         ip_ranges: nmap.value.ip_ranges.split(',').map(s => s.trim()).filter(Boolean),
         vuln_scripts_by_tag: parsedVulnRules.value,
       },
-      logging: logging.value,
+
     }
     await api.post('/api/v1/settings', payload)
     if (aiCfg.value.api_key) {
@@ -257,29 +257,6 @@ const chainItems = [
       </v-card-text>
     </v-card>
 
-    <!-- Logging -->
-    <v-card class="mb-4">
-      <v-card-title><v-icon start>mdi-file-document-outline</v-icon>日志开关</v-card-title>
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" md="4">
-            <v-switch v-model="logging.api_request_log" label="API 请求日志" color="primary" hide-details />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-switch v-model="logging.sync_log"         label="同步日志"     color="primary" hide-details />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-switch v-model="logging.scan_log"         label="扫描日志"     color="primary" hide-details />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-switch v-model="logging.ai_log"           label="AI 日志"      color="primary" hide-details />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-switch v-model="logging.error_log"        label="错误日志"     color="primary" hide-details />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
 
     <v-btn color="primary" size="large" :loading="saving" @click="saveSettings" prepend-icon="mdi-content-save">
       保存设置
