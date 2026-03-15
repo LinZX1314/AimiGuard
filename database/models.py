@@ -552,20 +552,28 @@ class AiModel:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
-        
+
+        # 确保 content 不是 None
+        content = content or ''
+
         tc_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
-        
-        cursor.execute('''
-            INSERT INTO ai_chat_history (session_id, role, content, tool_calls, create_time, query, response)
-            VALUES (?, ?, ?, ?, ?, '', '')
-        ''', (session_id, role, content, tc_json, now))
-        
-        # 更新会话最后活跃时间
-        if session_id:
-            cursor.execute('UPDATE ai_chat_sessions SET updated_at = ? WHERE id = ?', (now, session_id))
-        
-        conn.commit()
-        conn.close()
+
+        try:
+            cursor.execute('''
+                INSERT INTO ai_chat_history (session_id, role, content, tool_calls, create_time, query, response)
+                VALUES (?, ?, ?, ?, ?, '', '')
+            ''', (session_id, role, content, tc_json, now))
+
+            # 更新会话最后活跃时间
+            if session_id:
+                cursor.execute('UPDATE ai_chat_sessions SET updated_at = ? WHERE id = ?', (now, session_id))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"[AiModel] 保存消息失败: {e}, session_id={session_id}, role={role}")
+        finally:
+            conn.close()
 
     @staticmethod
     def get_messages(session_id):

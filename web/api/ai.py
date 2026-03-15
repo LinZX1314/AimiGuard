@@ -164,7 +164,11 @@ def ai_chat_stream():
         if not tool_calls_received:
             res_content = "".join(full_reply)
             history.append({'role': 'assistant', 'content': res_content, 'ts': _now_iso()})
-            AiModel.save_message(sid, 'assistant', res_content)
+            try:
+                AiModel.save_message(sid, 'assistant', res_content)
+                print(f"[AIChat] 保存助手消息成功, sid={sid}, content_len={len(res_content)}")
+            except Exception as e:
+                print(f"[AIChat] 保存助手消息失败: {e}")
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
 
@@ -204,7 +208,11 @@ def ai_chat_stream():
 
         final_content = "".join(second_reply)
         history.append({'role': 'assistant', 'content': final_content, 'ts': _now_iso()})
-        AiModel.save_message(sid, 'assistant', final_content)
+        try:
+            AiModel.save_message(sid, 'assistant', final_content)
+            print(f"[AIChat] 保存最终助手消息成功, sid={sid}, content_len={len(final_content)}")
+        except Exception as e:
+            print(f"[AIChat] 保存最终助手消息失败: {e}")
         yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
 
     return Response(

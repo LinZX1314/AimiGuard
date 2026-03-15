@@ -10,7 +10,7 @@
     "host_port": "192.168.0.4:4433",
     "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
     "sync_interval": 60,
-    "sync_enabled": true,
+    "sync_enabled": false,
     "api_base_url": ""
   },
   "ai": {

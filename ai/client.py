@@ -12,19 +12,18 @@ def build_openai_messages(history: list[dict]) -> list[dict]:
     messages: list[dict] = []
     for item in history:
         role = item.get('role')
-        if role in ('system', 'user', 'assistant', 'tool'):
+        if role in ('system', 'user', 'tool'):
             msg: dict = {'role': role, 'content': item.get('content') or ''}
             # tool 消息需要附带 tool_call_id
             if role == 'tool' and item.get('tool_call_id'):
                 msg['tool_call_id'] = item['tool_call_id']
             messages.append(msg)
-        elif role == 'assistant_with_tool_calls':
-            # 还原带 tool_calls 字段的 assistant 消息
-            messages.append({
-                'role': 'assistant',
-                'content': item.get('content') or None,
-                'tool_calls': item.get('tool_calls', []),
-            })
+        elif role in ('assistant', 'assistant_with_tool_calls'):
+            # assistant 消息需要检查是否有 tool_calls
+            msg: dict = {'role': 'assistant', 'content': item.get('content') or None}
+            if item.get('tool_calls'):
+                msg['tool_calls'] = item['tool_calls']
+            messages.append(msg)
     return messages
 
 
@@ -43,6 +42,8 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
 
     try:
         response = client.chat.completions.create(model=model, messages=messages)
+        if not response.choices:
+            return {'content': '⚠️ AI 返回为空'}
         content = _content_to_text(response.choices[0].message.content)
         return {'content': content}
     except Exception as e:
@@ -74,6 +75,8 @@ def stream_openai_chat_completion(
             model=model, messages=messages, stream=True
         )
         for chunk in response:
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta
             if delta.content:
                 yield (delta.content, '')
@@ -121,6 +124,8 @@ def stream_openai_chat_with_tools(
         finish_reason = None
 
         for chunk in response:
+            if not chunk.choices:
+                continue
             choice = chunk.choices[0]
             finish_reason = choice.finish_reason or finish_reason
             delta = choice.delta

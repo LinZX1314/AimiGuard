@@ -280,6 +280,58 @@ wr
         return {'ok': False, 'error': f'ACL配置失败: {e}'}
 
 
+@tool_registry.register(
+    name='get_ban_records',
+    description='获取封禁记录列表，查看所有已封禁的IP地址和封禁时间',
+    parameters={
+        'type': 'object',
+        'properties': {
+            'switch_ip': {
+                'type': 'string',
+                'description': '交换机IP地址，不传则查询所有交换机',
+            },
+            'limit': {
+                'type': 'integer',
+                'description': '返回记录数量限制，默认50条',
+                'default': 50,
+            },
+        },
+        'required': [],
+    },
+)
+def _get_ban_records(args: dict, cfg: dict = None) -> dict:
+    """获取封禁记录工具"""
+    from database.models import SwitchAclModel
+
+    switch_ip = args.get('switch_ip')
+    limit = args.get('limit', 50)
+
+    try:
+        rules = SwitchAclModel.get_rules(switch_ip=switch_ip)
+        # 只返回封禁中的记录（action=ban）
+        ban_records = [r for r in rules if r.get('action') == 'ban']
+        ban_records = ban_records[:limit]
+
+        # 格式化记录便于阅读
+        formatted = []
+        for r in ban_records:
+            formatted.append({
+                'ip': r.get('target_ip', 'N/A'),
+                '封禁时间': r.get('created_at', ''),
+                '交换机': r.get('switch_ip', ''),
+                '描述': r.get('description', ''),
+            })
+
+        return {
+            'ok': True,
+            'total': len(ban_records),
+            '已封禁IP列表': formatted,
+            '说明': '列表中的IP当前处于封禁状态，如需解封请使用 switch_acl_config 工具',
+        }
+    except Exception as e:
+        return {'ok': False, 'error': f'获取封禁记录失败: {e}'}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 导出
 # ──────────────────────────────────────────────────────────────────────────────

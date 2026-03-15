@@ -159,7 +159,7 @@ def print_startup_banner(config: dict):
     switches = config.get("switches", [])
 
     unified_log("WebApp", "=" * 58)
-    unified_log("WebApp", "[*] 玄枢·AI攻防指挥官 已启动")
+    unified_log("WebApp", "玄枢·AI攻防指挥官 已启动")
     unified_log("WebApp", "=" * 58)
     unified_log("WebApp", f"控制台地址: http://{display_host}:{port}")
     unified_log("WebApp", (
