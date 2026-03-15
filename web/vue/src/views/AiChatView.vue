@@ -517,7 +517,18 @@ onMounted(onPageLoad)
                   <!-- Assistant Message -->
                   <template v-else>
                     <div
-                      v-if="msg.content"
+                      v-if="!msg.content && !msg.post_content && !msg.tool_calls?.length && !msg.tool_results?.length && sending"
+                      class="assistant-loading"
+                      aria-live="polite"
+                    >
+                      <span class="assistant-loading-text">思考中...</span>
+                      <span class="assistant-loading-dots" aria-hidden="true">
+                        <i></i><i></i><i></i>
+                      </span>
+                    </div>
+
+                    <div
+                      v-else-if="msg.content"
                       class="md-body"
                       v-html="renderMd(msg.content)"
                     />
@@ -810,7 +821,7 @@ onMounted(onPageLoad)
 }
 
 .chat-container {
-  max-width: 900px;
+  max-width: 1040px;
   width: 100%;
   margin: 0 auto;
   display: flex;
@@ -826,7 +837,7 @@ onMounted(onPageLoad)
 }
 
 .messages-area .chat-container {
-  padding: 24px 20px 20px;
+  padding: 24px 14px 20px;
 }
 
 .messages-area::-webkit-scrollbar { width: 6px; }
@@ -902,7 +913,7 @@ onMounted(onPageLoad)
 }
 
 .message-content-wrapper {
-  max-width: 80%;
+  max-width: 86%;
 }
 
 .message-bubble {
@@ -1036,7 +1047,7 @@ details[open] .tool-header .expand-icon {
 }
 
 .input-area-wrapper .chat-container {
-  padding: 24px 20px 0;
+  padding: 24px 14px 0;
 }
 
 .prompt-input-container {
@@ -1163,7 +1174,7 @@ details[open] .tool-header .expand-icon {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.loading-state {
+ .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1174,6 +1185,42 @@ details[open] .tool-header .expand-icon {
   gap: 16px;
 }
 
+.assistant-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  color: var(--text-muted);
+}
+
+.assistant-loading-text {
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.assistant-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-loading-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(196, 181, 253, 0.95);
+  display: block;
+  animation: dot-bounce 1s ease-in-out infinite;
+}
+
+.assistant-loading-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.assistant-loading-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
 .spinner {
   width: 24px;
   height: 24px;
@@ -1181,6 +1228,17 @@ details[open] .tool-header .expand-icon {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+@keyframes dot-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
