@@ -71,7 +71,7 @@ tool_registry = ToolRegistry()
 def _dhcp_query(args: dict, cfg: dict = None) -> dict:
     """DHCP查询工具 - 查询交换机DHCP绑定表"""
     import re
-    import telnetlib
+    import telnetlib3 as telnetlib
     import time
 
     if cfg is None:
@@ -256,7 +256,9 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
 def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
     """交换机ACL配置工具"""
     import time
-    import telnetlib
+    import telnetlib3 as telnetlib
+
+    from database.models import SwitchAclModel
 
     from database.models import SwitchAclModel
 

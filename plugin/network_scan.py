@@ -10,6 +10,7 @@ import nmap
 import sqlite3
 import time
 import os
+import shutil
 from datetime import datetime
 
 # nmap 路径配置
@@ -22,6 +23,23 @@ from database.models import ScannerModel, VulnModel, NmapModel
 from utils.logger import log
 
 import json
+
+
+def get_nmap_executable():
+    """检测可用的 nmap 可执行文件路径。"""
+    system_nmap = shutil.which('nmap')
+    if system_nmap:
+        log("Nmap", f"使用系统 nmap: {system_nmap}", "INFO")
+        return system_nmap
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_nmap = os.path.join(base_dir, 'lib', 'Nmap', 'nmap.exe')
+    if os.path.isfile(local_nmap):
+        log("Nmap", f"系统未安装 nmap，降级使用项目内置: {local_nmap}", "WARNING")
+        return local_nmap
+
+    log("Nmap", "未找到 nmap！系统 PATH 和 lib/Nmap/ 均无可用二进制。", "ERROR")
+    return None
 
 
 
@@ -52,7 +70,11 @@ def scan_hosts(ip_range, arguments='-sV -O -T5'):
     返回:
         扫描结果字典
     """
-    nm = nmap.PortScanner()
+    nmap_path = get_nmap_executable()
+    if not nmap_path:
+        return None
+
+    nm = nmap.PortScanner(nmap_search_path=(nmap_path,))
 
     try:
         nm.scan(hosts=ip_range, arguments=arguments)
@@ -255,7 +277,11 @@ def run_vuln_scan(hosts_data):
     """
     stats = {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
 
-    nm = nmap.PortScanner()
+    nmap_path = get_nmap_executable()
+    if not nmap_path:
+        return stats
+
+    nm = nmap.PortScanner(nmap_search_path=(nmap_path,))
 
     for host in hosts_data:
         mac_address = host.get('mac_address')
