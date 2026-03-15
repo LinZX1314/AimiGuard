@@ -65,73 +65,100 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
     """
     url = f"https://{host_port}/api/v1/attack/detail?api_key={api_key}"
 
-    payload = json.dumps({
-        "start_time": start_time,
-        "end_time": end_time,
-        "page_no": 1,
-        "page_size": 1000,
-        "intranet": -1,
-        "threat_label": [],
-        "client_id": [],
-        "service_name": [],
-        "info_confirm": "0"
-    })
+    all_logs = []
+    page_no = 1
+    page_size = 10000
 
-    headers = {'Content-Type': 'application/json'}
+    while True:
+        payload = json.dumps({
+            "start_time": start_time,
+            "end_time": end_time,
+            "page_no": page_no,
+            "page_size": page_size,
+            "intranet": -1,
+            "threat_label": [],
+            "client_id": [],
+            "service_name": [],
+            "info_confirm": "0"
+        })
 
-    max_retries = 2
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
-            response.raise_for_status()
-            data = response.json()
+        headers = {'Content-Type': 'application/json'}
 
-            # 列表处理
-            if "data" in data and "detail_list" in data.get("data", {}):
-                detail_list = data["data"]["detail_list"]
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
+                response.raise_for_status()
+                data = response.json()
 
-                for item in detail_list:
-                    # 1. 时间戳转换
-                    if "create_time" in item:
-                        item["create_time_str"] = timestamp_to_time(item["create_time"])
-                        del item["create_time"]
+                # 列表处理
+                if "data" in data and "detail_list" in data.get("data", {}):
+                    detail_list = data["data"]["detail_list"]
 
-                    # 2. 删除多余字段
-                    for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
-                        item.pop(key, None)
+                    if not detail_list:
+                        # 没有更多数据了
+                        break
 
-                return detail_list
+                    for item in detail_list:
+                        # 1. 时间戳转换
+                        if "create_time" in item:
+                            item["create_time_str"] = timestamp_to_time(item["create_time"])
+                            del item["create_time"]
 
-            return []
+                        # 2. 删除多余字段
+                        for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
+                            item.pop(key, None)
 
-        except requests.exceptions.ConnectionError as e:
-            raw = str(e)
-            if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
-                err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
-            elif "Name or service not known" in raw or "nodename nor servname" in raw:
-                err_msg = "无法解析主机名，请检查地址配置"
-            else:
-                err_msg = raw[:80] + "..." if len(raw) > 80 else raw
-            if attempt < max_retries - 1:
-                time.sleep(2)
-                continue
-            log("HFish", _format_error(host_port, err_msg), "ERROR")
-            return []
+                    all_logs.extend(detail_list)
 
-        except requests.exceptions.Timeout:
-            if attempt < max_retries - 1:
-                time.sleep(2)
-                continue
-            log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "ERROR")
-            return []
+                    # 检查是否还有更多数据
+                    total = data.get("data", {}).get("total", 0)
+                    if page_no * page_size >= total:
+                        break
 
-        except requests.exceptions.HTTPError as e:
-            log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "ERROR")
-            return []
+                    page_no += 1
+                else:
+                    break
 
-        except Exception as e:
-            log("HFish", _format_error(host_port, str(e)), "ERROR")
-            return []
+                break  # 成功获取数据，跳出重试循环
+
+            except requests.exceptions.ConnectionError as e:
+                raw = str(e)
+                if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
+                    err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
+                elif "Name or service not known" in raw or "nodename nor servname" in raw:
+                    err_msg = "无法解析主机名，请检查地址配置"
+                else:
+                    err_msg = raw[:80] + "..." if len(raw) > 80 else raw
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                log("HFish", _format_error(host_port, err_msg), "ERROR")
+                return all_logs if all_logs else []
+
+            except requests.exceptions.Timeout:
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "ERROR")
+                return all_logs if all_logs else []
+
+            except requests.exceptions.HTTPError as e:
+                log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "ERROR")
+                return all_logs if all_logs else []
+
+            except Exception as e:
+                log("HFish", _format_error(host_port, str(e)), "ERROR")
+                return all_logs if all_logs else []
+
+        # 检查是否需要继续获取下一页
+        total = data.get("data", {}).get("total", 0)
+        if page_no * page_size >= total or not detail_list:
+            break
+
+        page_no += 1
+
+    return all_logs
 
 
 

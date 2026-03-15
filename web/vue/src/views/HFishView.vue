@@ -62,10 +62,8 @@ const CHART_THEME = {
 const locationBarOption = computed(() => {
   const counter: Record<string, number> = {}
   for (const log of logs.value) {
-    const loc = log.ip_location || log.location || '未知'
-    // take first segment (e.g. "中国 广东")
-    const key = loc.split(' ')[0] || loc
-    counter[key] = (counter[key] ?? 0) + (Number(log.attack_count) || 1)
+    const ip = log.attack_ip || '未知'
+    counter[ip] = (counter[ip] ?? 0) + (Number(log.attack_count) || 1)
   }
   const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 15)
   return {
@@ -129,8 +127,8 @@ async function loadLogs() {
   loading.value = true
   try {
     let url = viewMode.value === 'aggregated'
-      ? '/api/v1/defense/hfish/logs?limit=500&aggregated=1'
-      : '/api/v1/defense/hfish/logs?limit=500'
+      ? '/api/v1/defense/hfish/logs?limit=5000&aggregated=1'
+      : '/api/v1/defense/hfish/logs?limit=5000'
     if (svcFilter.value) url += `&service_name=${encodeURIComponent(svcFilter.value)}`
     const d = await api.get<any>(url)
     logs.value = normalizeLogs(d)
@@ -185,7 +183,7 @@ onMounted(() => { loadStats(); loadLogs() })
         <v-card>
           <v-card-title class="text-subtitle-1 pa-3">
             <v-icon start color="primary" size="18">mdi-earth</v-icon>
-            攻击来源 Top 15（地区）
+            攻击来源 Top 15（IP）
           </v-card-title>
           <v-card-text class="pa-2" style="height:300px">
             <v-chart :option="locationBarOption" autoresize style="width:100%;height:100%" />

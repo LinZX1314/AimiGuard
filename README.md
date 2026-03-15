@@ -202,6 +202,6 @@ ECharts 已通过 `manualChunks` 拆分，不再与 HFishView 合并打包，可
 - [x] HFish 攻击来源柱状图 + 服务分布饼图（ECharts + vue-echarts）
 - [x] AI 对话 Markdown 渲染（marked.js）+ 语音输入（Web Speech STT）+ 朗读（TTS）
 - [x] ECharts 独立分包（manualChunks），首屏包体积优化
-- [x] 交换机联动封堵（Netmiko）
+- [x] 交换机联动封堵（telnet）
 - [ ] 钉钉 / 飞书 Webhook 实时告警
 - [ ] 导出 PDF 安全体检报告

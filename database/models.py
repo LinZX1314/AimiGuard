@@ -365,7 +365,20 @@ class HFishModel:
         rows = cursor.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-        
+
+    @staticmethod
+    def get_attack_logs_by_ip(ip: str, limit: int = 1000):
+        """获取指定IP的攻击日志"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM attack_logs WHERE attack_ip = ? ORDER BY create_time_timestamp DESC LIMIT ?",
+            (ip, limit)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
     @staticmethod
     def get_stats():
         conn = get_connection()

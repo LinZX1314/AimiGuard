@@ -141,6 +141,10 @@ def ai_chat_stream():
     cfg_now = _load_cfg()
 
     def generate():
+        # 如果是新会话，流开始的第一帧直接告诉前端建立的会话 ID
+        if not session_id:
+            yield f"data: {json.dumps({'session_id': sid}, ensure_ascii=False)}\n\n"
+
         full_reply = []
         tool_calls_received = []
 

@@ -58,6 +58,100 @@ tool_registry = ToolRegistry()
 # 工具定义（使用装饰器）
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+@tool_registry.register(
+    name='dhcp_query',
+    description='查询锐捷交换机DHCP绑定表，获取当前网络中所有通过DHCP获取IP的设备列表（IP地址、MAC地址、租约时间）',
+    parameters={
+        'type': 'object',
+        'properties': {},
+        'required': [],
+    },
+)
+def _dhcp_query(args: dict, cfg: dict = None) -> dict:
+    """DHCP查询工具 - 查询交换机DHCP绑定表"""
+    import re
+    import telnetlib
+    import time
+
+    if cfg is None:
+        return {'ok': False, 'error': '缺少配置信息'}
+
+    # 从配置获取交换机信息
+    switches = cfg.get('switches', [])
+    if not switches:
+        return {'ok': False, 'error': '配置文件中未找到交换机信息'}
+
+    switch = switches[0]
+    host = switch.get('host', '192.168.0.1')
+    port = switch.get('port', 23)
+    password = switch.get('password', 'admin')
+    secret = switch.get('secret', password)
+
+    try:
+        tn = telnetlib.Telnet(host, port, 30)
+        time.sleep(2)
+
+        # 读取欢迎信息
+        tn.read_very_eager()
+
+        # 发送密码进入特权模式
+        tn.write((password + '\r').encode('utf-8'))
+        time.sleep(1)
+
+        # 进入enable模式
+        tn.write(b'en\r')
+        time.sleep(1)
+        tn.write((secret + '\r').encode('utf-8'))
+        time.sleep(1)
+
+        # 执行DHCP查询命令
+        tn.write(b'show ip dhcp binding\r')
+        time.sleep(2)
+
+        # 读取输出
+        output = tn.read_very_eager().decode('utf-8', errors='ignore')
+        tn.close()
+
+        # 解析输出
+        bindings = []
+        lines = output.strip().split('\n')
+
+        # 跳过表头（前两行）
+        for line in lines[2:]:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 正则匹配
+            match = re.match(r'^(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F.]+)\s+(\d+\s+days.*?)\s+(Automatic|Dynamic)$', line)
+            if match:
+                ip = match.group(1)
+                mac = match.group(2)
+                # 格式化MAC地址
+                if len(mac) == 14 and '.' in mac:
+                    mac_clean = mac.replace('.', '')
+                    mac_formatted = ':'.join([mac_clean[i:i+2] for i in range(0, 12, 2)])
+                else:
+                    mac_formatted = mac
+
+                bindings.append({
+                    'ip': ip,
+                    'mac': mac_formatted,
+                    'lease': match.group(3).strip(),
+                    'type': match.group(4),
+                })
+
+        return {
+            'ok': True,
+            'count': len(bindings),
+            'devices': bindings,
+        }
+
+    except Exception as e:
+        return {'ok': False, 'error': f'DHCP查询失败: {e}'}
+
+
 @tool_registry.register(
     name='nmap_scan',
     description='执行 Nmap 网络扫描，发现存活主机、开放端口、服务版本和操作系统信息',

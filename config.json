@@ -7,23 +7,23 @@
     "error_log": true
   },
   "hfish": {
-    "host_port": "192.168.0.4:4433",
+    "host_port": "192.168.0.5:4433",
     "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
     "sync_interval": 60,
-    "sync_enabled": false,
+    "sync_enabled": true,
     "api_base_url": ""
   },
   "ai": {
     "enabled": true,
-    "auto_ban": false,
-    "api_url": "https://npi.linzzx.top",
+    "auto_ban": true,
+    "api_url": "http://192.168.0.5:1234",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
-    "model": "MiniMax-M2.5",
+    "model": "lmstudio-community/Qwen3.5-4B-GGUF-no-thinking",
     "timeout": 160
   },
   "switches": [
     {
-      "host": "192.168.0.1",
+      "host": "192.168.0.2",
       "port": 23,
       "password": "admin",
       "acl_number": 30
