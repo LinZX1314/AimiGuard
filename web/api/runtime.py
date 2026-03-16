@@ -86,6 +86,9 @@ def run_hfish_sync():
         last_timestamp = HFishModel.get_last_timestamp()
         logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
 
+        if logs is None:
+            return {'success': False, 'error': '连接异常'}
+
         if not logs:
             _runtime_log('info', 'HFish 同步完成: 无新数据')
             return {'success': True, 'total': 0, 'new': 0}

@@ -45,9 +45,7 @@ def timestamp_to_time(timestamp):
 def _format_error(host_port, err_msg):
     """格式化控制台错误输出"""
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f""" [{ts}] HFish 蜜罐连接异常，地址: {host_port} 
-    错误: {err_msg}
-"""
+    return f""" [{ts}] HFish 蜜罐连接异常，地址: {host_port} """
 
 
 def get_attack_logs(start_time, end_time, host_port, api_key):
@@ -134,22 +132,22 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
                     time.sleep(2)
                     continue
                 log("HFish", _format_error(host_port, err_msg), "ERROR")
-                return all_logs if all_logs else []
+                return None
 
             except requests.exceptions.Timeout:
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
                 log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "ERROR")
-                return all_logs if all_logs else []
+                return None
 
             except requests.exceptions.HTTPError as e:
                 log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "ERROR")
-                return all_logs if all_logs else []
+                return None
 
             except Exception as e:
                 log("HFish", _format_error(host_port, str(e)), "ERROR")
-                return all_logs if all_logs else []
+                return None
 
         # 检查是否需要继续获取下一页
         total = data.get("data", {}).get("total", 0)
@@ -218,7 +216,10 @@ def main():
 
             logs = get_attack_logs(start_time, 0, host_port, api_key)
 
-            if logs:
+            if logs is None:
+                log("HFish", "同步失败，跳过本次同步")
+                return
+            elif logs:
                 new_count = HFishModel.save_logs(logs)
                 log("HFish", f"同步完成: 获取 {len(logs)} 条, 新增 {new_count} 条")
             else:

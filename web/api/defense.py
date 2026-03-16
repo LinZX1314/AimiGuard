@@ -33,7 +33,9 @@ def defense_hfish_logs():
         conn = get_connection()
         c = conn.cursor()
         q = """
-            SELECT attack_ip, ip_location, service_name,
+            SELECT attack_ip,
+                   MAX(ip_location) as ip_location,
+                   GROUP_CONCAT(DISTINCT service_name) as service_name,
                    COUNT(*) as attack_count,
                    MAX(create_time_str) as latest_time
             FROM attack_logs WHERE 1=1

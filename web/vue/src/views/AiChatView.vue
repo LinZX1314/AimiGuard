@@ -615,7 +615,7 @@ onMounted(onPageLoad)
               :disabled="!recognition"
               @click="toggleListen"
             >
-              <v-icon size="22">{{ listening ? 'mdi-microphone-off' : 'mdi-microphone' }}</v-icon>
+              <v-icon size="22">{{ listening ? 'mdi-microphone' : 'mdi-microphone-off' }}</v-icon>
               <div v-if="listening" class="pulse-ring"></div>
             </button>
             

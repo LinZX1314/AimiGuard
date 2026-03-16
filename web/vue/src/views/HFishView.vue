@@ -14,8 +14,9 @@ use([CanvasRenderer, BarChart, PieChart, GridComponent, TitleComponent,
      TooltipComponent, LegendComponent, DataZoomComponent])
 
 const loading   = ref(false)
-const viewMode  = ref<'detail' | 'aggregated'>('detail')
+const viewMode  = ref<'detail' | 'aggregated'>('aggregated')
 const logs      = ref<any[]>([])
+const pieLogs   = ref<any[]>([])  // 明细数据，用于饼图统计
 const stats     = ref({ total_attacks: 0 })
 const services  = ref<string[]>([])
 const search    = ref('')
@@ -90,7 +91,7 @@ const locationBarOption = computed(() => {
 
 const servicePieOption = computed(() => {
   const counter: Record<string, number> = {}
-  for (const log of logs.value) {
+  for (const log of pieLogs.value) {  // 使用固定的明细数据
     const svc = log.service_name || '未知'
     counter[svc] = (counter[svc] ?? 0) + (Number(log.attack_count) || 1)
   }
@@ -132,6 +133,11 @@ async function loadLogs() {
     if (svcFilter.value) url += `&service_name=${encodeURIComponent(svcFilter.value)}`
     const d = await api.get<any>(url)
     logs.value = normalizeLogs(d)
+
+    // 同时请求明细数据用于饼图统计
+    const pieUrl = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
+    const pieD = await api.get<any>(pieUrl)
+    pieLogs.value = normalizeLogs(pieD)
   } catch(e) { console.error(e) }
   loading.value = false
 }
@@ -208,13 +214,14 @@ onMounted(() => { loadStats(); loadLogs() })
       <v-card-title class="d-flex flex-wrap align-center ga-2 pa-4">
         <span>攻击记录</span>
         <v-btn-toggle v-model="viewMode" mandatory density="compact" color="primary">
-          <v-btn value="detail" size="small">
-            <v-icon start size="16">mdi-format-list-bulleted</v-icon>明细
-          </v-btn>
           <v-btn value="aggregated" size="small">
             <v-icon start size="16">mdi-folder-network</v-icon>折叠
           </v-btn>
+          <v-btn value="detail" size="small">
+            <v-icon start size="16">mdi-format-list-bulleted</v-icon>明细
+          </v-btn>
         </v-btn-toggle>
+
         <v-spacer />
         <v-btn icon variant="text" @click="loadLogs"><v-icon>mdi-refresh</v-icon></v-btn>
       </v-card-title>
@@ -245,9 +252,9 @@ onMounted(() => { loadStats(); loadLogs() })
           <template #item.decision="{ item }">
             <v-chip
               v-if="item.decision"
-              :color="item.decision === 'true' ? 'error' : 'success'"
+              :color="item.decision === '封禁' || item.decision === '已封禁' ? 'error' : 'success'"
               size="x-small"
-            >{{ item.decision === 'true' ? '建议封禁' : '无需封禁' }}</v-chip>
+            >{{ item.decision === '封禁' ? '建议封禁' : item.decision === '已封禁' ? '已封禁' : '无需封禁' }}</v-chip>
             <span v-else class="text-medium-emphasis">-</span>
           </template>
           <template #item.ai_analysis="{ item }">
