@@ -2,6 +2,34 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { marked } from 'marked'
 import { api } from '@/api/index'
+import {
+  MessageSquare,
+  Plus,
+  Trash2,
+  Bot,
+  Wrench,
+  CheckCircle2,
+  ChevronDown,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Send,
+  User,
+  History,
+  Settings,
+  X
+} from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Textarea } from '@/components/ui/textarea'
 
 interface ToolCall {
   id: string
@@ -113,7 +141,7 @@ function cleanupVoiceCapture() {
 function renderWaveformFrame() {
   if (!analyser || !frequencyData) return
 
-  analyser.getByteFrequencyData(frequencyData)
+  if (frequencyData) analyser.getByteFrequencyData(frequencyData as any)
   const bucketSize = Math.max(1, Math.floor(frequencyData.length / waveformBars.value.length))
 
   waveformBars.value = waveformBars.value.map((_, index) => {
@@ -148,7 +176,8 @@ async function startWaveform() {
       },
     })
     audioContext = new AudioContextClass()
-    if (audioContext.state === 'suspended') await audioContext.resume()
+    if (audioContext?.state === 'suspended') await audioContext.resume()
+    if (!audioContext) return
 
     analyser = audioContext.createAnalyser()
     analyser.fftSize = 256
@@ -261,6 +290,15 @@ function applyVoiceTranscript() {
 watch(voiceDialog, (open) => {
   if (!open) cleanupVoiceCapture()
 })
+
+function toggleListen() {
+  if (!recognition) return
+  if (listening.value) {
+    stopVoiceInput()
+  } else {
+    startSpeechRecognition()
+  }
+}
 
 
 // ── TTS ──────────────────────────────────────────────────────────────────
@@ -638,78 +676,83 @@ onBeforeUnmount(() => {
   }
 })
 </script>
-
 <template>
-  <div class="ai-chat-layout premium-theme">
+  <div class="flex h-[calc(100vh-64px)] bg-background text-foreground font-sans overflow-hidden">
     <!-- Sidebar -->
-    <aside class="ai-sidebar">
-      <div class="sidebar-header">
-        <h2 class="sidebar-title">
-          <v-icon size="20" class="mr-2">mdi-forum</v-icon>
+    <aside class="w-72 shrink-0 bg-muted/30 border-r border-border flex flex-col backdrop-blur-xl z-10 transition-all">
+      <div class="p-5 flex justify-between items-center border-b border-border/50">
+        <h2 class="text-base font-semibold flex items-center m-0 opacity-90">
+          <MessageSquare :size="20" class="mr-2" />
           会话记录
         </h2>
-        <button class="new-chat-btn" @click="newChat" title="新对话">
-          <v-icon size="20">mdi-plus</v-icon>
-        </button>
+        <Button variant="ghost" size="icon" @click="newChat" title="新对话" class="h-9 w-9 rounded-full bg-background/5 border border-border hover:bg-foreground hover:text-background transition-all">
+          <Plus :size="20" />
+        </Button>
       </div>
-      
-      <div class="session-list">
-        <div v-if="!sessions.length" class="empty-sessions">
+
+      <ScrollArea class="flex-1 p-3">
+        <div v-if="!sessions.length" class="text-center py-8 text-muted-foreground text-sm">
           暂无历史会话
         </div>
-        <div
-          v-for="s in sessions"
-          :key="s.id"
-          class="session-item"
-          :class="{ 'session-active': currentSession === s.id }"
-          @click="loadMessages(s.id)"
-        >
-          <div class="session-info">
-            <div class="session-title">{{ s.title || `会话 #${s.id}` }}</div>
-            <div class="session-time">{{ s.created_at?.slice(0,16) }}</div>
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="s in sessions"
+            :key="s.id"
+            class="group flex items-center justify-between py-3 px-4 rounded-xl cursor-pointer bg-transparent transition-all border border-transparent hover:bg-background/40"
+            :class="[currentSession === s.id ? 'bg-primary/10 border-primary/20' : '']"
+            @click="loadMessages(s.id)"
+          >
+            <div class="overflow-hidden flex-1">
+              <div class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis mb-1" :class="[currentSession === s.id ? 'text-primary' : '']">
+                {{ s.title || `会话 #${s.id}` }}
+              </div>
+              <div class="text-xs text-muted-foreground">{{ s.created_at?.slice(0,16) }}</div>
+            </div>
+            <Button variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity" @click.stop="deleteSession(s.id)">
+              <Trash2 :size="16" />
+            </Button>
           </div>
-          <button class="delete-btn" @click.stop="deleteSession(s.id)">
-            <v-icon size="16">mdi-trash-can-outline</v-icon>
-          </button>
         </div>
-      </div>
+      </ScrollArea>
     </aside>
 
     <!-- Main Chat Window -->
-    <main class="ai-main">
-      <div ref="chatBox" class="messages-area">
-        <div class="chat-container">
+    <main class="flex-1 bg-background/80 flex flex-col relative w-full">
+      <ScrollArea ref="chatBox" class="flex-1 w-full pb-36 h-full">
+        <div class="max-w-4xl w-full mx-auto flex flex-col px-4 pt-6 pb-5">
           <!-- Loading State -->
-          <div v-if="loading" class="loading-state">
-            <div class="spinner"></div>
+          <div v-if="loading" class="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-4 py-20">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <span>加载对话中...</span>
           </div>
 
           <!-- Empty State -->
-          <div v-else-if="!messages.length" class="empty-state">
-            <div class="empty-icon-wrap">
-              <v-icon size="48" class="empty-icon">mdi-robot-outline</v-icon>
+          <div v-else-if="!messages.length" class="m-auto text-center animate-in fade-in py-32">
+            <div class="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-full flex items-center justify-center text-muted-foreground shadow-2xl">
+              <Bot :size="40" class="text-primary/80" />
             </div>
-            <h3 class="empty-title">玄枢 AI 助手</h3>
-            <p class="empty-desc">输入指令开始对话，支持自然语言触发扫描与分析</p>
+            <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">玄枢 AI 助手</h3>
+            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入指令开始对话，支持自然语言触发扫描与分析</p>
           </div>
 
           <!-- Message List -->
-          <div v-else class="message-list">
+          <div v-else class="flex flex-col gap-8">
             <div
               v-for="(msg, i) in messages"
               :key="messageKey(msg, i)"
-              class="message-wrapper"
-              :class="msg.role === 'user' ? 'is-user' : 'is-assistant'"
+              class="flex gap-4 animate-in slide-in-from-bottom-2 fade-in duration-300"
+              :class="[msg.role === 'user' ? 'justify-end' : 'justify-start']"
             >
-              <div class="message-avatar" v-if="msg.role === 'assistant'">
-                <v-icon size="22">mdi-robot-outline</v-icon>
-              </div>
+              <Avatar v-if="msg.role === 'assistant'" class="w-9 h-9 border border-border bg-muted shrink-0 text-muted-foreground">
+                <AvatarFallback><Bot :size="20" /></AvatarFallback>
+              </Avatar>
 
-              <div class="message-content-wrapper">
-                <div class="message-bubble">
+              <div class="max-w-[86%]">
+                <div class="p-4 rounded-2xl text-[15px] leading-relaxed shadow-sm"
+                  :class="[msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted/50 border border-border/50 rounded-bl-sm text-foreground']"
+                >
                   <!-- User Message -->
-                  <div v-if="msg.role === 'user'" class="user-text">
+                  <div v-if="msg.role === 'user'" class="whitespace-pre-wrap">
                     {{ msg.content }}
                   </div>
                   
@@ -717,742 +760,185 @@ onBeforeUnmount(() => {
                   <template v-else>
                     <div
                       v-if="!msg.content && !msg.post_content && !msg.tool_calls?.length && !msg.tool_results?.length && sending"
-                      class="assistant-loading"
-                      aria-live="polite"
+                      class="inline-flex items-center gap-2.5 min-h-[28px] text-muted-foreground"
                     >
-                      <span class="assistant-loading-text">思考中...</span>
-                      <span class="assistant-loading-dots" aria-hidden="true">
-                        <i></i><i></i><i></i>
+                      <span class="text-[15px]">思考中...</span>
+                      <span class="flex items-center gap-1.5 align-middle">
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce"></i>
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce delay-150"></i>
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce delay-300"></i>
                       </span>
                     </div>
 
                     <div
                       v-else-if="msg.content"
-                      class="md-body"
+                      class="md-body text-foreground/90 markdown-content"
                       v-html="renderMd(msg.content)"
                     />
                     
-                    <!-- Merged Tool Calls and Results -->
-                    <details v-if="msg.tool_calls?.length || msg.tool_results?.length" class="tool-section my-3">
-                      <summary class="tool-header" :class="{ success: msg.tool_results?.length && msg.tool_results.length >= (msg.tool_calls?.length || 0) }">
-                        <div class="d-flex align-center" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                          <v-icon size="14" class="mr-1">
-                            {{ (msg.tool_calls?.length && !msg.tool_results?.length) ? 'mdi-wrench-outline' : 'mdi-check-circle-outline' }}
-                          </v-icon>
-                          <span class="tool-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px;">
+                    <!-- Tools -->
+                    <details v-if="msg.tool_calls?.length || msg.tool_results?.length" class="bg-black/20 rounded-xl border border-border/50 overflow-hidden mt-3 transition-all group">
+                      <summary class="px-3.5 py-2.5 bg-white/5 border-b border-transparent text-xs text-muted-foreground flex items-center justify-between cursor-pointer select-none list-none group-hover:bg-white/10 group-open:border-border/50 w-full outline-none [&::-webkit-details-marker]:hidden"
+                        :class="[msg.tool_results?.length && msg.tool_results.length >= (msg.tool_calls?.length || 0) ? 'text-emerald-500' : '']"
+                      >
+                        <div class="flex items-center overflow-hidden text-ellipsis whitespace-nowrap">
+                          <Wrench v-if="msg.tool_calls?.length && !msg.tool_results?.length" class="w-3.5 h-3.5 mr-1" />
+                          <CheckCircle2 v-else class="w-3.5 h-3.5 mr-1" />
+                          <span class="whitespace-nowrap overflow-hidden text-ellipsis max-w-[400px]">
                             工具: {{ (msg.tool_calls || msg.tool_results || []).map((t: any) => t.name || t.function?.name || 'unknown_tool').join(', ') }}
                           </span>
                         </div>
-                        <v-icon size="16" class="expand-icon">mdi-chevron-down</v-icon>
+                        <ChevronDown class="w-4 h-4 transition-transform duration-300 group-open:rotate-180" />
                       </summary>
-                      <div class="tool-content">
-                        <!-- When we have Tool Calls -->
+
+                      <div class="animate-in slide-in-from-top-1">
                         <template v-if="msg.tool_calls?.length">
                           <div
                             v-for="toolCall in msg.tool_calls"
                             :key="toolCall.id"
-                            class="tool-card"
+                            class="p-3.5 border-b border-white/5 last:border-0"
                           >
-                            <div class="tool-name d-flex align-center justify-space-between">
-                              <span><v-icon size="14" class="mr-1">mdi-api</v-icon> {{ toolCall.name || toolCall.function?.name }}</span>
-                              <v-icon size="14" v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))" color="#10b981">mdi-check</v-icon>
-                              <v-progress-circular v-else indeterminate size="12" width="2" color="#c4b5fd" />
+                            <div class="font-mono text-[13px] font-semibold text-primary/80 mb-2 flex items-center justify-between">
+                              <span class="flex items-center gap-1"><Wrench class="w-3.5 h-3.5" /> {{ toolCall.name || toolCall.function?.name }}</span>
+                              <CheckCircle2 v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))" class="w-3.5 h-3.5 text-emerald-500" />
+                              <div v-else class="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full"></div>
                             </div>
                             
-                            <div class="code-label">输入参数</div>
-                            <pre class="tool-code">{{ formatJson(toolCall.arguments || toolCall.function?.arguments) }}</pre>
+                            <div class="text-[11px] text-slate-400 mb-1 ml-0.5 uppercase tracking-wider">输入参数</div>
+                            <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-slate-50 border-l-2 border-primary font-mono">{{ formatJson(toolCall.arguments || toolCall.function?.arguments) }}</pre>
 
-                            <!-- Corresponding Result -->
                             <template v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))">
-                              <div class="code-label result-label mt-2">返回结果</div>
-                              <pre class="tool-code result-code">{{ formatToolResult(msg.tool_results.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))!.content) }}</pre>
+                              <div class="text-[11px] text-emerald-400 mt-2 mb-1 ml-0.5 uppercase tracking-wider">返回结果</div>
+                              <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-emerald-100 border-l-2 border-emerald-500 font-mono">{{ formatToolResult(msg.tool_results.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))!.content) }}</pre>
                             </template>
                           </div>
                         </template>
 
-                        <!-- Fallback: Only Tool Results -->
                         <template v-else-if="msg.tool_results?.length">
                           <div
                             v-for="(toolResult, toolIndex) in msg.tool_results"
                             :key="toolResultKey(messageKey(msg, i), toolResult, toolIndex)"
-                            class="tool-card result-card"
+                            class="p-3.5 border-b border-white/5 last:border-0"
                           >
-                            <div class="tool-name"><v-icon size="14" class="mr-1">mdi-api</v-icon> {{ toolResult.name || 'unknown_tool' }}</div>
-                            <div class="code-label result-label">返回结果</div>
-                            <pre class="tool-code result-code">{{ formatToolResult(toolResult.content) }}</pre>
+                            <div class="font-mono text-[13px] font-semibold text-primary/80 mb-2 flex items-center gap-1"><Wrench class="w-3.5 h-3.5" /> {{ toolResult.name || 'unknown_tool' }}</div>
+                            <div class="text-[11px] text-emerald-400 mb-1 ml-0.5 uppercase tracking-wider">返回结果</div>
+                            <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-emerald-100 border-l-2 border-emerald-500 font-mono">{{ formatToolResult(toolResult.content) }}</pre>
                           </div>
                         </template>
                       </div>
                     </details>
                     
-                    <!-- Post Tool Message Content -->
                     <div
                       v-if="msg.post_content"
-                      class="md-body mt-2"
+                      class="md-body text-foreground/90 markdown-content mt-2"
                       v-html="renderMd(msg.post_content)"
                     />
                   </template>
                 </div>
               </div>
 
-              <div class="message-avatar" v-if="msg.role === 'user'">
-                <v-icon size="22">mdi-account</v-icon>
-              </div>
+              <Avatar v-if="msg.role === 'user'" class="w-9 h-9 bg-primary/20 shrink-0 text-primary border border-primary/30">
+                <AvatarFallback><User class="w-5 h-5" /></AvatarFallback>
+              </Avatar>
             </div>
           </div>
         </div>
-      </div>
+      </ScrollArea>
 
-      <!-- Input Area (Prompt Input) -->
-      <div class="input-area-wrapper">
-        <div class="chat-container">
-          <div class="prompt-input-container">
-            <button 
-              class="action-btn stt-btn"
-              :class="{ 'is-listening': listening }"
-              :title="recognition ? (listening ? '停止录音' : '语音输入') : '浏览器不支持语音识别'"
-              :disabled="!recognition"
-              @click="toggleListen"
-            >
-              <v-icon size="22">{{ listening ? 'mdi-microphone' : 'mdi-microphone-off' }}</v-icon>
-              <div v-if="listening" class="pulse-ring"></div>
-            </button>
+      <!-- Input Area -->
+      <div class="absolute bottom-0 left-0 right-0 pb-3 bg-gradient-to-t from-background/95 from-75% to-transparent pointer-events-none flex justify-center z-10 w-full">
+        <div class="max-w-4xl w-full px-4 pt-6">
+          <div class="pointer-events-auto bg-card/60 backdrop-blur-xl border border-border/80 rounded-[24px] p-2 flex items-end gap-3 shadow-2xl transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative"
+                    :class="[listening ? 'text-destructive hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/10']"
+                    :disabled="!recognition"
+                    @click="toggleListen"
+                  >
+                    <Mic v-if="listening" :size="20" class="z-10" />
+                    <MicOff v-else :size="20" />
+                    <div v-if="listening" class="absolute inset-0 rounded-full border-2 border-destructive animate-ping"></div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ recognition ? (listening ? '停止录音' : '语音输入') : '浏览器不支持语音识别' }}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
-            <textarea
+            <Textarea
               v-model="input"
-              class="prompt-textarea"
+              class="flex-1 bg-transparent border-0 text-foreground font-sans text-[15px] leading-relaxed py-2.5 resize-none max-h-[150px] min-h-[44px] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none scrollbar-hide"
               placeholder="何事相询？ (Enter 发送，Shift+Enter 换行)"
-              rows="1"
+              :rows="1"
               :disabled="sending"
               @keydown.enter.exact.prevent="send"
               @keydown.enter.shift.stop
-            ></textarea>
+            />
 
-            <div class="action-group">
-              <button 
-                class="action-btn tts-btn" 
-                :class="{ 'active': ttsEnabled }"
-                @click="toggleTts"
-                title="AI 语音播报"
-              >
-                <v-icon size="20">{{ ttsEnabled ? 'mdi-volume-high' : 'mdi-volume-off' }}</v-icon>
-              </button>
+            <div class="flex gap-1.5 p-1 shrink-0">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      class="h-[38px] w-[38px] rounded-full"
+                      :class="[ttsEnabled ? 'text-primary' : 'text-muted-foreground']"
+                      @click="toggleTts"
+                    >
+                      <Volume2 v-if="ttsEnabled" :size="20" />
+                      <VolumeX v-else :size="20" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>AI 语音播报</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               
-              <button 
-                class="action-btn send-btn" 
-                :class="{ 'sending': sending, 'disabled': !input.trim() }"
-                @click="send" 
+              <Button 
+                class="h-[38px] w-[38px] rounded-full transition-all"
+                :class="[sending || !input.trim() ? 'opacity-50 cursor-not-allowed bg-white/10 text-white/30 hover:bg-white/10' : 'bg-primary text-primary-foreground hover:scale-105 shadow-md shadow-primary/20']"
                 :disabled="sending || !input.trim()"
+                size="icon"
+                @click="send" 
               >
-                <v-icon v-if="!sending" size="20">mdi-send</v-icon>
-                <v-progress-circular v-else indeterminate size="20" width="2" color="white" />
-              </button>
+                <div v-if="sending" class="animate-spin h-5 w-5 border-2 border-foreground border-t-transparent rounded-full"></div>
+                <Send v-else :size="18" class="ml-0.5" />
+              </Button>
             </div>
           </div>
-          <div class="input-footer">AI 生成的内容仅供参考，请谨慎验证。</div>
+          <div class="text-center text-[11px] text-muted-foreground/60 mt-3 pointer-events-auto">AI 生成的内容仅供参考，请谨慎验证。</div>
         </div>
       </div>
     </main>
   </div>
 </template>
 
-<style scoped>
-/* ───────────── PREMIUM THEME TOKENS ───────────── */
-.premium-theme {
-  --bg-app: #0f1115;
-  --bg-sidebar: rgba(22, 24, 29, 0.7);
-  --bg-chat: #0a0c10;
-  --bg-bubble-user: linear-gradient(135deg, #2563eb, #0ea5e9);
-  --bg-bubble-ai: rgba(30, 33, 40, 0.85);
-  --bg-input: rgba(30, 33, 40, 0.6);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-light: rgba(255, 255, 255, 0.05);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --accent: #38bdf8;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-}
-
-/* ───────────── LAYOUT ───────────── */
-.ai-chat-layout {
-  display: flex;
-  height: calc(100vh - 64px);
-  background-color: var(--bg-app);
-  color: var(--text-main);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  overflow: hidden;
-}
-
-/* ───────────── SIDEBAR ───────────── */
-.ai-sidebar {
-  width: 280px;
-  flex-shrink: 0;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  z-index: 10;
-}
-
-.sidebar-header {
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.sidebar-title {
-  font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  margin: 0;
-  opacity: 0.9;
-}
-
-.new-chat-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  height: 36px;
-  width: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.new-chat-btn:hover {
-  background: var(--text-main);
-  color: #000;
-  transform: scale(1.05);
-}
-
-.session-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.session-list::-webkit-scrollbar { width: 4px; }
-.session-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-
-.empty-sessions {
-  text-align: center;
-  padding: 30px 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.session-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  background: transparent;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-}
-
-.session-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.session-active {
-  background: rgba(56, 189, 248, 0.1);
-  border-color: rgba(56, 189, 248, 0.2);
-}
-
-.session-info {
-  overflow: hidden;
-}
-
-.session-title {
-  font-weight: 500;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 4px;
-}
-
-.session-active .session-title { color: var(--accent); }
-
-.session-time {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  opacity: 0;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.session-item:hover .delete-btn { opacity: 1; }
-.delete-btn:hover { color: #f43f5e; background: rgba(244, 63, 94, 0.1); }
-
-/* ───────────── MAIN DEFAULT ───────────── */
-.ai-main {
-  flex: 1;
-  background: var(--bg-chat);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.chat-container {
-  max-width: 1040px;
-  width: 100%;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.messages-area {
-  flex: 1;
-  overflow-y: auto;
-  width: 100%;
-  padding-bottom: 140px; /* Space for absolute input area */
-  scroll-behavior: smooth;
-}
-
-.messages-area .chat-container {
-  padding: 24px 14px 20px;
-}
-
-.messages-area::-webkit-scrollbar { width: 6px; }
-.messages-area::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
-
-/* ───────────── EMPTY STATE ───────────── */
-.empty-state {
-  margin: auto;
-  text-align: center;
-  animation: fade-in 0.8s ease-out;
-}
-
-.empty-icon-wrap {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 20px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-}
-
-.empty-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-
-.empty-desc {
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  max-width: 300px;
-  margin: 0 auto;
-  line-height: 1.5;
-}
-
-/* ───────────── MESSAGE LIST ───────────── */
-.message-list {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.message-wrapper {
-  display: flex;
-  gap: 16px;
-  animation: slide-up 0.4s ease-out backwards;
-}
-
-.message-wrapper.is-user { justify-content: flex-end; }
-
-.message-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-muted);
-}
-
-.is-user .message-avatar {
-  background: linear-gradient(135deg, #475569, #334155);
-  color: #fff;
-}
-
-.message-content-wrapper {
-  max-width: 86%;
-}
-
-.message-bubble {
-  padding: 16px 20px;
-  border-radius: var(--radius-lg);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
-
-.is-user .message-bubble {
-  background: var(--bg-bubble-user);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-}
-
-.is-assistant .message-bubble {
-  background: var(--bg-bubble-ai);
-  border: 1px solid var(--border-color);
-  border-bottom-left-radius: 4px;
-}
-
-.user-text {
-  white-space: pre-wrap;
-}
-
-/* ───────────── TOOLS ───────────── */
-details.tool-section {
-  background: rgba(0,0,0,0.25);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  overflow: hidden;
-  margin-top: 12px;
-  transition: all 0.3s ease;
-}
-
-.tool-header {
-  padding: 10px 14px;
-  background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid transparent;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-  list-style: none; /* Hide default arrow */
-  transition: background 0.2s;
-}
-
-.tool-header::-webkit-details-marker {
-  display: none;
-}
-
-.tool-header:hover {
-  background: rgba(255,255,255,0.05);
-}
-
-details[open] .tool-header {
-  border-bottom-color: var(--border-light);
-}
-
-.tool-header .expand-icon {
-  transition: transform 0.3s ease;
-}
-
-details[open] .tool-header .expand-icon {
-  transform: rotate(180deg);
-}
-
-.tool-header.success { color: #10b981; }
-
-.tool-content {
-  animation: slide-down 0.3s ease-out;
-}
-
-.tool-card {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
-.tool-card:last-child { border-bottom: none; }
-
-.tool-name {
-  font-family: monospace;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #c4b5fd;
-  margin-bottom: 8px;
-}
-
-.code-label {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  margin-bottom: 4px;
-  margin-left: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.result-label { color: #34d399; }
-
-.tool-code {
-  margin: 0;
-  padding: 12px;
-  background: rgba(0,0,0,0.4);
-  border-radius: 6px;
-  font-size: 0.8rem;
-  overflow-x: auto;
-  color: #f8fafc;
-  border-left: 2px solid #6366f1;
-}
-
-.result-code {
-  color: #a7f3d0;
-  border-left-color: #10b981;
-}
-
-/* ───────────── INPUT AREA ───────────── */
-.input-area-wrapper {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding-bottom: 12px;
-  background: linear-gradient(to top, var(--bg-chat) 75%, transparent);
-  pointer-events: none;
-  display: flex;
-  justify-content: center;
-}
-
-.input-area-wrapper .chat-container {
-  padding: 24px 14px 0;
-}
-
-.prompt-input-container {
-  pointer-events: auto;
-  background: var(--bg-input);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 8px;
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.prompt-input-container:focus-within {
-  border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 2px rgba(56, 189, 248, 0.1);
-}
-
-.prompt-textarea {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text-main);
-  font-family: inherit;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  padding: 12px 0;
-  resize: none;
-  max-height: 150px;
-  outline: none;
-}
-
-.prompt-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.action-group {
-  display: flex;
-  gap: 6px;
-  padding: 6px 4px;
-}
-
-.action-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.action-btn:hover:not(.disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-main);
-}
-
-.action-btn.active {
-  color: var(--accent);
-}
-
-.send-btn {
-  background: var(--text-main);
-  color: #000;
-}
-
-.send-btn:hover:not(.disabled) {
-  background: #fff;
-  color: #000;
-  transform: scale(1.05);
-}
-
-.send-btn.disabled {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.3);
-  cursor: not-allowed;
-}
-
-.stt-btn { margin-bottom: 6px; margin-left: 6px; }
-
-.is-listening { color: #f43f5e; }
-.pulse-ring {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  border-radius: 50%;
-  border: 2px solid #f43f5e;
-  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-.input-footer {
-  text-align: center;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.2);
-  margin-top: 12px;
-  pointer-events: auto;
-}
-
-/* ───────────── ANIMATIONS ───────────── */
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes ping {
-  75%, 100% { transform: scale(1.5); opacity: 0; }
-}
-
-@keyframes slide-down {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
- .loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  gap: 16px;
-}
-
-.assistant-loading {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 28px;
-  color: var(--text-muted);
-}
-
-.assistant-loading-text {
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.assistant-loading-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.assistant-loading-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(196, 181, 253, 0.95);
-  display: block;
-  animation: dot-bounce 1s ease-in-out infinite;
-}
-
-.assistant-loading-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.assistant-loading-dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(255,255,255,0.1);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes dot-bounce {
-  0%, 80%, 100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  40% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ───────────── MARKDOWN FIXES ───────────── */
-.md-body { overflow-wrap: anywhere; word-break: break-word; }
-.md-body :deep(p) { margin: 0.5rem 0; }
-.md-body :deep(pre) { background: rgba(0,0,0,0.4); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 0.85rem; margin: 12px 0; }
-.md-body :deep(code) { background: rgba(0,0,0,0.3); border-radius: 4px; padding: 2px 6px; font-size: 0.85rem; color: #e2e8f0; }
-.md-body :deep(ul), .md-body :deep(ol) { padding-left: 1.5em; margin: 0.5rem 0; }
-.md-body :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: 1em; opacity: 0.8; margin: 0.5rem 0; background: rgba(56, 189, 248, 0.05); padding: 8px 12px; border-radius: 0 6px 6px 0; }
-.md-body :deep(h1), .md-body :deep(h2), .md-body :deep(h3) { margin: 1rem 0 0.5rem; font-size: 1.1rem; color: #fff; font-weight: 600; }
-.md-body :deep(table) { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 12px 0; border: 1px solid var(--border-light); border-radius: 8px; overflow: hidden; display: block; }
-.md-body :deep(th), .md-body :deep(td) { border: 1px solid var(--border-light); padding: 8px 12px; }
-.md-body :deep(th) { background: rgba(255,255,255,0.03); font-weight: 600; text-align: left; }
-.md-body :deep(a) { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
-.md-body :deep(a:hover) { text-decoration: underline; opacity: 0.8; }
+<style>
+/* Markdown Content Overrides */
+.markdown-content { overflow-wrap: anywhere; word-break: break-word; }
+.markdown-content p { margin: 0.5rem 0; }
+.markdown-content pre { background: rgba(0,0,0,0.4); border: 1px solid theme('colors.border'); border-radius: 0.5rem; padding: 0.75rem; overflow-x: auto; font-size: 0.85rem; margin: 0.75rem 0; }
+.markdown-content code { background: rgba(0,0,0,0.3); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.85rem; color: theme('colors.slate.200'); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.markdown-content pre code { background: transparent; padding: 0; color: inherit; }
+.markdown-content ul, .markdown-content ol { padding-left: 1.5em; margin: 0.5rem 0; }
+.markdown-content ul { list-style-type: disc; }
+.markdown-content ol { list-style-type: decimal; }
+.markdown-content blockquote { border-left: 3px solid theme('colors.primary.DEFAULT'); padding: 0.5rem 0.75rem; opacity: 0.8; margin: 0.5rem 0; background: theme('colors.primary.DEFAULT' / 5%); border-radius: 0 0.375rem 0.375rem 0; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { margin: 1rem 0 0.5rem; color: theme('colors.foreground'); font-weight: 600; line-height: 1.25; }
+.markdown-content h1 { font-size: 1.5rem; }
+.markdown-content h2 { font-size: 1.25rem; }
+.markdown-content h3 { font-size: 1.125rem; }
+.markdown-content table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0.75rem 0; border: 1px solid theme('colors.border'); border-radius: 0.5rem; overflow: hidden; display: block; }
+.markdown-content th, .markdown-content td { border: 1px solid theme('colors.border'); padding: 0.5rem 0.75rem; }
+.markdown-content th { background: theme('colors.white' / 3%); font-weight: 600; text-align: left; }
+.markdown-content a { color: theme('colors.primary.DEFAULT'); text-decoration: none; transition: opacity 0.2s; }
+.markdown-content a:hover { text-decoration: underline; opacity: 0.8; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 </style>

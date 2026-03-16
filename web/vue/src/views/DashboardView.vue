@@ -6,6 +6,21 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, ArcElement, BarElement, Title, Tooltip, Legend, Filler
 } from 'chart.js'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
+import { 
+  History, 
+  ShieldAlert, 
+  Server, 
+  Bug, 
+  Bot, 
+  Ban, 
+  CheckCircle2, 
+  Circle,
+  AlertTriangle,
+  Flame
+} from 'lucide-vue-next'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement,
   ArcElement, BarElement, Title, Tooltip, Legend, Filler)
@@ -34,12 +49,12 @@ const THREAT_COLORS: Record<string, string> = {
   '高危': '#EF4444', '中危': '#F59E0B', '低危': '#3B82F6', '信息': '#9CA3AF'
 }
 const statCards = [
-  { label: '攻击日志总数',  key: 'hfish_total',   color: '#3B82F6', icon: 'mdi-history' },
-  { label: '高危攻击',      key: 'hfish_high',    color: '#EF4444', icon: 'mdi-shield-alert-outline' },
-  { label: '在线主机',      key: 'nmap_online',   color: '#10B981', icon: 'mdi-server-network' },
-  { label: '待修漏洞',      key: 'vuln_open',     color: '#F59E0B', icon: 'mdi-bug-outline' },
-  { label: 'AI 封禁决策',   key: 'ai_decisions',  color: '#8B5CF6', icon: 'mdi-robot-outline' },
-  { label: '已封禁 IP',     key: 'blocked_ips',   color: '#F472B6', icon: 'mdi-cancel' },
+  { label: '攻击日志总数',  key: 'hfish_total',   color: 'text-blue-400',   bg: 'bg-blue-400/10', border: 'border-blue-400/20', icon: History },
+  { label: '高危攻击',      key: 'hfish_high',    color: 'text-red-400',    bg: 'bg-red-400/10',  border: 'border-red-400/20',  icon: ShieldAlert },
+  { label: '在线主机',      key: 'nmap_online',   color: 'text-emerald-400', bg: 'bg-emerald-400/10', border: 'border-emerald-400/20', icon: Server },
+  { label: '待修漏洞',      key: 'vuln_open',     color: 'text-amber-400',  bg: 'bg-amber-400/10', border: 'border-amber-400/20', icon: Bug },
+  { label: 'AI 封禁决策',   key: 'ai_decisions',  color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20', icon: Bot },
+  { label: '已封禁 IP',     key: 'blocked_ips',   color: 'text-slate-400',   bg: 'bg-slate-400/10',   border: 'border-slate-400/20',   icon: Ban },
 ]
 const chainItems = [
   { label: 'HFish 同步',   key: 'hfish_sync'   },
@@ -48,42 +63,20 @@ const chainItems = [
   { label: 'ACL 封禁',     key: 'acl_auto_ban' },
 ]
 
-const trendChartData = {
-  labels: trends.value.labels,
-  datasets: [{
-    label: '攻击次数',
-    data: trends.value.counts,
-    borderColor: '#00E5FF',
-    backgroundColor: 'rgba(0,229,255,0.12)',
-    fill: true,
-    tension: 0.4
-  }]
-}
 const trendOptions = {
   responsive: true, maintainAspectRatio: false,
   plugins: { legend: { display: false } },
-  scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } }
+  scales: { 
+    x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } }, 
+    y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } } 
+  }
 }
 
 function unwrap<T>(payload: any): T {
-  // 兼容 api.ts 已解包和历史接口未解包两种返回。
   return (payload?.data ?? payload) as T
 }
 
-function resetCharts() {
-  trends.value = { labels: [], counts: [] }
-  hfishStats.value = { levels: [], counts: [], colors: [], services: {} }
-  trendChartData.labels = []
-  trendChartData.datasets[0].data = []
-}
-
-function syncTrendChart() {
-  trendChartData.labels = trends.value.labels
-  trendChartData.datasets[0].data = trends.value.counts
-}
-
 async function load() {
-  // 仪表盘加载时并发拉取核心统计，减少首屏等待。
   loading.value = true
   loadError.value = ''
   partialError.value = []
@@ -130,14 +123,10 @@ async function load() {
       labels: ts.map((t: any) => t.date),
       counts: ts.map((t: any) => t.count)
     }
-    syncTrendChart()
   } else {
-    resetCharts()
+    trends.value = { labels: [], counts: [] }
+    hfishStats.value = { levels: [], counts: [], colors: [], services: {} }
     partialError.value.push('攻击统计图表加载失败')
-  }
-
-  if (!loadError.value && partialError.value.length === 3) {
-    loadError.value = '首页数据暂时无法加载，请检查后端服务后重试。'
   }
 
   loading.value = false
@@ -149,127 +138,196 @@ onUnmounted(() => clearInterval(refreshTimer))
 </script>
 
 <template>
-  <v-container fluid class="pa-6">
-    <v-alert
-      v-if="loadError"
-      type="error"
-      variant="tonal"
-      class="mb-4"
-      density="comfortable"
-      border="start"
-    >
-      {{ loadError }}
-    </v-alert>
-
-    <v-alert
-      v-if="partialError.length"
-      type="warning"
-      variant="tonal"
-      class="mb-4"
-      density="comfortable"
-      border="start"
-    >
-      {{ partialError.join('；') }}。
-    </v-alert>
+  <div class="p-6 space-y-6">
+    <!-- Notifications -->
+    <div v-if="loadError || partialError.length" class="space-y-3">
+      <Alert v-if="loadError" variant="destructive" class="bg-red-500/10 border-red-500/20">
+        <AlertTriangle class="h-4 w-4" />
+        <AlertDescription>{{ loadError }}</AlertDescription>
+      </Alert>
+      <Alert v-if="partialError.length" variant="default" class="bg-amber-500/10 border-amber-500/20 text-amber-500">
+        <ShieldAlert class="h-4 w-4" />
+        <AlertDescription>{{ partialError.join('；') }}。</AlertDescription>
+      </Alert>
+    </div>
 
     <!-- Stat Cards -->
-    <v-row class="mb-4">
-      <v-col v-for="s in statCards" :key="s.key" cols="12" sm="6" md="4" lg="2">
-        <v-card :style="`border-left:4px solid ${s.color}`" class="pa-4" height="100">
-          <div class="d-flex justify-space-between align-center">
-            <div>
-              <div class="text-caption text-medium-emphasis">{{ s.label }}</div>
-              <div class="text-h4 font-weight-bold mt-1" :style="`color:${s.color}`">
-                <v-progress-circular v-if="loading" indeterminate size="24" width="2" :color="s.color" />
-                <span v-else-if="loadError">--</span>
-                <span v-else>{{ (metrics as any)[s.key] }}</span>
-              </div>
-            </div>
-            <v-icon size="40" :color="s.color" style="opacity:.7">{{ s.icon }}</v-icon>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <Card 
+        v-for="s in statCards" 
+        :key="s.key" 
+        class="bg-card/40 border border-border/50 relative overflow-hidden group hover:border-border transition-all"
+      >
+        <div class="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
+          <Bug v-if="s.icon === Bug" :size="48" :stroke-width="1.5" :class="s.color" />
+          <ShieldAlert v-else-if="s.icon === ShieldAlert" :size="48" :stroke-width="1.5" :class="s.color" />
+          <History v-else-if="s.icon === History" :size="48" :stroke-width="1.5" :class="s.color" />
+          <Server v-else-if="s.icon === Server" :size="48" :stroke-width="1.5" :class="s.color" />
+          <Bot v-else-if="s.icon === Bot" :size="48" :stroke-width="1.5" :class="s.color" />
+          <Ban v-else-if="s.icon === Ban" :size="48" :stroke-width="1.5" :class="s.color" />
+          <Activity v-else :size="48" :stroke-width="1.5" :class="s.color" />
+        </div>
+        <CardContent class="p-5 relative z-10">
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{{ s.label }}</p>
+          <div class="flex items-center">
+            <h2 v-if="!loading" class="text-3xl font-bold tracking-tight" :class="s.color">
+              {{ (metrics as any)[s.key] }}
+            </h2>
+            <Skeleton v-else class="h-8 w-20 bg-muted" />
           </div>
-        </v-card>
-      </v-col>
-    </v-row>
+          <div class="mt-2 h-1 w-12 rounded-full" :class="s.bg"></div>
+        </CardContent>
+      </Card>
+    </div>
 
-    <!-- Charts row -->
-    <v-row class="mb-4">
-      <v-col cols="12" md="8">
-        <v-card height="280">
-          <v-card-title class="text-subtitle-1">攻击趋势（近 7 天）</v-card-title>
-          <v-card-text style="height:220px">
-            <Line v-if="trends.labels.length" :data="{ labels: trends.labels, datasets: [{ label:'攻击次数', data: trends.counts, borderColor:'#00E5FF', backgroundColor:'rgba(0,229,255,.12)', fill:true, tension:.4 }] }" :options="trendOptions" />
-            <v-skeleton-loader v-else-if="loading" type="image" height="200" />
-            <div v-else class="d-flex align-center justify-center text-medium-emphasis h-100">
-              {{ partialError.includes('攻击统计图表加载失败') ? '攻击趋势加载失败' : '暂无趋势数据' }}
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Line Chart -->
+      <Card class="lg:col-span-8 bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <History class="h-4 w-4 text-primary" />
+            攻击趋势（近 7 天）
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="h-[240px] w-full">
+            <Line 
+              v-if="trends.labels.length" 
+              :data="{ 
+                labels: trends.labels, 
+                datasets: [{ 
+                  label: '攻击次数', 
+                  data: trends.counts, 
+                  borderColor: '#00E5FF', 
+                  backgroundColor: 'rgba(0,229,255,.08)', 
+                  fill: true, 
+                  tension: 0.4,
+                  pointRadius: 4,
+                  pointBackgroundColor: '#00E5FF',
+                  borderWidth: 2
+                }] 
+              }" 
+              :options="trendOptions" 
+            />
+            <Skeleton v-else-if="loading" class="h-full w-full rounded-lg" />
+            <div v-else class="h-full flex items-center justify-center text-muted-foreground text-sm italic">
+              {{ partialError.includes('攻击统计图表加载失败') ? '数据加载异常' : '暂无统计数据' }}
             </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-card height="280">
-          <v-card-title class="text-subtitle-1">威胁等级分布</v-card-title>
-          <v-card-text style="height:220px; display:flex; align-items:center; justify-content:center">
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Doughnut Chart -->
+      <Card class="lg:col-span-4 bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <ShieldAlert class="h-4 w-4 text-primary" />
+            威胁等级分布
+          </CardTitle>
+        </CardHeader>
+        <CardContent class="flex items-center justify-center pt-2">
+          <div class="h-[240px] w-full flex items-center justify-center">
             <Doughnut
               v-if="hfishStats.levels.length"
-              :data="{ labels: hfishStats.levels, datasets: [{ data: hfishStats.counts, backgroundColor: hfishStats.colors }] }"
-              :options="{ responsive:true, maintainAspectRatio:false }"
+              :data="{ 
+                labels: hfishStats.levels, 
+                datasets: [{ 
+                  data: hfishStats.counts, 
+                  backgroundColor: hfishStats.colors,
+                  borderWidth: 0,
+                  hoverOffset: 8
+                }] 
+              }"
+              :options="{ 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    labels: { color: '#94a3b8', boxWidth: 10, padding: 20, font: { size: 10 } }
+                  }
+                }
+              }"
             />
-            <v-skeleton-loader v-else-if="loading" type="image" height="180" />
-            <div v-else class="text-medium-emphasis text-body-2">
-              {{ partialError.includes('攻击统计图表加载失败') ? '威胁分布加载失败' : '暂无威胁分布数据' }}
+            <Skeleton v-else-if="loading" class="h-48 w-48 rounded-full" />
+            <div v-else class="text-muted-foreground text-sm italic">
+              暂无等级统计
             </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
 
+    <!-- Defense Status & Popular Services -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Card class="bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <Bot class="h-4 w-4 text-primary" />
+            防御链路状态
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div v-if="Object.keys(chainStatus).length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 py-2">
+            <div 
+              v-for="ci in chainItems" 
+              :key="ci.key" 
+              class="flex items-center gap-3 p-2.5 rounded-lg border border-transparent transition-all"
+              :class="[chainStatus[ci.key] ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' : 'bg-muted/10 text-slate-500 border-dashed border-border/50']"
+            >
+              <CheckCircle2 v-if="chainStatus[ci.key]" class="h-4 w-4 shrink-0" />
+              <Circle v-else class="h-4 w-4 shrink-0" />
+              <span class="text-sm font-medium">{{ ci.label }}</span>
+            </div>
+          </div>
+          <div v-else-if="loading" class="space-y-3 py-2">
+            <Skeleton v-for="i in 4" :key="i" class="h-10 w-full" />
+          </div>
+          <div v-else class="py-10 text-center text-muted-foreground text-sm italic">
+            链路数据暂时不可用
+          </div>
+        </CardContent>
+      </Card>
 
-    <!-- Chain status -->
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="text-subtitle-1">防御链路状态</v-card-title>
-          <v-card-text>
-            <v-row v-if="Object.keys(chainStatus).length" dense>
-              <v-col v-for="ci in chainItems" :key="ci.key" cols="6">
-                <div class="d-flex align-center ga-2 py-2">
-                  <v-icon
-                    :color="chainStatus[ci.key] ? 'success' : 'grey'"
-                    size="18"
-                  >{{ chainStatus[ci.key] ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
-                  <span class="text-body-2">{{ ci.label }}</span>
-                </div>
-              </v-col>
-            </v-row>
-            <div v-else-if="loading" class="py-6">
-              <v-skeleton-loader type="list-item-two-line" />
-            </div>
-            <div v-else class="text-medium-emphasis text-body-2 py-4">
-              {{ partialError.includes('防御链路状态加载失败') ? '防御链路状态加载失败' : '暂无链路状态数据' }}
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="text-subtitle-1 d-flex align-center">
+      <Card class="bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <Flame class="h-4 w-4 text-primary" />
             热门攻击服务
-          </v-card-title>
-          <v-card-text style="height:150px">
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="h-[160px] w-full overflow-hidden">
             <Bar
               v-if="Object.keys(hfishStats.services).length"
               :data="{
                 labels: Object.keys(hfishStats.services).slice(0,6),
-                datasets: [{ label:'次数', data: Object.values(hfishStats.services).slice(0,6), backgroundColor:'#8B5CF6', borderRadius:4 }]
+                datasets: [{ 
+                  label: '攻击次数', 
+                  data: Object.values(hfishStats.services).slice(0,6), 
+                  backgroundColor: '#8B5CF6', 
+                  borderRadius: 6 
+                }]
               }"
-              :options="{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{ legend:{ display:false } } }"
+              :options="{ 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                indexAxis: 'y', 
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                  y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+                }
+              }"
             />
-            <v-skeleton-loader v-else-if="loading" type="image" height="130" />
-            <div v-else class="d-flex align-center justify-center text-medium-emphasis h-100">
-              {{ partialError.includes('攻击统计图表加载失败') ? '热门攻击服务加载失败' : '暂无热门攻击服务数据' }}
+            <Skeleton v-else-if="loading" class="h-full w-full rounded-lg" />
+            <div v-else class="h-full flex items-center justify-center text-muted-foreground text-sm italic">
+              暂无服务统计数据
             </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  </div>
 </template>

@@ -1,0 +1,267 @@
+
+<template>
+  <div class="flex h-[calc(100vh-64px)] bg-background text-foreground font-sans overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-72 shrink-0 bg-muted/30 border-r border-border flex flex-col backdrop-blur-xl z-10 transition-all">
+      <div class="p-5 flex justify-between items-center border-b border-border/50">
+        <h2 class="text-base font-semibold flex items-center m-0 opacity-90">
+          <MessageSquare class="w-5 h-5 mr-2" />
+          会话记录
+        </h2>
+        <Button variant="ghost" size="icon" @click="newChat" title="新对话" class="h-9 w-9 rounded-full bg-background/5 border border-border hover:bg-foreground hover:text-background transition-all">
+          <Plus class="w-5 h-5" />
+        </Button>
+      </div>
+
+      <ScrollArea class="flex-1 p-3">
+        <div v-if="!sessions.length" class="text-center py-8 text-muted-foreground text-sm">
+          暂无历史会话
+        </div>
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="s in sessions"
+            :key="s.id"
+            class="group flex items-center justify-between py-3 px-4 rounded-xl cursor-pointer bg-transparent transition-all border border-transparent hover:bg-background/40"
+            :class="[currentSession === s.id ? 'bg-primary/10 border-primary/20' : '']"
+            @click="loadMessages(s.id)"
+          >
+            <div class="overflow-hidden flex-1">
+              <div class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis mb-1" :class="[currentSession === s.id ? 'text-primary' : '']">
+                {{ s.title || `会话 #${s.id}` }}
+              </div>
+              <div class="text-xs text-muted-foreground">{{ s.created_at?.slice(0,16) }}</div>
+            </div>
+            <Button variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity" @click.stop="deleteSession(s.id)">
+              <Trash2 class="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </ScrollArea>
+    </aside>
+
+    <!-- Main Chat Window -->
+    <main class="flex-1 bg-background/80 flex flex-col relative w-full">
+      <ScrollArea ref="chatBox" class="flex-1 w-full pb-36 h-full">
+        <div class="max-w-4xl w-full mx-auto flex flex-col px-4 pt-6 pb-5">
+          <!-- Loading State -->
+          <div v-if="loading" class="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-4 py-20">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span>加载对话中...</span>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="!messages.length" class="m-auto text-center animate-in fade-in py-32">
+            <div class="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-full flex items-center justify-center text-muted-foreground shadow-2xl">
+              <Bot class="w-10 h-10 text-primary/80" />
+            </div>
+            <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">玄枢 AI 助手</h3>
+            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入指令开始对话，支持自然语言触发扫描与分析</p>
+          </div>
+
+          <!-- Message List -->
+          <div v-else class="flex flex-col gap-8">
+            <div
+              v-for="(msg, i) in messages"
+              :key="messageKey(msg, i)"
+              class="flex gap-4 animate-in slide-in-from-bottom-2 fade-in duration-300"
+              :class="[msg.role === 'user' ? 'justify-end' : 'justify-start']"
+            >
+              <Avatar v-if="msg.role === 'assistant'" class="w-9 h-9 border border-border bg-muted shrink-0 text-muted-foreground">
+                <AvatarFallback><Bot class="w-5 h-5" /></AvatarFallback>
+              </Avatar>
+
+              <div class="max-w-[86%]">
+                <div class="p-4 rounded-2xl text-[15px] leading-relaxed shadow-sm"
+                  :class="[msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted/50 border border-border/50 rounded-bl-sm text-foreground']"
+                >
+                  <!-- User Message -->
+                  <div v-if="msg.role === 'user'" class="whitespace-pre-wrap">
+                    {{ msg.content }}
+                  </div>
+                  
+                  <!-- Assistant Message -->
+                  <template v-else>
+                    <div
+                      v-if="!msg.content && !msg.post_content && !msg.tool_calls?.length && !msg.tool_results?.length && sending"
+                      class="inline-flex items-center gap-2.5 min-h-[28px] text-muted-foreground"
+                    >
+                      <span class="text-[15px]">思考中...</span>
+                      <span class="flex items-center gap-1.5 align-middle">
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce"></i>
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce delay-150"></i>
+                        <i class="w-1.5 h-1.5 rounded-full bg-primary/80 animate-bounce delay-300"></i>
+                      </span>
+                    </div>
+
+                    <div
+                      v-else-if="msg.content"
+                      class="md-body text-foreground/90 markdown-content"
+                      v-html="renderMd(msg.content)"
+                    />
+                    
+                    <!-- Tools -->
+                    <details v-if="msg.tool_calls?.length || msg.tool_results?.length" class="bg-black/20 rounded-xl border border-border/50 overflow-hidden mt-3 transition-all group">
+                      <summary class="px-3.5 py-2.5 bg-white/5 border-b border-transparent text-xs text-muted-foreground flex items-center justify-between cursor-pointer select-none list-none group-hover:bg-white/10 group-open:border-border/50 w-full outline-none [&::-webkit-details-marker]:hidden"
+                        :class="[msg.tool_results?.length && msg.tool_results.length >= (msg.tool_calls?.length || 0) ? 'text-emerald-500' : '']"
+                      >
+                        <div class="flex items-center overflow-hidden text-ellipsis whitespace-nowrap">
+                          <Wrench v-if="msg.tool_calls?.length && !msg.tool_results?.length" class="w-3.5 h-3.5 mr-1" />
+                          <CheckCircle2 v-else class="w-3.5 h-3.5 mr-1" />
+                          <span class="whitespace-nowrap overflow-hidden text-ellipsis max-w-[400px]">
+                            工具: {{ (msg.tool_calls || msg.tool_results || []).map((t: any) => t.name || t.function?.name || 'unknown_tool').join(', ') }}
+                          </span>
+                        </div>
+                        <ChevronDown class="w-4 h-4 transition-transform duration-300 group-open:rotate-180" />
+                      </summary>
+
+                      <div class="animate-in slide-in-from-top-1">
+                        <template v-if="msg.tool_calls?.length">
+                          <div
+                            v-for="toolCall in msg.tool_calls"
+                            :key="toolCall.id"
+                            class="p-3.5 border-b border-white/5 last:border-0"
+                          >
+                            <div class="font-mono text-[13px] font-semibold text-primary/80 mb-2 flex items-center justify-between">
+                              <span class="flex items-center gap-1"><Wrench class="w-3.5 h-3.5" /> {{ toolCall.name || toolCall.function?.name }}</span>
+                              <CheckCircle2 v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))" class="w-3.5 h-3.5 text-emerald-500" />
+                              <div v-else class="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full"></div>
+                            </div>
+                            
+                            <div class="text-[11px] text-slate-400 mb-1 ml-0.5 uppercase tracking-wider">输入参数</div>
+                            <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-slate-50 border-l-2 border-primary font-mono">{{ formatJson(toolCall.arguments || toolCall.function?.arguments) }}</pre>
+
+                            <template v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))">
+                              <div class="text-[11px] text-emerald-400 mt-2 mb-1 ml-0.5 uppercase tracking-wider">返回结果</div>
+                              <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-emerald-100 border-l-2 border-emerald-500 font-mono">{{ formatToolResult(msg.tool_results.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))!.content) }}</pre>
+                            </template>
+                          </div>
+                        </template>
+
+                        <template v-else-if="msg.tool_results?.length">
+                          <div
+                            v-for="(toolResult, toolIndex) in msg.tool_results"
+                            :key="toolResultKey(messageKey(msg, i), toolResult, toolIndex)"
+                            class="p-3.5 border-b border-white/5 last:border-0"
+                          >
+                            <div class="font-mono text-[13px] font-semibold text-primary/80 mb-2 flex items-center gap-1"><Wrench class="w-3.5 h-3.5" /> {{ toolResult.name || 'unknown_tool' }}</div>
+                            <div class="text-[11px] text-emerald-400 mb-1 ml-0.5 uppercase tracking-wider">返回结果</div>
+                            <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-emerald-100 border-l-2 border-emerald-500 font-mono">{{ formatToolResult(toolResult.content) }}</pre>
+                          </div>
+                        </template>
+                      </div>
+                    </details>
+                    
+                    <div
+                      v-if="msg.post_content"
+                      class="md-body text-foreground/90 markdown-content mt-2"
+                      v-html="renderMd(msg.post_content)"
+                    />
+                  </template>
+                </div>
+              </div>
+
+              <Avatar v-if="msg.role === 'user'" class="w-9 h-9 bg-primary/20 shrink-0 text-primary border border-primary/30">
+                <AvatarFallback><User class="w-5 h-5" /></AvatarFallback>
+              </Avatar>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+
+      <!-- Input Area -->
+      <div class="absolute bottom-0 left-0 right-0 pb-3 bg-gradient-to-t from-background/95 from-75% to-transparent pointer-events-none flex justify-center z-10 w-full">
+        <div class="max-w-4xl w-full px-4 pt-6">
+          <div class="pointer-events-auto bg-card/60 backdrop-blur-xl border border-border/80 rounded-[24px] p-2 flex items-end gap-3 shadow-2xl transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative"
+                    :class="[listening ? 'text-destructive hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/10']"
+                    :disabled="!recognition"
+                    @click="toggleListen"
+                  >
+                    <Mic v-if="listening" class="w-5 h-5 z-10" />
+                    <MicOff v-else class="w-5 h-5" />
+                    <div v-if="listening" class="absolute inset-0 rounded-full border-2 border-destructive animate-ping"></div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ recognition ? (listening ? '停止录音' : '语音输入') : '浏览器不支持语音识别' }}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <Textarea
+              v-model="input"
+              class="flex-1 bg-transparent border-0 text-foreground font-sans text-[15px] leading-relaxed py-2.5 resize-none max-h-[150px] min-h-[44px] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none scrollbar-hide"
+              placeholder="何事相询？ (Enter 发送，Shift+Enter 换行)"
+              :rows="1"
+              :disabled="sending"
+              @keydown.enter.exact.prevent="send"
+              @keydown.enter.shift.stop
+            />
+
+            <div class="flex gap-1.5 p-1 shrink-0">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      class="h-[38px] w-[38px] rounded-full"
+                      :class="[ttsEnabled ? 'text-primary' : 'text-muted-foreground']"
+                      @click="toggleTts"
+                    >
+                      <Volume2 v-if="ttsEnabled" class="w-5 h-5" />
+                      <VolumeX v-else class="w-5 h-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>AI 语音播报</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <Button 
+                class="h-[38px] w-[38px] rounded-full transition-all"
+                :class="[sending || !input.trim() ? 'opacity-50 cursor-not-allowed bg-white/10 text-white/30 hover:bg-white/10' : 'bg-primary text-primary-foreground hover:scale-105 shadow-md shadow-primary/20']"
+                :disabled="sending || !input.trim()"
+                size="icon"
+                @click="send" 
+              >
+                <div v-if="sending" class="animate-spin h-5 w-5 border-2 border-foreground border-t-transparent rounded-full"></div>
+                <Send v-else class="w-4 h-4 ml-0.5" />
+              </Button>
+            </div>
+          </div>
+          <div class="text-center text-[11px] text-muted-foreground/60 mt-3 pointer-events-auto">AI 生成的内容仅供参考，请谨慎验证。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<style>
+/* Markdown Content Overrides */
+.markdown-content { overflow-wrap: anywhere; word-break: break-word; }
+.markdown-content p { margin: 0.5rem 0; }
+.markdown-content pre { background: rgba(0,0,0,0.4); border: 1px solid theme('colors.border'); border-radius: 0.5rem; padding: 0.75rem; overflow-x: auto; font-size: 0.85rem; margin: 0.75rem 0; }
+.markdown-content code { background: rgba(0,0,0,0.3); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.85rem; color: theme('colors.slate.200'); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.markdown-content pre code { background: transparent; padding: 0; color: inherit; }
+.markdown-content ul, .markdown-content ol { padding-left: 1.5em; margin: 0.5rem 0; }
+.markdown-content ul { list-style-type: disc; }
+.markdown-content ol { list-style-type: decimal; }
+.markdown-content blockquote { border-left: 3px solid theme('colors.primary.DEFAULT'); padding: 0.5rem 0.75rem; opacity: 0.8; margin: 0.5rem 0; background: theme('colors.primary.DEFAULT' / 5%); border-radius: 0 0.375rem 0.375rem 0; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { margin: 1rem 0 0.5rem; color: theme('colors.foreground'); font-weight: 600; line-height: 1.25; }
+.markdown-content h1 { font-size: 1.5rem; }
+.markdown-content h2 { font-size: 1.25rem; }
+.markdown-content h3 { font-size: 1.125rem; }
+.markdown-content table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0.75rem 0; border: 1px solid theme('colors.border'); border-radius: 0.5rem; overflow: hidden; display: block; }
+.markdown-content th, .markdown-content td { border: 1px solid theme('colors.border'); padding: 0.5rem 0.75rem; }
+.markdown-content th { background: theme('colors.white' / 3%); font-weight: 600; text-align: left; }
+.markdown-content a { color: theme('colors.primary.DEFAULT'); text-decoration: none; transition: opacity 0.2s; }
+.markdown-content a:hover { text-decoration: underline; opacity: 0.8; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+</style>

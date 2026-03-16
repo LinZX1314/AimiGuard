@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import { loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import vuetify from 'vite-plugin-vuetify'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig(({ mode }) => {
@@ -11,7 +10,6 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       vue(),
-      vuetify({ autoImport: true })
     ],
     resolve: {
       alias: {
@@ -58,7 +56,6 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             'echarts': ['echarts', 'vue-echarts'],
-            'vuetify': ['vuetify'],
           }
         }
       }

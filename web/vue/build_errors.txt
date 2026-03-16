@@ -1,0 +1,27 @@
+src/components/ui/accordion/AccordionTrigger.vue(5,33): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/alert/index.ts(1,35): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/alert/index.ts(2,21): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/avatar/index.ts(1,35): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/avatar/index.ts(2,21): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/button/index.ts(1,35): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/button/index.ts(2,21): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/dialog/DialogContent.vue(5,28): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/dialog/DialogScrollContent.vue(5,28): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/dropdown-menu/DropdownMenuCheckboxItem.vue(5,27): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/dropdown-menu/DropdownMenuRadioItem.vue(5,31): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/dropdown-menu/DropdownMenuSubTrigger.vue(5,34): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/components/ui/sheet/index.ts(1,35): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/sheet/index.ts(2,21): error TS2307: Cannot find module 'class-variance-authority' or its corresponding type declarations.
+src/components/ui/sheet/SheetContent.vue(6,28): error TS2307: Cannot find module '@radix-icons/vue' or its corresponding type declarations.
+src/lib/utils.ts(1,39): error TS2307: Cannot find module 'clsx' or its corresponding type declarations.
+src/lib/utils.ts(2,25): error TS2307: Cannot find module 'tailwind-merge' or its corresponding type declarations.
+src/views/AiChatView.vue(116,33): error TS2345: Argument of type 'Uint8Array<ArrayBufferLike>' is not assignable to parameter of type 'Uint8Array<ArrayBuffer>'.
+  Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.
+    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
+      Types of property '[Symbol.toStringTag]' are incompatible.
+        Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
+src/views/AiChatView.vue(151,9): error TS18047: 'audioContext' is possibly 'null'.
+src/views/AiChatView.vue(151,51): error TS18047: 'audioContext' is possibly 'null'.
+src/views/AiChatView.vue(153,16): error TS18047: 'audioContext' is possibly 'null'.
+src/views/AiChatView.vue(156,18): error TS18047: 'audioContext' is possibly 'null'.
+src/views/AiChatView.vue(823,29): error TS2339: Property 'toggleListen' does not exist on type 'CreateComponentPublicInstanceWithMixins<ToResolvedProps<{}, {}>, { sessions: Ref<{ id: number; title: string; created_at: string; }[], Session[] | { id: number; title: string; created_at: string; }[]>; ... 18 more ...; newChat: () => void; }, ... 23 more ..., {}>'.

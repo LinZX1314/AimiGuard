@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { use }    from 'echarts/core'
 import { CanvasRenderer }  from 'echarts/renderers'
@@ -9,6 +9,37 @@ import {
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { api } from '@/api/index'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { 
+  RefreshCw, 
+  RotateCw, 
+  Search, 
+  Earth, 
+  PieChart as PieChartIcon, 
+  LayoutGrid, 
+  List, 
+  Globe,
+  Settings2,
+  XCircle,
+  AlertTriangle
+} from 'lucide-vue-next'
 
 use([CanvasRenderer, BarChart, PieChart, GridComponent, TitleComponent,
      TooltipComponent, LegendComponent, DataZoomComponent])
@@ -16,37 +47,35 @@ use([CanvasRenderer, BarChart, PieChart, GridComponent, TitleComponent,
 const loading   = ref(false)
 const viewMode  = ref<'detail' | 'aggregated'>('aggregated')
 const logs      = ref<any[]>([])
-const pieLogs   = ref<any[]>([])  // 明细数据，用于饼图统计
+const pieLogs   = ref<any[]>([])
 const stats     = ref({ total_attacks: 0 })
 const services  = ref<string[]>([])
 const search    = ref('')
-const svcFilter = ref<string | null>(null)
+const svcFilter = ref<string>("ALL")
 
 // Nmap host dialog
 const nmapDialog = ref(false)
 const nmapIp     = ref('')
 const nmapHost   = ref<any>(null)
 
-const detailHeaders = [
-  { title: '攻击 IP',   key: 'attack_ip',       width: '160px' },
-  { title: '归属地',    key: 'ip_location' },
-  { title: '服务类型',  key: 'service_name' },
-  { title: '端口',      key: 'service_port',    width: '90px' },
-  { title: '时间',      key: 'create_time_str' },
-]
-const aggHeaders = [
-  { title: '攻击 IP',     key: 'attack_ip',    width: '160px' },
-  { title: '归属地',      key: 'ip_location' },
-  { title: '攻击次数',    key: 'attack_count', width: '100px' },
-  { title: '服务分类',    key: 'service_name' },
-  { title: '最后活跃',    key: 'latest_time' },
-  { title: 'AI 封禁判定', key: 'decision',     width: '120px' },
-  { title: 'AI 分析',     key: 'ai_analysis' },
-]
+const aggHeaders = ['攻击 IP', '归属地', '攻击次数', '服务分类', '最后活跃', 'AI 判定', 'AI 分析']
+const detailHeaders = ['攻击 IP', '归属地', '服务类型', '端口', '时间']
 const headers = computed(() => viewMode.value === 'aggregated' ? aggHeaders : detailHeaders)
 
+const filteredLogs = computed(() => {
+  let result = logs.value
+  if (search.value) {
+    const s = search.value.toLowerCase()
+    result = result.filter(l => 
+      (l.attack_ip || '').toLowerCase().includes(s) || 
+      (l.ip_location || '').toLowerCase().includes(s) ||
+      (l.service_name || '').toLowerCase().includes(s)
+    )
+  }
+  return result
+})
+
 function normalizeLogs(payload: unknown): any[] {
-  // 兼容多种返回形态，确保表格 items 始终是数组。
   if (Array.isArray(payload)) return payload
   if (payload && typeof payload === 'object') {
     const obj = payload as { items?: unknown }
@@ -70,47 +99,48 @@ const locationBarOption = computed(() => {
   return {
     ...CHART_THEME,
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,.06)' } } },
+    grid: { left: '3%', right: '8%', bottom: '3%', top: '5%', containLabel: true },
+    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,.06)' } }, axisLabel: { color: '#64748b' } },
     yAxis: {
       type: 'category',
       data: sorted.map(x => x[0]).reverse(),
-      axisLabel: { fontSize: 11 }
+      axisLabel: { fontSize: 11, color: '#94a3b8' }
     },
     series: [{
       type: 'bar',
       data: sorted.map(x => x[1]).reverse(),
       itemStyle: {
+        borderRadius: [0, 4, 4, 0],
         color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
           colorStops: [{ offset: 0, color: '#8B5CF6' }, { offset: 1, color: '#00E5FF' }] }
       },
-      label: { show: true, position: 'right', fontSize: 11, color: 'rgba(255,255,255,.6)' }
+      label: { show: true, position: 'right', fontSize: 10, color: '#94a3b8' }
     }]
   }
 })
 
 const servicePieOption = computed(() => {
   const counter: Record<string, number> = {}
-  for (const log of pieLogs.value) {  // 使用固定的明细数据
+  for (const log of pieLogs.value) {
     const svc = log.service_name || '未知'
     counter[svc] = (counter[svc] ?? 0) + (Number(log.attack_count) || 1)
   }
-  const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 10)
-  const COLORS = ['#00E5FF','#8B5CF6','#F472B6','#10B981','#F59E0B','#3B82F6','#EF4444','#6EE7B7','#A78BFA','#FCA5A5']
+  const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  const COLORS = ['#00E5FF','#8B5CF6','#F472B6','#10B981','#F59E0B','#3B82F6','#EF4444','#FCA5A5']
   return {
     ...CHART_THEME,
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { orient: 'vertical', right: '2%', top: 'center',
-      textStyle: { color: 'rgba(255,255,255,.7)', fontSize: 11 } },
+    legend: { orient: 'vertical', right: '0', top: 'center',
+      textStyle: { color: '#94a3b8', fontSize: 10 } },
     series: [{
       type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['40%', '55%'],
+      radius: ['50%', '80%'],
+      center: ['35%', '50%'],
       data: sorted.map(([name, value], i) => ({
         name, value, itemStyle: { color: COLORS[i % COLORS.length] }
       })),
       label: { show: false },
-      emphasis: { label: { show: true, fontSize: 12 } }
+      itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 }
     }]
   }
 })
@@ -130,12 +160,11 @@ async function loadLogs() {
     let url = viewMode.value === 'aggregated'
       ? '/api/v1/defense/hfish/logs?limit=5000&aggregated=1'
       : '/api/v1/defense/hfish/logs?limit=5000'
-    if (svcFilter.value) url += `&service_name=${encodeURIComponent(svcFilter.value)}`
+    if (svcFilter.value !== "ALL") url += `&service_name=${encodeURIComponent(svcFilter.value)}`
     const d = await api.get<any>(url)
     logs.value = normalizeLogs(d)
 
-    // 同时请求明细数据用于饼图统计
-    const pieUrl = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
+    const pieUrl = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value !== "ALL" ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
     const pieD = await api.get<any>(pieUrl)
     pieLogs.value = normalizeLogs(pieD)
   } catch(e) { console.error(e) }
@@ -153,11 +182,13 @@ async function showNmap(ip: string) {
 }
 
 async function manualSync() {
+  loading.value = true
   try {
     await api.post('/api/v1/defense/hfish/sync', {})
     await loadStats()
     await loadLogs()
   } catch(e) { console.error(e) }
+  loading.value = false
 }
 
 watch([viewMode, svcFilter], loadLogs)
@@ -165,146 +196,243 @@ onMounted(() => { loadStats(); loadLogs() })
 </script>
 
 <template>
-  <v-container fluid class="pa-6">
-    <!-- Stats bar -->
-    <v-row class="mb-4">
-      <v-col cols="12">
-        <v-card style="border-left:4px solid #3B82F6" class="pa-4">
-          <div class="d-flex justify-space-between align-center">
-            <div>
-              <div class="text-caption text-medium-emphasis">攻击日志总数</div>
-              <div class="text-h4 font-weight-bold" style="color:#3B82F6">{{ stats.total_attacks }}</div>
-            </div>
-            <v-btn color="primary" variant="tonal" @click="manualSync" prepend-icon="mdi-sync">
-              手动同步
-            </v-btn>
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
+  <div class="p-6 space-y-6">
+    <!-- Stats Bar -->
+    <Card class="bg-blue-500/5 border-blue-500/10 border-l-[4px] border-l-blue-500">
+      <CardContent class="p-5 flex justify-between items-center">
+        <div>
+          <p class="text-xs font-medium text-blue-400 uppercase tracking-wider mb-1">攻击日志总数</p>
+          <h2 class="text-4xl font-bold tracking-tight text-blue-500">{{ stats.total_attacks }}</h2>
+        </div>
+        <Button variant="outline" size="sm" @click="manualSync" :disabled="loading" class="bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-all">
+          <RotateCw v-if="loading" :size="16" class="mr-2 animate-spin" />
+          <RefreshCw v-else :size="16" class="mr-2" />
+          手动同步
+        </Button>
+      </CardContent>
+    </Card>
 
-    <!-- ECharts Attack Origin Charts -->
-    <v-row class="mb-4" v-if="logs.length">
-      <v-col cols="12" md="7">
-        <v-card>
-          <v-card-title class="text-subtitle-1 pa-3">
-            <v-icon start color="primary" size="18">mdi-earth</v-icon>
+    <!-- Charts row -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6" v-if="logs.length">
+      <Card class="md:col-span-7 bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <Globe :size="16" class="text-primary" />
             攻击来源 Top 15（IP）
-          </v-card-title>
-          <v-card-text class="pa-2" style="height:300px">
-            <v-chart :option="locationBarOption" autoresize style="width:100%;height:100%" />
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="5">
-        <v-card>
-          <v-card-title class="text-subtitle-1 pa-3">
-            <v-icon start color="secondary" size="18">mdi-chart-donut</v-icon>
-            攻击服务分布
-          </v-card-title>
-          <v-card-text class="pa-2" style="height:300px">
-            <v-chart :option="servicePieOption" autoresize style="width:100%;height:100%" />
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Table card -->
-    <v-card>
-      <v-card-title class="d-flex flex-wrap align-center ga-2 pa-4">
-        <span>攻击记录</span>
-        <v-btn-toggle v-model="viewMode" mandatory density="compact" color="primary">
-          <v-btn value="aggregated" size="small">
-            <v-icon start size="16">mdi-folder-network</v-icon>折叠
-          </v-btn>
-          <v-btn value="detail" size="small">
-            <v-icon start size="16">mdi-format-list-bulleted</v-icon>明细
-          </v-btn>
-        </v-btn-toggle>
-
-        <v-spacer />
-        <v-btn icon variant="text" @click="loadLogs"><v-icon>mdi-refresh</v-icon></v-btn>
-      </v-card-title>
-
-      <v-card-text class="pt-0">
-        <v-row dense class="mb-3">
-          <v-col cols="12" md="3">
-            <v-text-field v-model="search" label="搜索" prepend-inner-icon="mdi-magnify" clearable hide-details />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select v-model="svcFilter" :items="services" label="服务类型" clearable hide-details />
-          </v-col>
-        </v-row>
-
-        <v-data-table
-          :headers="headers"
-          :items="logs"
-          :loading="loading"
-          :search="search"
-          :items-per-page="50"
-          density="compact"
-        >
-          <template #item.attack_ip="{ item }">
-            <a href="#" @click.prevent="showNmap(item.attack_ip)" class="text-primary">
-              {{ item.attack_ip || '-' }}
-            </a>
-          </template>
-          <template #item.decision="{ item }">
-            <v-chip
-              v-if="item.decision"
-              :color="item.decision === '封禁' || item.decision === '已封禁' ? 'error' : 'success'"
-              size="x-small"
-            >{{ item.decision === '封禁' ? '建议封禁' : item.decision === '已封禁' ? '已封禁' : '无需封禁' }}</v-chip>
-            <span v-else class="text-medium-emphasis">-</span>
-          </template>
-          <template #item.ai_analysis="{ item }">
-            <div
-              v-if="item.ai_analysis"
-              style="max-width:280px; white-space:normal; word-break:break-all; font-size:.8rem"
-              class="text-medium-emphasis"
-            >{{ item.ai_analysis }}</div>
-            <span v-else class="text-medium-emphasis">暂无分析</span>
-          </template>
-        </v-data-table>
-      </v-card-text>
-    </v-card>
-
-    <!-- Nmap dialog -->
-    <v-dialog v-model="nmapDialog" max-width="560">
-      <v-card>
-        <v-card-title>扫描信息 - {{ nmapIp }}</v-card-title>
-        <v-card-text v-if="nmapHost">
-          <v-list density="compact">
-            <v-list-item title="状态">
-              <template #append>
-                <v-chip :color="nmapHost.state === 'up' ? 'success' : 'grey'" size="x-small">
-                  {{ nmapHost.state === 'up' ? '在线' : '离线' }}
-                </v-chip>
-              </template>
-            </v-list-item>
-            <v-list-item title="MAC 地址"   :subtitle="nmapHost.mac_address || '-'" />
-            <v-list-item title="厂商"        :subtitle="nmapHost.vendor    || '-'" />
-            <v-list-item title="主机名"      :subtitle="nmapHost.hostname  || '-'" />
-            <v-list-item title="操作系统"    :subtitle="nmapHost.os_type   || '-'" />
-          </v-list>
-          <div v-if="nmapHost.services?.length" class="mt-2">
-            <div class="text-subtitle-2 mb-1">开放端口</div>
-            <v-table density="compact">
-              <thead><tr><th>端口</th><th>服务</th></tr></thead>
-              <tbody>
-                <tr v-for="s in nmapHost.services" :key="s.port">
-                  <td>{{ s.port }}</td><td>{{ s.service }}</td>
-                </tr>
-              </tbody>
-            </v-table>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="h-[300px]">
+            <VChart :option="locationBarOption" autoresize />
           </div>
-        </v-card-text>
-        <v-card-text v-else class="text-medium-emphasis">未找到该 IP 的扫描记录</v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="primary" variant="text" @click="nmapDialog = false">关闭</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-container>
+        </CardContent>
+      </Card>
+      <Card class="md:col-span-5 bg-card/40 border border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
+            <PieChartIcon :size="16" class="text-primary" />
+            攻击服务分布
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="h-[300px]">
+            <VChart :option="servicePieOption" autoresize />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Table Card -->
+    <Card class="bg-card/40 border border-border/50">
+      <CardHeader class="pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <CardTitle class="text-lg font-bold">攻击记录</CardTitle>
+          <div class="flex p-0.5 bg-muted/30 rounded-lg border border-border/50">
+            <button 
+              @click="viewMode = 'aggregated'"
+              class="flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              :class="viewMode === 'aggregated' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-white/5'"
+            >
+              <LayoutGrid class="h-3.5 w-3.5 mr-1.5" />
+              折叠
+            </button>
+            <button 
+              @click="viewMode = 'detail'"
+              class="flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              :class="viewMode === 'detail' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-white/5'"
+            >
+              <List class="h-3.5 w-3.5 mr-1.5" />
+              明细
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative w-64">
+            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input v-model="search" placeholder="搜索攻击 IP 或服务" class="pl-9 h-9 bg-black/20" />
+          </div>
+          <Select v-model="svcFilter">
+            <SelectTrigger class="w-40 h-9 bg-black/20">
+              <SelectValue placeholder="服务类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">全部服务</SelectItem>
+              <SelectItem v-for="s in services" :key="s" :value="s">{{ s }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="ghost" size="icon" @click="loadLogs" :disabled="loading">
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent class="p-0">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-muted/20 border-b border-border/50 text-muted-foreground">
+                <th v-for="h in headers" :key="h" class="text-left py-3 px-4 font-semibold uppercase text-[11px] tracking-wider">{{ h }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-if="loading">
+                <tr v-for="i in 5" :key="i" class="border-b border-border/20 last:border-0">
+                  <td v-for="j in headers.length" :key="j" class="py-4 px-4"><Skeleton class="h-4 w-full" /></td>
+                </tr>
+              </template>
+              <template v-else-if="filteredLogs.length">
+                <tr v-for="(item, idx) in filteredLogs" :key="idx" class="border-b border-border/10 last:border-0 hover:bg-white/5 transition-colors">
+                  <!-- Aggregated View Rows -->
+                  <template v-if="viewMode === 'aggregated'">
+                    <td class="py-3 px-4">
+                      <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
+                    </td>
+                    <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
+                    <td class="py-3 px-4">
+                      <Badge variant="secondary" class="bg-blue-500/10 text-blue-400 border-blue-500/20">{{ item.attack_count }} 次</Badge>
+                    </td>
+                    <td class="py-3 px-4">
+                      <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
+                    </td>
+                    <td class="py-3 px-4 text-slate-500 text-xs">{{ item.latest_time }}</td>
+                    <td class="py-3 px-4">
+                      <Badge v-if="item.decision" :variant="item.decision.includes('封禁') ? 'destructive' : 'default'" class="font-medium">
+                        {{ item.decision }}
+                      </Badge>
+                      <span v-else class="text-slate-600">-</span>
+                    </td>
+                    <td class="py-3 px-4">
+                      <div class="max-w-[300px] text-xs leading-relaxed text-slate-400 italic truncate" :title="item.ai_analysis">
+                        {{ item.ai_analysis || '暂无分析' }}
+                      </div>
+                    </td>
+                  </template>
+                  <!-- Detail View Rows -->
+                  <template v-else>
+                    <td class="py-3 px-4">
+                      <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
+                    </td>
+                    <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
+                    <td class="py-3 px-4">
+                      <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
+                    </td>
+                    <td class="py-3 px-4 text-slate-400 font-mono">{{ item.service_port || '-' }}</td>
+                    <td class="py-3 px-4 text-slate-500 text-xs">{{ item.create_time_str }}</td>
+                  </template>
+                </tr>
+              </template>
+              <tr v-else>
+                <td :colspan="headers.length" class="py-20 text-center text-muted-foreground italic">暂无满足条件的攻击记录</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- Nmap Dialog -->
+    <Dialog v-model:open="nmapDialog">
+      <DialogContent class="sm:max-w-[560px] bg-slate-900 border-white/10 text-slate-100">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2 text-xl">
+            <Settings2 class="h-5 w-5 text-primary" />
+            扫描信息 - {{ nmapIp }}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div v-if="nmapHost" class="space-y-6 pt-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">当前状态</p>
+              <Badge :variant="nmapHost.state === 'up' ? 'default' : 'secondary'" 
+                     :class="nmapHost.state === 'up' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : ''">
+                {{ nmapHost.state === 'up' ? '在线' : '离线' }}
+              </Badge>
+            </div>
+            <div class="space-y-1 text-right">
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">主机名</p>
+              <p class="font-medium">{{ nmapHost.hostname || '-' }}</p>
+            </div>
+          </div>
+
+          <div class="p-4 bg-black/30 rounded-xl border border-white/5 grid grid-cols-1 gap-4">
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-slate-400">MAC 地址</span>
+              <span class="font-mono">{{ nmapHost.mac_address || '-' }}</span>
+            </div>
+            <div class="border-t border-white/5 pt-2 flex justify-between items-center text-sm">
+              <span class="text-slate-400">厂商信息</span>
+              <span>{{ nmapHost.vendor || '-' }}</span>
+            </div>
+            <div class="border-t border-white/5 pt-2 flex justify-between items-center text-sm">
+              <span class="text-slate-400">操作系统</span>
+              <span class="flex items-center gap-1.5 font-medium"><Globe class="h-3.5 w-3.5 text-primary" /> {{ nmapHost.os_type || '-' }}</span>
+            </div>
+          </div>
+
+          <div v-if="nmapHost.services?.length" class="space-y-3">
+            <h4 class="text-sm font-semibold flex items-center gap-2">
+              <LayoutGrid class="h-4 w-4 text-primary" />
+              开放端口
+            </h4>
+            <div class="rounded-xl border border-white/5 overflow-hidden">
+              <table class="w-full text-xs">
+                <thead class="bg-white/5">
+                  <tr class="text-slate-500">
+                    <th class="py-2.5 px-4 text-left font-medium">端口</th>
+                    <th class="py-2.5 px-4 text-left font-medium">协议</th>
+                    <th class="py-2.5 px-4 text-left font-medium text-right">服务名称</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                  <tr v-for="s in nmapHost.services" :key="s.port" class="hover:bg-white/5 px-4">
+                    <td class="py-2.5 px-4 font-bold text-primary">{{ s.port }}</td>
+                    <td class="py-2.5 px-4 uppercase text-slate-500">TCP</td>
+                    <td class="py-2.5 px-4 text-right">
+                      <Badge variant="outline" class="border-white/10 text-slate-300 font-normal">{{ s.service }}</Badge>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div v-else class="py-12 flex flex-col items-center justify-center gap-3 text-slate-500 italic">
+          <XCircle class="h-10 w-10 opacity-20" />
+          未找到该 IP 的扫描记录
+        </div>
+
+        <div class="flex justify-end pt-4">
+          <Button variant="secondary" @click="nmapDialog = false">关闭窗口</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </div>
 </template>
+
+<style scoped>
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>
