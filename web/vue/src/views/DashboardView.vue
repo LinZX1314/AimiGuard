@@ -221,7 +221,7 @@ onUnmounted(() => clearInterval(refreshTimer))
           </v-card-text>
         </v-card>
       </v-col>
-
+    </v-row>
 
     <!-- Chain status -->
     <v-row>
