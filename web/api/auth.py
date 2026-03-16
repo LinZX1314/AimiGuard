@@ -6,7 +6,7 @@ from .helpers import (
     require_auth, ok, err, _body, _load_cfg, _make_token, _DEFAULT_USERS
 )
 
-auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
 
 
 @auth_bp.route('/login', methods=['POST'])

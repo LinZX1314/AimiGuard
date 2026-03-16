@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { marked } from 'marked'
 import { api } from '@/api/index'
 
@@ -51,24 +51,217 @@ const chatBox  = ref<HTMLElement | null>(null)
 
 // ── STT ──────────────────────────────────────────────────────────────────
 const listening = ref(false)
+const voiceDialog = ref(false)
+const voiceError = ref('')
+const voiceDraft = ref('')
+const voiceInterim = ref('')
+const waveformBars = ref<number[]>(Array.from({ length: 28 }, (_, index) => 0.12 + (index % 5) * 0.018))
+
 let recognition: any = null
+let mediaStream: MediaStream | null = null
+let audioContext: AudioContext | null = null
+let analyser: AnalyserNode | null = null
+let sourceNode: MediaStreamAudioSourceNode | null = null
+let frequencyData: Uint8Array | null = null
+let animationFrameId: number | null = null
+
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+const voiceSupported = computed(() => Boolean(SpeechRecognition && navigator.mediaDevices?.getUserMedia))
+const voiceTranscript = computed(() => [voiceDraft.value, voiceInterim.value].filter(Boolean).join(' ').trim())
+const canApplyVoice = computed(() => Boolean(voiceTranscript.value))
+
+function resetWaveform() {
+  waveformBars.value = Array.from({ length: 28 }, (_, index) => 0.12 + (index % 5) * 0.018)
+}
+
+function stopWaveform() {
+  if (animationFrameId !== null) {
+    window.cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
+  if (sourceNode) {
+    sourceNode.disconnect()
+    sourceNode = null
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop())
+    mediaStream = null
+  }
+  if (audioContext) {
+    void audioContext.close()
+    audioContext = null
+  }
+  analyser = null
+  frequencyData = null
+  resetWaveform()
+}
+
+function stopSpeechRecognition() {
+  if (!recognition) return
+  try {
+    recognition.stop()
+  } catch {}
+  listening.value = false
+}
+
+function cleanupVoiceCapture() {
+  stopSpeechRecognition()
+  stopWaveform()
+  voiceInterim.value = ''
+}
+
+function renderWaveformFrame() {
+  if (!analyser || !frequencyData) return
+
+  analyser.getByteFrequencyData(frequencyData)
+  const bucketSize = Math.max(1, Math.floor(frequencyData.length / waveformBars.value.length))
+
+  waveformBars.value = waveformBars.value.map((_, index) => {
+    const start = index * bucketSize
+    const end = index === waveformBars.value.length - 1 ? frequencyData!.length : Math.min(frequencyData!.length, start + bucketSize)
+    let total = 0
+
+    for (let i = start; i < end; i += 1) total += frequencyData![i]
+
+    const average = total / Math.max(1, end - start)
+    return Number((0.12 + Math.min(1, Math.max(0.04, average / 255)) * 1.18).toFixed(3))
+  })
+
+  animationFrameId = window.requestAnimationFrame(renderWaveformFrame)
+}
+
+async function startWaveform() {
+  stopWaveform()
+  const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext
+
+  if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
+    voiceError.value = '当前浏览器不支持麦克风实时波形。'
+    return
+  }
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    audioContext = new AudioContextClass()
+    if (audioContext.state === 'suspended') await audioContext.resume()
+
+    analyser = audioContext.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.82
+    sourceNode = audioContext.createMediaStreamSource(mediaStream)
+    sourceNode.connect(analyser)
+    frequencyData = new Uint8Array(analyser.frequencyBinCount)
+    renderWaveformFrame()
+  } catch (error) {
+    console.error('启动麦克风波形失败:', error)
+    voiceError.value = '无法访问麦克风，请确认浏览器权限已开启。'
+    resetWaveform()
+  }
+}
+
 if (SpeechRecognition) {
   recognition = new SpeechRecognition()
   recognition.lang = 'zh-CN'
-  recognition.continuous = false
-  recognition.interimResults = false
-  recognition.onresult = (e: any) => {
-    const t = e.results[0][0].transcript
-    input.value = (input.value + ' ' + t).trim()
+  recognition.continuous = true
+  recognition.interimResults = true
+  recognition.maxAlternatives = 1
+
+  recognition.onresult = (event: any) => {
+    let finalText = ''
+    let interimText = ''
+
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index]
+      const transcript = result?.[0]?.transcript?.trim() || ''
+      if (!transcript) continue
+
+      if (result.isFinal) finalText += ` ${transcript}`
+      else interimText += ` ${transcript}`
+    }
+
+    if (finalText.trim()) {
+      voiceDraft.value = [voiceDraft.value, finalText.trim()].filter(Boolean).join(' ').trim()
+    }
+    voiceInterim.value = interimText.trim()
   }
-  recognition.onend = () => { listening.value = false }
+
+  recognition.onerror = (event: any) => {
+    console.error('语音识别失败:', event)
+    listening.value = false
+    stopWaveform()
+    voiceError.value = event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
+      ? '麦克风权限被拒绝，请允许浏览器访问麦克风。'
+      : `语音识别不可用：${event?.error || '未知错误'}`
+  }
+
+  recognition.onend = () => {
+    listening.value = false
+    stopWaveform()
+  }
 }
-function toggleListen() {
-  if (!recognition) return
-  if (listening.value) { recognition.stop(); listening.value = false }
-  else { recognition.start(); listening.value = true }
+
+function startSpeechRecognition() {
+  if (!recognition) {
+    voiceError.value = '当前浏览器不支持语音识别。'
+    return
+  }
+
+  voiceError.value = ''
+  voiceInterim.value = ''
+
+  try {
+    recognition.start()
+    listening.value = true
+  } catch (error) {
+    console.error('启动语音识别失败:', error)
+    voiceError.value = '语音识别启动失败，请稍后重试。'
+    listening.value = false
+  }
 }
+
+async function openVoiceDialog() {
+  if (!voiceSupported.value) return
+  voiceDialog.value = true
+  voiceError.value = ''
+  voiceDraft.value = ''
+  voiceInterim.value = ''
+  resetWaveform()
+  await startWaveform()
+  startSpeechRecognition()
+}
+
+async function restartVoiceInput() {
+  voiceError.value = ''
+  voiceDraft.value = ''
+  voiceInterim.value = ''
+  stopSpeechRecognition()
+  await startWaveform()
+  startSpeechRecognition()
+}
+
+function closeVoiceDialog() {
+  voiceDialog.value = false
+}
+
+function stopVoiceInput() {
+  cleanupVoiceCapture()
+}
+
+function applyVoiceTranscript() {
+  if (!voiceTranscript.value) return
+  input.value = [input.value, voiceTranscript.value].filter(Boolean).join(' ').trim()
+  voiceDialog.value = false
+}
+
+watch(voiceDialog, (open) => {
+  if (!open) cleanupVoiceCapture()
+})
+
 
 // ── TTS ──────────────────────────────────────────────────────────────────
 const ttsEnabled = ref(true)
@@ -424,20 +617,26 @@ const route = useRoute()
 
 async function onPageLoad() {
   await loadSessions()
-  
+
   // 处理 URL传参上下文
   const { context_type, context_id } = route.query
   if (context_type && context_id) {
     // 自动发起一个分析请求
     input.value = `请帮我深度分析一下这个目标：${context_id}`
-    await send({ 
-      context_type: context_type as string, 
-      context_id: context_id as string 
+    await send({
+      context_type: context_type as string,
+      context_id: context_id as string
     })
   }
 }
 
 onMounted(onPageLoad)
+onBeforeUnmount(() => {
+  cleanupVoiceCapture()
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel()
+  }
+})
 </script>
 
 <template>

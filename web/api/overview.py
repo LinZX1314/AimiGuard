@@ -5,7 +5,7 @@ from flask import Blueprint, request
 from database.models import NmapModel, VulnModel, HFishModel, AiModel
 from .helpers import require_auth, ok, _load_cfg
 
-overview_bp = Blueprint('overview', __name__, url_prefix='/overview')
+overview_bp = Blueprint('overview', __name__, url_prefix='/api/v1/overview')
 
 
 @overview_bp.route('/metrics', methods=['GET'])

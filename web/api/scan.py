@@ -5,7 +5,7 @@ from flask import Blueprint
 from database.models import VulnModel
 from .helpers import require_auth, ok, _parse_int_arg
 
-scan_bp = Blueprint('scan', __name__, url_prefix='/scan')
+scan_bp = Blueprint('scan', __name__, url_prefix='/api/v1/scan')
 
 
 @scan_bp.route('/findings', methods=['GET'])

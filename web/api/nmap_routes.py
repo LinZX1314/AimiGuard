@@ -5,7 +5,7 @@ from flask import Blueprint, request
 from database.models import NmapModel
 from .helpers import require_auth, ok, _parse_int_arg, _normalize_host_fields
 
-nmap_bp = Blueprint('nmap', __name__, url_prefix='/nmap')
+nmap_bp = Blueprint('nmap', __name__, url_prefix='/api/nmap')
 
 
 @nmap_bp.route('/scans', methods=['GET'])

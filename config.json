@@ -29,7 +29,7 @@
     ],
     "arguments": "-sS -T5 -O -sV ",
     "scan_interval": 604800,
-    "scan_enabled": false,
+    "scan_enabled": true,
     "vuln_scripts_by_tag": {
       "Windows 10": [
         "smb-vuln-ms17-010"

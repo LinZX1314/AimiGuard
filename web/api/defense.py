@@ -11,12 +11,7 @@ from .helpers import (
 )
 from .runtime import run_hfish_sync, _run_daemon
 
-defense_bp = Blueprint('defense', __name__, url_prefix='/defense')
-
-
-def _run_daemon(task):
-    import threading
-    threading.Thread(target=task, daemon=True).start()
+defense_bp = Blueprint('defense', __name__, url_prefix='/api/v1/defense')
 
 
 @defense_bp.route('/hfish/logs', methods=['GET'])

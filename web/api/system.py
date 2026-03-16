@@ -7,7 +7,7 @@ from .helpers import (
     _as_bool
 )
 
-system_bp = Blueprint('system', __name__, url_prefix='/system')
+system_bp = Blueprint('system', __name__, url_prefix='/api/v1/system')
 
 
 @system_bp.route('/ai-config', methods=['GET'])

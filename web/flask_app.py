@@ -15,10 +15,8 @@ from flask import Flask, Blueprint, jsonify, request, send_from_directory
 import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WEB_DIR = os.path.dirname(os.path.abspath(__file__))
-for _p in (BASE_DIR, WEB_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from database.db import init_db
 from utils.logger import log as unified_log
@@ -67,7 +65,7 @@ def create_app() -> Flask:
 
     # ── 注册 /api/v1/ 与 /api/ 蓝图 ──────────────────────────────────────
     try:
-        from api import register_blueprints
+        from web.api import register_blueprints
         register_blueprints(app)
     except Exception as exc:
         import traceback
@@ -96,7 +94,7 @@ def create_app() -> Flask:
         return jsonify(logs[-limit:])
 
     # ── Vue SPA 静态文件 ─────────────────────────────────────────────────
-    vue_dist = os.path.join(WEB_DIR, "static", "vue-dist")
+    vue_dist = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "vue-dist")
 
     @app.route("/")
     def spa_index():
