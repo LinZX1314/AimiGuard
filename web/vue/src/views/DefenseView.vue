@@ -84,7 +84,7 @@ onMounted(load)
 <template>
   <div class="p-6 space-y-6">
     <Card class="bg-card/40 border border-border/50">
-      <CardHeader class="pb-6 border-b border-border/20 flex flex-row items-center justify-between">
+      <CardHeader class="pb-6 border-b flex flex-row items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2 bg-red-500/10 rounded-lg">
             <ShieldAlert :size="20" class="text-red-500" />
@@ -100,7 +100,7 @@ onMounted(load)
         <div class="overflow-x-auto text-foreground">
           <table class="w-full text-sm">
             <thead>
-              <tr class="bg-muted/30 text-muted-foreground border-b border-border/50 text-[10px] uppercase tracking-widest font-bold">
+              <tr class="bg-muted/30 text-muted-foreground border-b text-[10px] uppercase tracking-widest font-bold">
                 <th v-for="h in headers" :key="h" class="text-left py-4 px-5">{{ h }}</th>
               </tr>
             </thead>
@@ -111,7 +111,7 @@ onMounted(load)
                 </tr>
               </template>
               <template v-else-if="events.length">
-                <tr v-for="ev in events" :key="ev.id" class="hover:bg-white/[0.02] border-b border-border/5 last:border-0 transition-colors">
+                <tr v-for="ev in events" :key="ev.id" class="hover:bg-white/[0.02] border-b last:border-0 transition-colors">
                   <!-- 资产信息 -->
                   <td class="py-5 px-5 align-top">
                     <div class="space-y-1.5">
@@ -139,7 +139,7 @@ onMounted(load)
                     <div class="space-y-2">
                       <div class="flex flex-wrap gap-1 max-w-[180px]">
                         <Badge v-for="tag in (ev.event_type || '').split(',').slice(0, 3)" :key="tag" 
-                               variant="secondary" class="text-[9px] px-1.5 py-0 h-4 bg-muted text-muted-foreground border-border/50 rounded">
+                               variant="secondary" class="text-[9px] px-1.5 py-0 h-4 bg-muted text-muted-foreground rounded">
                           {{ tag.trim() }}
                         </Badge>
                         <span v-if="(ev.event_type || '').split(',').length > 3" class="text-[9px] text-muted-foreground/60 font-bold">...</span>
@@ -161,7 +161,7 @@ onMounted(load)
                           {{ (ev.ai_decision === 'ban' || ev.ai_decision === '封禁' || ev.ai_decision === '已封禁') ? '检出：建议阻断' : '检出：疑似误报' }}
                         </span>
                       </div>
-                      <div class="text-[11px] text-foreground/80 leading-relaxed bg-muted/30 p-2.5 rounded-lg border border-border/50 relative group">
+                      <div class="text-[11px] text-foreground/80 leading-relaxed bg-muted/30 p-2.5 rounded-lg border relative group">
                         <div class="absolute -left-1 top-2 w-0.5 h-3 bg-primary/40 rounded-full"></div>
                         <span class="italic">"{{ ev.ai_analysis || 'AI 正在分析该 IP 的攻击指纹与威胁模型...' }}"</span>
                       </div>

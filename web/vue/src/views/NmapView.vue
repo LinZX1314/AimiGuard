@@ -242,7 +242,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             <Input v-model="search" placeholder="搜索 IP、主机名..." class="pl-9 h-9 bg-black/20" />
           </div>
           <Select v-model="vendorFlt">
-            <SelectTrigger class="w-48 h-9 bg-black/20 border-border/40 text-xs">
+            <SelectTrigger class="w-48 h-9 bg-black/20 text-xs">
               <SelectValue placeholder="厂商过滤" />
             </SelectTrigger>
             <SelectContent>
@@ -266,7 +266,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                 </tr>
               </template>
               <template v-else-if="filteredHosts.length">
-                <tr v-for="h in filteredHosts" :key="h.id" class="border-b border-border/5 hover:bg-white/5 transition-colors">
+                <tr v-for="h in filteredHosts" :key="h.id" class="border-b hover:bg-white/5 transition-colors">
                   <td class="py-3 px-4">
                     <div class="flex items-center gap-2">
                       <div class="h-2 w-2 rounded-full" :class="h.state === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-600'"></div>
@@ -276,7 +276,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                   <td class="py-3 px-4">
                     <div class="flex flex-col gap-0.5">
                       <span class="text-xs font-mono text-slate-400">{{ h.mac_address || '未知 MAC' }}</span>
-                      <Badge variant="outline" class="w-fit text-[10px] h-4 px-1 py-0 border-border/50 bg-black/20">
+                      <Badge variant="outline" class="w-fit text-[10px] h-4 px-1 py-0 bg-black/20">
                         {{ h.state === 'up' ? 'ONLINE' : 'OFFLINE' }}
                       </Badge>
                     </div>

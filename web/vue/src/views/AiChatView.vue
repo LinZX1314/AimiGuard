@@ -821,7 +821,7 @@ onBeforeUnmount(() => {
 
               <div class="max-w-[86%]">
                 <div class="p-4 rounded-2xl text-[15px] leading-relaxed shadow-sm"
-                  :class="[msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted/50 border border-border/50 rounded-bl-sm text-foreground']"
+                  :class="[msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted/50 border rounded-bl-sm text-foreground']"
                 >
                   <!-- User Message -->
                   <div v-if="msg.role === 'user'" class="whitespace-pre-wrap">
@@ -849,7 +849,7 @@ onBeforeUnmount(() => {
                     />
                     
                     <!-- Tools -->
-                    <details v-if="msg.tool_calls?.length || msg.tool_results?.length" class="bg-black/20 rounded-xl border border-border/50 overflow-hidden mt-3 transition-all group">
+                    <details v-if="msg.tool_calls?.length || msg.tool_results?.length" class="bg-black/20 rounded-xl border overflow-hidden mt-3 transition-all group">
                       <summary class="px-3.5 py-2.5 bg-white/5 border-b border-transparent text-xs text-muted-foreground flex items-center justify-between cursor-pointer select-none list-none group-hover:bg-white/10 group-open:border-border/50 w-full outline-none [&::-webkit-details-marker]:hidden"
                         :class="[msg.tool_results?.length && msg.tool_results.length >= (msg.tool_calls?.length || 0) ? 'text-emerald-500' : '']"
                       >
@@ -921,7 +921,7 @@ onBeforeUnmount(() => {
       <!-- Input Area -->
       <div class="absolute bottom-0 left-0 right-0 pb-3 bg-gradient-to-t from-background/95 from-75% to-transparent pointer-events-none flex justify-center z-10 w-full">
         <div class="max-w-4xl w-full px-4 pt-6">
-          <div class="pointer-events-auto bg-card/60 backdrop-blur-xl border border-border/80 rounded-[24px] p-2 flex items-end gap-3 shadow-2xl transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
+          <div class="pointer-events-auto backdrop-blur-xl border rounded-[24px] p-2 flex items-end gap-3 shadow-2xl transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

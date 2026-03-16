@@ -121,7 +121,7 @@ onMounted(load)
   <div class="p-6 space-y-6 text-slate-100">
     <!-- Quick Stats Row -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <Card v-for="s in statSummaries" :key="s.label" class="bg-card/40 border border-border/50 transition-all hover:bg-card/60">
+      <Card v-for="s in statSummaries" :key="s.label" class="bg-card/40 border transition-all hover:bg-card/60">
         <CardContent class="p-5 flex flex-col justify-center items-center text-center">
           <div class="p-2 rounded-full mb-2 bg-white/5">
             <Bug v-if="s.icon === Bug" :size="20" :class="s.color" />
@@ -137,7 +137,7 @@ onMounted(load)
 
     <!-- Main List Card -->
     <Card class="bg-card/40 border border-border/50">
-      <CardHeader class="pb-4 border-b border-border/20 flex flex-row items-center justify-between">
+      <CardHeader class="pb-4 border-b flex flex-row items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2 bg-orange-500/10 rounded-lg">
             <AlertTriangle :size="20" class="text-orange-500" />
@@ -159,7 +159,7 @@ onMounted(load)
       
       <CardContent class="p-0">
         <!-- Filter Bar -->
-        <div class="p-4 bg-muted/5 border-b border-border/10 flex flex-wrap items-center gap-4">
+        <div class="p-4 bg-muted/5 border-b flex flex-wrap items-center gap-4">
           <div class="relative w-72">
             <Search :size="16" class="absolute left-3 top-3 text-muted-foreground" />
             <Input v-model="search" placeholder="搜索漏洞名称/资产 IP..." class="pl-10 h-10 bg-black/20" />
@@ -192,7 +192,7 @@ onMounted(load)
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="text-muted-foreground bg-muted/10 border-b border-border/20 uppercase text-[10px] tracking-widest font-bold">
+              <tr class="text-muted-foreground bg-muted/10 border-b uppercase text-[10px] tracking-widest font-bold">
                 <th v-for="h in headers" :key="h" class="text-left py-3 px-5">{{ h }}</th>
               </tr>
             </thead>

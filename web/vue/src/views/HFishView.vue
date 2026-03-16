@@ -83,7 +83,7 @@ const trend = ref({
 const logs = ref<HFishLogItem[]>([])
 
 const statCards = computed(() => [
-  { key: 'total', title: '攻击总数量', value: detailStats.value.total_attacks, icon: Shield, color: 'text-cyan-400' },
+  { key: 'total', title: '攻击总数量', value: detailStats.value.total_attacks, icon: Shield, color: 'text-primary' },
   { key: 'nodes', title: '攻击节点数', value: detailStats.value.unique_nodes, icon: Server, color: 'text-emerald-400' },
   { key: 'ips', title: '来源 IP 数', value: detailStats.value.unique_ips, icon: Globe, color: 'text-amber-400' },
   { key: 'latest', title: '最新攻击时间', value: detailStats.value.latest_attack_time, icon: Clock3, color: 'text-violet-400' },
@@ -290,7 +290,7 @@ function threatClass(level: string) {
   if (level === 'high' || level === '高危') return 'bg-red-500/10 text-red-400 border-red-500/30'
   if (level === 'medium' || level === '中危') return 'bg-amber-500/10 text-amber-400 border-amber-500/30'
   if (level === 'low' || level === '低危') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-  return 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+  return 'bg-slate-500/10 text-muted-foreground border-slate-500/30'
 }
 
 function threatLabel(level: string) {
@@ -330,18 +330,18 @@ onMounted(async () => {
 
 <template>
   <div class="p-6 space-y-6">
-    <Card class="bg-cyan-500/5 border-cyan-500/20 border-l-[4px] border-l-cyan-400">
+    <Card class="bg-card/40 border-border/50 border-l-[4px] border-l-primary">
       <CardContent class="p-5 flex items-center justify-between gap-4">
         <div>
-          <p class="text-xs font-semibold tracking-[0.12em] text-cyan-400 uppercase">HFish 攻击总量</p>
-          <h2 class="text-4xl font-bold text-cyan-300 mt-1">{{ totalAttacks }}</h2>
+          <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">HFish 攻击总量</p>
+          <h2 class="text-4xl font-bold text-primary mt-1">{{ totalAttacks }}</h2>
         </div>
         <Button
           variant="outline"
           size="sm"
           @click="manualSync"
           :disabled="loadingDetail"
-          class="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
+          class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
         >
           <RotateCw v-if="loadingDetail" class="h-4 w-4 mr-2 animate-spin" />
           <RefreshCw v-else class="h-4 w-4 mr-2" />
@@ -353,27 +353,26 @@ onMounted(async () => {
     <Card class="bg-card/40 border border-border/50">
       <CardHeader class="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <CardTitle class="text-base flex items-center gap-2">
-          <Activity class="h-4 w-4 text-cyan-300" />
+          <Activity class="h-4 w-4 text-primary" />
           蜜罐服务攻击列表
         </CardTitle>
         <div class="relative w-full md:w-80">
-          <Search class="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-          <Input v-model="search" class="pl-9 bg-black/20" placeholder="筛选服务名 / 攻击IP / 节点" />
+          <Search class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input v-model="search" class="pl-9 bg-card/40" placeholder="筛选服务名 / 攻击IP / 节点" />
         </div>
       </CardHeader>
 
       <CardContent class="space-y-3">
-        <div class="hidden md:grid md:grid-cols-12 text-[11px] text-slate-500 uppercase tracking-wider px-4">
+        <div class="hidden md:grid md:grid-cols-12 text-[11px] text-muted-foreground uppercase tracking-wider px-4">
           <div class="md:col-span-2">蜜罐服务</div>
           <div class="md:col-span-2">被攻击数量</div>
-          <div class="md:col-span-2">被攻击节点</div>
-          <div class="md:col-span-2">攻击来源</div>
-          <div class="md:col-span-2">最近攻击时间</div>
+          <div class="md:col-span-3">攻击来源</div>
+          <div class="md:col-span-3">最近攻击时间</div>
           <div class="md:col-span-2 text-right">操作</div>
         </div>
 
         <template v-if="loadingTypes">
-          <div v-for="i in 8" :key="i" class="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div v-for="i in 8" :key="i" class="rounded-xl border border-border/50 bg-card/40 p-4">
             <Skeleton class="h-5 w-full" />
           </div>
         </template>
@@ -382,23 +381,22 @@ onMounted(async () => {
           <div
             v-for="item in serviceCards"
             :key="item.name"
-            class="rounded-xl border border-white/10 bg-black/20 overflow-hidden"
+            class="rounded-xl border border-border/50 bg-card/40 overflow-hidden"
           >
             <button
               type="button"
-              class="w-full px-4 py-3 hover:bg-white/5 transition-colors"
+              class="w-full px-4 py-3 hover:hover:bg-muted/50 transition-colors"
               @click="switchType(item.name)"
             >
               <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center text-left">
-                <div class="md:col-span-2 font-semibold text-slate-100 flex items-center gap-2">
-                  <ChevronDown v-if="expandedService === item.name" class="h-4 w-4 text-cyan-300" />
-                  <ChevronRight v-else class="h-4 w-4 text-slate-500" />
+                <div class="md:col-span-2 font-semibold text-foreground flex items-center gap-2">
+                  <ChevronDown v-if="expandedService === item.name" class="h-4 w-4 text-primary" />
+                  <ChevronRight v-else class="h-4 w-4 text-muted-foreground" />
                   <span>{{ item.name }}</span>
                 </div>
-                <div class="md:col-span-2 text-cyan-300 font-bold">{{ item.total_attacks }}</div>
-                <div class="md:col-span-2 text-slate-300">{{ item.latest_client_id || '-' }}</div>
-                <div class="md:col-span-2 text-slate-300">{{ item.latest_attack_ip || '-' }}</div>
-                <div class="md:col-span-2 text-slate-400 text-xs">{{ item.latest_attack_time || '-' }}</div>
+                <div class="md:col-span-2 text-primary font-bold">{{ item.total_attacks }}</div>
+                <div class="md:col-span-3 text-muted-foreground">{{ item.latest_attack_ip || '-' }}</div>
+                <div class="md:col-span-3 text-muted-foreground text-xs">{{ item.latest_attack_time || '-' }}</div>
                 <div class="md:col-span-2 flex md:justify-end">
                   <Badge variant="outline" :class="threatClass(item.latest_threat_level || '')">
                     {{ expandedService === item.name ? '收起' : '展开' }}
@@ -407,14 +405,14 @@ onMounted(async () => {
               </div>
             </button>
 
-            <div v-if="expandedService === item.name" class="border-t border-white/10 bg-slate-950/40 p-4 space-y-4">
+            <div v-if="expandedService === item.name" class="border-t border-border/50 bg-muted/40 p-4 space-y-4">
               <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                <Card v-for="s in statCards" :key="s.key" class="bg-black/20 border-white/10">
+                <Card v-for="s in statCards" :key="s.key" class="bg-card/40 border-border/50">
                   <CardContent class="p-3">
                     <div class="flex items-center justify-between">
                       <div>
-                        <p class="text-[11px] text-slate-400">{{ s.title }}</p>
-                        <p class="text-lg font-bold text-slate-100 mt-1">{{ s.value }}</p>
+                        <p class="text-[11px] text-muted-foreground">{{ s.title }}</p>
+                        <p class="text-lg font-bold text-foreground mt-1">{{ s.value }}</p>
                       </div>
                       <component :is="s.icon" class="h-4 w-4" :class="s.color" />
                     </div>
@@ -422,7 +420,7 @@ onMounted(async () => {
                 </Card>
               </div>
 
-              <Card class="bg-black/20 border-white/10">
+              <Card class="bg-card/40 border-border/50">
                 <CardHeader class="pb-2">
                   <CardTitle class="text-sm">当前蜜罐攻击趋势</CardTitle>
                 </CardHeader>
@@ -435,7 +433,7 @@ onMounted(async () => {
 
               <div class="space-y-2">
                 <div v-if="loadingDetail" class="space-y-2">
-                  <div v-for="k in 3" :key="k" class="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <div v-for="k in 3" :key="k" class="rounded-lg border border-border/50 bg-card/40 p-3">
                     <Skeleton class="h-5 w-full" />
                   </div>
                 </div>
@@ -444,37 +442,37 @@ onMounted(async () => {
                   <div
                     v-for="log in filteredLogs"
                     :key="log.id"
-                    class="rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    class="rounded-xl border border-border/50 bg-card/40 px-4 py-3"
                   >
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                       <div class="md:col-span-3 space-y-1">
-                        <div class="text-xs text-slate-400">{{ log.create_time_str || log.attack_time || '-' }}</div>
-                        <div class="text-[11px] text-slate-500">ts: {{ log.create_time_timestamp ?? '-' }}</div>
-                        <div class="text-[11px] text-slate-500">id: {{ log.id }}</div>
+                        <div class="text-xs text-muted-foreground">{{ log.create_time_str || log.attack_time || '-' }}</div>
+                        <div class="text-[11px] text-muted-foreground">ts: {{ log.create_time_timestamp ?? '-' }}</div>
+                        <div class="text-[11px] text-muted-foreground">id: {{ log.id }}</div>
                       </div>
 
                       <div class="md:col-span-2 space-y-1">
-                        <div class="text-cyan-200 font-semibold">{{ log.attack_ip || '-' }}</div>
-                        <div class="text-[11px] text-slate-500">{{ log.ip_location || '未知' }}</div>
+                        <div class="text-primary font-semibold">{{ log.attack_ip || '-' }}</div>
+                        <div class="text-[11px] text-muted-foreground">{{ log.ip_location || '未知' }}</div>
                       </div>
 
-                      <div class="md:col-span-3 space-y-1 text-xs text-slate-300">
+                      <div class="md:col-span-3 space-y-1 text-xs text-muted-foreground">
                         <div>
-                          <span class="text-slate-500">节点名称: </span>{{ log.client_name || '未知节点' }}
+                          <span class="text-muted-foreground">节点名称: </span>{{ log.client_name || '未知节点' }}
                         </div>
                         <div>
-                          <span class="text-slate-500">节点ID: </span>
+                          <span class="text-muted-foreground">节点ID: </span>
                           <span class="font-mono text-[11px] break-all">{{ log.client_id || '-' }}</span>
                         </div>
                         <div>
-                          <span class="text-slate-500">服务: </span>{{ log.service_name || expandedService || '-' }}
+                          <span class="text-muted-foreground">服务: </span>{{ log.service_name || expandedService || '-' }}
                         </div>
                         <div>
-                          <span class="text-slate-500">端口: </span>{{ log.service_port ?? '-' }}
+                          <span class="text-muted-foreground">端口: </span>{{ log.service_port ?? '-' }}
                         </div>
                       </div>
 
-                      <div class="md:col-span-3 text-xs text-slate-300 break-all leading-relaxed">
+                      <div class="md:col-span-3 text-xs text-muted-foreground break-all leading-relaxed">
                         {{ log.payload || '-' }}
                       </div>
 
@@ -492,7 +490,7 @@ onMounted(async () => {
                   </div>
                 </template>
 
-                <div v-else class="py-6 text-center text-slate-500 flex items-center justify-center gap-2">
+                <div v-else class="py-6 text-center text-muted-foreground flex items-center justify-center gap-2">
                   <AlertTriangle class="h-4 w-4" />
                   当前蜜罐暂无攻击明细
                 </div>
@@ -509,7 +507,7 @@ onMounted(async () => {
           </div>
         </template>
 
-        <div v-else class="py-10 text-center text-slate-500">没有匹配的蜜罐服务</div>
+        <div v-else class="py-10 text-center text-muted-foreground">没有匹配的蜜罐服务</div>
       </CardContent>
     </Card>
   </div>

@@ -64,7 +64,7 @@ function handleLogout() {
 <template>
   <div class="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans">
     <!-- Sidebar -->
-    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] bg-card flex flex-col hidden md:flex">
+    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex">
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
         <Avatar class="h-8 w-8 mr-3 drop-shadow-[0_0_4px_rgba(0,229,255,0.3)] bg-transparent">
@@ -115,7 +115,7 @@ function handleLogout() {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Top Header -->
-      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] bg-card/50 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6">
+      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] backdrop-blur-sm flex items-center justify-between px-4 sm:px-6">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
           <Button variant="ghost" size="icon" class="md:hidden mr-2">

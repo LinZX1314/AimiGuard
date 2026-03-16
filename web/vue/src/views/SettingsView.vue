@@ -166,7 +166,7 @@ const chainItems = [
 <template>
   <div class="p-6 max-w-4xl mx-auto space-y-6">
     <!-- Theme selection -->
-    <Card class="bg-card/40 border border-border/50 overflow-hidden">
+    <Card class="bg-card/40 border overflow-hidden">
       <CardHeader class="pb-4">
         <CardTitle class="text-[15px] font-bold flex items-center gap-2">
           <Activity :size="16" class="text-primary" />
@@ -177,7 +177,7 @@ const chainItems = [
       <CardContent>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div v-for="ci in chainItems" :key="ci.key" 
-               class="flex items-center gap-2 p-3 rounded-lg border border-border/20 bg-muted/5 transition-all"
+               class="flex items-center gap-2 p-3 rounded-lg border bg-muted/5 transition-all"
                :class="(status as any)[ci.key] ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-slate-500/20'">
             <CheckCircle2 v-if="(status as any)[ci.key]" :size="16" class="text-emerald-500 shrink-0" />
             <Circle v-else :size="16" class="text-slate-600 shrink-0" />
@@ -193,12 +193,12 @@ const chainItems = [
           <Settings :size="16" class="text-primary" />
           界面主题定制
         </CardTitle>
-        <CardDescription class="text-xs">选择适合您工作环境的视觉风格</CardDescription>
+        <CardDescription class="text-xs">仅保留亮色与暗色两种界面模式</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 gap-4">
           <div 
-            v-for="t in ['cyberpunk', 'indigo', 'forest', 'rose']" 
+            v-for="t in ['dark', 'light']" 
             :key="t"
             class="group cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3"
             :class="[uiStore.theme === t ? 'border-primary bg-primary/10' : 'border-border/50 bg-muted/5 hover:border-border']"
@@ -206,23 +206,20 @@ const chainItems = [
           >
             <div class="w-full h-20 rounded-lg flex items-center justify-center relative overflow-hidden" 
                  :class="[
-                   t === 'cyberpunk' ? 'bg-black shadow-[inset_0_0_20px_rgba(0,255,255,0.2)]' : 
-                   t === 'indigo' ? 'bg-slate-900 border-indigo-500/20 shadow-[inset_0_0_20px_rgba(79,70,229,0.2)]' : 
-                   t === 'forest' ? 'bg-[#051005] border-emerald-500/10 shadow-[inset_0_0_20px_rgba(16,185,129,0.1)]' : 
-                   'bg-white border-slate-200 shadow-[0_0_15px_rgba(0,0,0,0.05)]'
+                   t === 'dark'
+                     ? 'bg-slate-950 border-cyan-500/20 shadow-[inset_0_0_20px_rgba(34,211,238,0.2)]'
+                     : 'bg-white border-slate-200 shadow-[0_0_15px_rgba(0,0,0,0.05)]'
                  ]"
             >
               <div class="flex flex-col gap-1 w-1/2">
                 <div class="h-1.5 w-full rounded-full" :class="[
-                   t === 'cyberpunk' ? 'bg-cyan-400' : 
-                   t === 'indigo' ? 'bg-indigo-400' : 
-                   t === 'forest' ? 'bg-emerald-400' : 'bg-slate-900'
+                   t === 'dark' ? 'bg-cyan-400' : 'bg-slate-900'
                 ]"></div>
-                <div class="h-1 w-3/4 rounded-full" :class="t === 'rose' ? 'bg-slate-200' : 'bg-white/20'"></div>
+                <div class="h-1 w-3/4 rounded-full" :class="t === 'dark' ? 'bg-white/20' : 'bg-slate-200'"></div>
               </div>
             </div>
             <span class="text-xs font-bold uppercase tracking-wider">
-              {{ t === 'rose' ? 'Pure Monochrome' : t }}
+              {{ t === 'dark' ? '暗色模式' : '亮色模式' }}
             </span>
           </div>
         </div>
@@ -288,7 +285,7 @@ const chainItems = [
             <Label class="text-xs font-semibold text-slate-400">全网重扫周期 (秒)</Label>
             <Input v-model.number="nmap.scan_interval" type="number" class="bg-black/20" />
           </div>
-          <div class="flex items-center gap-3 h-10 px-4 bg-muted/10 rounded-lg border border-border/30 mt-auto">
+          <div class="flex items-center gap-3 h-10 px-4 bg-muted/10 rounded-lg border mt-auto">
             <Switch v-model="nmap.scan_enabled" id="nmap-scan" />
             <Label for="nmap-scan" class="text-xs font-medium cursor-pointer">开启周期性重扫</Label>
           </div>
@@ -335,7 +332,7 @@ const chainItems = [
             </div>
           </div>
 
-          <Accordion type="single" collapsible class="border rounded-lg border-border/30 overflow-hidden">
+          <Accordion type="single" collapsible class="border rounded-lg overflow-hidden">
             <AccordionItem value="json" class="border-0">
               <AccordionTrigger class="px-4 py-2 hover:no-underline hover:bg-white/5 text-xs text-slate-500">
                 <div class="flex items-center gap-2"><Code class="h-3.5 w-3.5" /> 导出/编辑原生规则 JSON</div>

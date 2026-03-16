@@ -157,7 +157,7 @@ onUnmounted(() => clearInterval(refreshTimer))
       <Card 
         v-for="s in statCards" 
         :key="s.key" 
-        class="bg-card/40 border border-border/50 relative overflow-hidden group hover:border-border transition-all"
+        class="bg-card/40 border relative overflow-hidden group hover:border-border transition-all"
       >
         <div class="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
           <Bug v-if="s.icon === Bug" :size="48" :stroke-width="1.5" :class="s.color" />
@@ -184,7 +184,7 @@ onUnmounted(() => clearInterval(refreshTimer))
     <!-- Charts Row -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <!-- Line Chart -->
-      <Card class="lg:col-span-8 bg-card/40 border border-border/50">
+      <Card class="lg:col-span-8 border border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
             <History class="h-4 w-4 text-primary" />
@@ -220,7 +220,7 @@ onUnmounted(() => clearInterval(refreshTimer))
       </Card>
 
       <!-- Doughnut Chart -->
-      <Card class="lg:col-span-4 bg-card/40 border border-border/50">
+      <Card class="lg:col-span-4 border border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
             <ShieldAlert class="h-4 w-4 text-primary" />

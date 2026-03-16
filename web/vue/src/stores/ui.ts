@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-export type Theme = 'cyberpunk' | 'indigo' | 'forest' | 'rose'
+export type Theme = 'light' | 'dark'
 
 export const useUiStore = defineStore('ui', () => {
-  const theme = ref<Theme>((localStorage.getItem('ag-theme') as Theme) || 'cyberpunk')
+  const storedTheme = localStorage.getItem('ag-theme') as Theme | null
+  const theme = ref<Theme>(storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark')
 
   function setTheme(t: Theme) {
     theme.value = t
@@ -12,10 +13,8 @@ export const useUiStore = defineStore('ui', () => {
 
   watch(theme, (newTheme) => {
     localStorage.setItem('ag-theme', newTheme)
-    document.documentElement.setAttribute('data-theme', newTheme)
-    // Also toggle .dark class for compatibility with Shadcn components that might use it
-    const darkThemes: Theme[] = ['cyberpunk', 'indigo', 'forest']
-    if (darkThemes.includes(newTheme)) {
+    // 同步 .dark 类，确保 shadcn / tailwind dark: 样式一致生效
+    if (newTheme === 'dark') {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')

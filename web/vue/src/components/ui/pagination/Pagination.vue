@@ -80,7 +80,7 @@ function handlePageSizeChange(val: unknown) {
       <div class="flex items-center gap-2">
         <span class="text-xs text-muted-foreground">每页</span>
         <Select :model-value="String(pageSize)" @update:model-value="handlePageSizeChange">
-          <SelectTrigger class="w-20 h-8 bg-black/20 border-border/40 text-xs">
+          <SelectTrigger class="w-20 h-8 bg-black/20 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
