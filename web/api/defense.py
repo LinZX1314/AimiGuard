@@ -166,30 +166,56 @@ def defense_events():
 @defense_bp.route('/events/<int:event_id>/approve', methods=['POST'])
 @require_auth
 def defense_event_approve(event_id: int):
-    """Approve a defense event"""
+    """Approve a defense event and trigger physical ban"""
     conn = get_connection()
     c = conn.cursor()
-    # 通过event_id获取attack_ip，然后更新ai_analysis_logs表
     c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
     row = c.fetchone()
-    if row:
-        attack_ip = row['attack_ip']
-        c.execute("UPDATE ai_analysis_logs SET status = 'approved' WHERE ip = ?", (attack_ip,))
-        conn.commit()
+    if not row:
+        conn.close()
+        return err('事件不存在', 404)
+        
+    attack_ip = row['attack_ip']
+    
+    # 1. 物理封禁 (如果尚未封禁)
+    cfg = _load_cfg()
+    from ai.tools import execute_tool
+    import json
+    
+    # 获取AI决策状态
+    c.execute("SELECT decision FROM ai_analysis_logs WHERE ip = ?", (attack_ip,))
+    ai_row = c.fetchone()
+    already_banned = ai_row and ai_row['decision'] == '已封禁'
+    
+    if not already_banned:
+        # 触发物理封禁
+        res_str = execute_tool('switch_acl_config', {'action': 'ban', 'target_ip': attack_ip, 'description': '手动确认封禁'}, cfg)
+        try:
+            res = json.loads(res_str)
+            if not res.get('ok'):
+                conn.close()
+                return err(f"物理封禁失败: {res.get('error')}", 500)
+        except:
+            pass
+
+    # 2. 更新数据库状态
+    c.execute("UPDATE ai_analysis_logs SET status = 'approved', decision = '已封禁' WHERE ip = ?", (attack_ip,))
+    conn.commit()
     conn.close()
-    return ok({'message': '已批准'})
+    return ok({'message': '已批准并执行物理封禁'})
 
 
 @defense_bp.route('/events/<int:event_id>/reject', methods=['POST'])
 @require_auth
 def defense_event_reject(event_id: int):
-    """Reject a defense event"""
+    """Reject a defense event (Optional: trigger unban)"""
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
     row = c.fetchone()
     if row:
         attack_ip = row['attack_ip']
+        # 更新状态为已拒绝
         c.execute("UPDATE ai_analysis_logs SET status = 'rejected' WHERE ip = ?", (attack_ip,))
         conn.commit()
     conn.close()
@@ -199,15 +225,21 @@ def defense_event_reject(event_id: int):
 @defense_bp.route('/events/<int:event_id>/false-positive', methods=['POST'])
 @require_auth
 def defense_event_false_positive(event_id: int):
-    """Mark event as false positive"""
+    """Mark event as false positive and trigger unban if needed"""
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
     row = c.fetchone()
     if row:
         attack_ip = row['attack_ip']
-        c.execute("UPDATE ai_analysis_logs SET status = 'false_positive' WHERE ip = ?", (attack_ip,))
+        
+        # 尝试物理回滚 (解封)
+        cfg = _load_cfg()
+        from ai.tools import execute_tool
+        execute_tool('switch_acl_config', {'action': 'unban', 'target_ip': attack_ip}, cfg)
+        
+        c.execute("UPDATE ai_analysis_logs SET status = 'false_positive', decision = '不封禁' WHERE ip = ?", (attack_ip,))
         conn.commit()
     conn.close()
-    return ok({'message': '已标记为误报'})
+    return ok({'message': '已标记为误报并尝试解除封禁'})
 

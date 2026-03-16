@@ -129,8 +129,7 @@ IP信息：
         decision = '封禁' if should_ban else '不封禁'
 
         # 保存分析结果到数据库（包含原因）
-        analysis_result = f"{analysis_text}"
-        AiModel.save_analysis(ip, analysis_result, decision)
+        AiModel.save_analysis(ip, analysis_text, decision, status='approved')
         analysis_results[ip] = decision
 
         # 自动封禁
@@ -149,7 +148,7 @@ IP信息：
             # 检查封禁是否成功
             if ban_result.get('ok'):
                 ban_count += 1
-                AiModel.save_analysis(ip, analysis_text, '已封禁')
+                AiModel.save_analysis(ip, analysis_text, '已封禁', status='approved')
                 logger.info(f"IP {ip} 封禁成功")
             else:
                 logger.warning(f"IP {ip} 封禁失败: {ban_result.get('error', '未知错误')}")

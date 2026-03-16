@@ -492,15 +492,20 @@ class StatsModel:
 class AiModel:
     """AI 分析与会话历史持久化模型。"""
     @staticmethod
-    def save_analysis(ip, analysis_text, decision):
+    def save_analysis(ip, analysis_text, decision, status='pending'):
         from datetime import datetime
+        scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
-        scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cursor.execute('''
-            INSERT OR REPLACE INTO ai_analysis_logs (ip, analysis_text, decision, scan_time)
-            VALUES (?, ?, ?, ?)
-        ''', (ip, analysis_text, decision, scan_time))
+            INSERT INTO ai_analysis_logs (ip, analysis_text, decision, scan_time, status)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(ip) DO UPDATE SET
+                analysis_text=excluded.analysis_text,
+                decision=excluded.decision,
+                scan_time=excluded.scan_time,
+                status=excluded.status
+        ''', (ip, analysis_text, decision, scan_time, status))
         conn.commit()
         conn.close()
 
