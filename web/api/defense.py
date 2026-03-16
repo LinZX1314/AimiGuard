@@ -17,16 +17,27 @@ defense_bp = Blueprint('defense', __name__, url_prefix='/api/v1/defense')
 @defense_bp.route('/hfish/logs', methods=['GET'])
 @require_auth
 def defense_hfish_logs():
-    """Get HFish attack logs"""
-    limit = _parse_int_arg('limit', 200)
-    offset = _parse_int_arg('offset', 0)
+    """Get HFish attack logs with pagination"""
+    page = _parse_int_arg('page', 1)
+    page_size = _parse_int_arg('page_size', 50)
+    offset = (page - 1) * page_size
     aggregated = _as_bool(request.args.get('aggregated', '0'))
     service_name = request.args.get('service_name')
     threat_level = request.args.get('threat_level')
 
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Get total count first
+    count_q = "SELECT COUNT(*) as total FROM attack_logs WHERE 1=1"
+    count_params = []
+    if service_name:
+        count_q += ' AND service_name = ?'
+        count_params.append(service_name)
+    c.execute(count_q, count_params)
+    total = c.fetchone()['total']
+
     if aggregated:
-        conn = get_connection()
-        c = conn.cursor()
         q = """
             SELECT attack_ip,
                    MAX(ip_location) as ip_location,
@@ -40,22 +51,23 @@ def defense_hfish_logs():
             q += ' AND service_name = ?'
             params.append(service_name)
         q += ' GROUP BY attack_ip ORDER BY attack_count DESC LIMIT ? OFFSET ?'
-        params += [limit, offset]
+        params += [page_size, offset]
         c.execute(q, params)
         rows = [dict(r) for r in c.fetchall()]
-        conn.close()
 
         ai_all = AiModel.get_all_analyses()
         for row in rows:
             a = ai_all.get(row['attack_ip'])
             row['decision'] = a['decision'] if a else None
             row['ai_analysis'] = a['analysis_text'] if a else None
-        return ok({'items': rows, 'total': len(rows)})
+        conn.close()
+        return ok({'items': rows, 'total': total, 'page': page, 'page_size': page_size})
 
-    logs = HFishModel.get_attack_logs(limit=limit, offset=offset,
+    logs = HFishModel.get_attack_logs(limit=page_size, offset=offset,
                                        threat_level=threat_level,
                                        service_name=service_name)
-    return ok({'items': logs, 'total': len(logs)})
+    conn.close()
+    return ok({'items': logs, 'total': total, 'page': page, 'page_size': page_size})
 
 
 @defense_bp.route('/hfish/stats', methods=['GET'])
@@ -63,6 +75,230 @@ def defense_hfish_logs():
 def defense_hfish_stats():
     """Get HFish stats"""
     return ok(HFishModel.get_stats())
+
+
+@defense_bp.route('/hfish/types', methods=['GET'])
+@require_auth
+def defense_hfish_types():
+    """Get attack types overview with aggregated stats per type"""
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Get all service types with aggregated stats
+    q = """
+        SELECT
+            service_name,
+            COUNT(*) as total_attacks,
+            COUNT(DISTINCT attack_ip) as unique_ips,
+            COUNT(DISTINCT client_id) as unique_nodes,
+            MAX(create_time) as latest_attack_time,
+            MAX(create_time_str) as latest_attack_time_str
+        FROM attack_logs
+        GROUP BY service_name
+        ORDER BY total_attacks DESC
+    """
+    c.execute(q)
+    rows = [dict(r) for r in c.fetchall()]
+
+    # Get total count
+    c.execute("SELECT COUNT(*) as total FROM attack_logs")
+    total_count = c.fetchone()['total']
+
+    conn.close()
+
+    types = [
+        {
+            'name': r['service_name'] or '未知',
+            'total_attacks': r['total_attacks'],
+            'unique_ips': r['unique_ips'],
+            'unique_nodes': r['unique_nodes'],
+            'latest_attack_time': r['latest_attack_time_str'] or '-'
+        }
+        for r in rows
+    ]
+
+    return ok({'types': types, 'total_count': total_count})
+
+
+@defense_bp.route('/hfish/type/<service_name>', methods=['GET'])
+@require_auth
+def defense_hfish_type_detail(service_name):
+    """Get detailed data for a specific attack type"""
+    page = _parse_int_arg('page', 1)
+    page_size = _parse_int_arg('page_size', 20)
+    offset = (page - 1) * page_size
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Decode service_name (URL encoded)
+    from urllib.parse import unquote
+    svc_name = unquote(service_name)
+
+    # Build where clause
+    where_sql = "WHERE service_name = ?" if svc_name != 'ALL' else "WHERE 1=1"
+    params = [svc_name] if svc_name != 'ALL' else []
+
+    # 1. Get aggregated stats for this type
+    stats_q = f"""
+        SELECT
+            COUNT(*) as total_attacks,
+            COUNT(DISTINCT attack_ip) as unique_ips,
+            COUNT(DISTINCT client_id) as unique_nodes,
+            MAX(create_time_str) as latest_attack_time
+        FROM attack_logs {where_sql}
+    """
+    c.execute(stats_q, params)
+    stats_row = dict(c.fetchone())
+
+    # 2. Get attack trend (last 7 days, hourly)
+    import time
+    from datetime import datetime, timedelta
+
+    trend_q = f"""
+        SELECT
+            strftime('%Y-%m-%d %H:00', create_time) as hour,
+            COUNT(*) as count
+        FROM attack_logs {where_sql}
+        AND create_time >= datetime('now', '-7 days')
+        GROUP BY hour
+        ORDER BY hour ASC
+    """
+    c.execute(trend_q, params)
+    trend_rows = [dict(r) for r in c.fetchall()]
+
+    # 3. Get top source IPs for this type
+    top_ips_q = f"""
+        SELECT attack_ip, COUNT(*) as count
+        FROM attack_logs {where_sql}
+        GROUP BY attack_ip
+        ORDER BY count DESC
+        LIMIT 10
+    """
+    c.execute(top_ips_q, params)
+    top_ips = [dict(r) for r in c.fetchall()]
+
+    # 4. Get paginated raw logs as cards
+    logs_q = f"""
+        SELECT
+            id, attack_ip, ip_location, service_name, service_port,
+            client_id, create_time_str, threat_level, payload
+        FROM attack_logs {where_sql}
+        ORDER BY create_time DESC
+        LIMIT ? OFFSET ?
+    """
+    c.execute(logs_q, params + [page_size, offset])
+
+    logs = []
+    for r in c.fetchall():
+        row = dict(r)
+        logs.append({
+            'id': row['id'],
+            'attack_ip': row['attack_ip'],
+            'ip_location': row['ip_location'] or '未知',
+            'service_port': row['service_port'],
+            'client_id': row['client_id'],
+            'attack_time': row['create_time_str'],
+            'threat_level': row['threat_level'],
+            'payload': row['payload']
+        })
+
+    # 5. Get total count for pagination
+    count_q = f"SELECT COUNT(*) as total FROM attack_logs {where_sql}"
+    c.execute(count_q, params)
+    total = c.fetchone()['total']
+
+    conn.close()
+
+    return ok({
+        'stats': {
+            'total_attacks': stats_row['total_attacks'] or 0,
+            'unique_ips': stats_row['unique_ips'] or 0,
+            'unique_nodes': stats_row['unique_nodes'] or 0,
+            'latest_attack_time': stats_row['latest_attack_time'] or '-'
+        },
+        'trend': {
+            'labels': [r['hour'] for r in trend_rows],
+            'values': [r['count'] for r in trend_rows]
+        },
+        'top_ips': top_ips,
+        'logs': logs,
+        'total': total,
+        'page': page,
+        'page_size': page_size
+    })
+
+
+@defense_bp.route('/hfish/charts', methods=['GET'])
+@require_auth
+def defense_hfish_charts():
+    """Get HFish chart data (computed on backend for performance)"""
+    service_name = request.args.get('service_name')
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Build where clause
+    where_sql = "WHERE 1=1"
+    params = []
+    if service_name:
+        where_sql += " AND service_name = ?"
+        params.append(service_name)
+
+    # 1. 攻击来源 Top 15 IP
+    ip_q = f"""
+        SELECT attack_ip, SUM(attack_count) as attack_count
+        FROM (
+            SELECT attack_ip, COUNT(*) as attack_count
+            FROM attack_logs {where_sql}
+            GROUP BY attack_ip
+        )
+        GROUP BY attack_ip
+        ORDER BY attack_count DESC
+        LIMIT 15
+    """
+    c.execute(ip_q, params * 2 if service_name else params)
+    ip_rows = [dict(r) for r in c.fetchall()]
+
+    # Reverse for bar chart (top IP at top)
+    top_ips = {
+        'labels': [r['attack_ip'] for r in reversed(ip_rows)],
+        'values': [r['attack_count'] for r in reversed(ip_rows)]
+    }
+
+    # 2. 攻击服务分布 Top 8
+    svc_q = f"""
+        SELECT service_name, COUNT(*) as attack_count
+        FROM attack_logs {where_sql}
+        GROUP BY service_name
+        ORDER BY attack_count DESC
+        LIMIT 8
+    """
+    c.execute(svc_q, params)
+    svc_rows = [dict(r) for r in c.fetchall()]
+
+    # Get total for percentage calculation
+    total_q = f"SELECT COUNT(*) as total FROM attack_logs {where_sql}"
+    c.execute(total_q, params)
+    total_count = c.fetchone()['total']
+
+    service_dist = {
+        'items': [
+            {
+                'name': r['service_name'] or '未知',
+                'value': r['attack_count'],
+                'percent': round(r['attack_count'] / total_count * 100, 1) if total_count > 0 else 0
+            }
+            for r in svc_rows
+        ]
+    }
+
+    conn.close()
+    return ok({
+        'top_ips': top_ips,
+        'service_dist': service_dist,
+        'total_count': total_count
+    })
 
 
 @defense_bp.route('/hfish/sync', methods=['POST'])

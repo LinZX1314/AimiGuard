@@ -563,8 +563,16 @@ class AiModel:
         conn.close()
 
     @staticmethod
-    def save_message(session_id, role, content, tool_calls=None):
-        """保存单条消息到指定会话"""
+    def save_message(session_id, role, content, tool_calls=None, tool_call_id=None):
+        """保存单条消息到指定会话
+
+        Args:
+            session_id: 会话ID
+            role: 消息角色 (user/assistant/tool)
+            content: 消息内容
+            tool_calls: 工具调用信息 (仅 assistant 消息)
+            tool_call_id: 工具调用ID (仅 tool 消息)
+        """
         from datetime import datetime
         import json
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -578,9 +586,9 @@ class AiModel:
 
         try:
             cursor.execute('''
-                INSERT INTO ai_chat_history (session_id, role, content, tool_calls, create_time, query, response)
-                VALUES (?, ?, ?, ?, ?, '', '')
-            ''', (session_id, role, content, tc_json, now))
+                INSERT INTO ai_chat_history (session_id, role, content, tool_calls, tool_call_id, create_time, query, response)
+                VALUES (?, ?, ?, ?, ?, ?, '', '')
+            ''', (session_id, role, content, tc_json, tool_call_id, now))
 
             # 更新会话最后活跃时间
             if session_id:
@@ -602,7 +610,7 @@ class AiModel:
         cursor.execute('SELECT * FROM ai_chat_history WHERE session_id = ? ORDER BY id ASC', (session_id,))
         rows = cursor.fetchall()
         conn.close()
-        
+
         history = []
         for r in rows:
             d = dict(r)
@@ -615,6 +623,9 @@ class AiModel:
                 try:
                     msg['tool_calls'] = json.loads(d['tool_calls'])
                 except: pass
+            # 恢复 tool 消息的 tool_call_id
+            if d['role'] == 'tool' and d.get('tool_call_id'):
+                msg['tool_call_id'] = d['tool_call_id']
             history.append(msg)
         return history
 

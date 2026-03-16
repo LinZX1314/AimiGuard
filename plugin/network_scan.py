@@ -25,6 +25,11 @@ from utils.logger import log
 import json
 
 
+def get_project_root():
+    """获取项目根目录（AimiGuard）。"""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def get_nmap_executable():
     """检测可用的 nmap 可执行文件路径。"""
     system_nmap = shutil.which('nmap')
@@ -45,7 +50,7 @@ def get_nmap_executable():
 
 def get_vuln_scripts_map():
     """获取系统标签与漏洞检测脚本的映射字典（优先从配置读取）"""
-    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config.json")
+    config_file = os.path.join(get_project_root(), "config.json")
     try:
         if os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -54,8 +59,9 @@ def get_vuln_scripts_map():
                 if vuln_map:
                     # 将所有键转换为小写，确保匹配时不受大小写影响
                     return {k.lower(): v for k, v in vuln_map.items()}
+                log("VulnScan", "配置中未找到 nmap.vuln_scripts_by_tag，漏洞扫描脚本映射为空", "WARNING")
     except Exception:
-        pass
+        log("VulnScan", f"读取漏洞脚本映射失败: {config_file}", "WARNING")
     return {}
 
 
@@ -368,7 +374,7 @@ def main(ip_ranges=None, scan_args=None, scan_interval=0):
     """主函数"""
     # 读取配置
     import json
-    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config.json")
+    config_file = os.path.join(get_project_root(), "config.json")
     if os.path.exists(config_file):
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)

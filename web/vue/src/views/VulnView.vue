@@ -13,14 +13,15 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { 
-  Bug, 
-  ShieldAlert, 
-  ShieldCheck, 
-  Search, 
-  RefreshCw, 
-  CheckCircle2, 
-  XCircle, 
+import { Pagination } from '@/components/ui/pagination'
+import {
+  Bug,
+  ShieldAlert,
+  ShieldCheck,
+  Search,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
   Flame,
   Filter,
@@ -35,6 +36,11 @@ const search   = ref('')
 const sevFlt   = ref<string>("ALL")
 const statusFlt= ref<string>("ALL")
 const stats    = ref({ total: 0, critical: 0, high: 0, fixed: 0 })
+
+// Pagination
+const page     = ref(1)
+const pageSize = ref(50)
+const total    = ref(0)
 
 const headers = ['漏洞名称', '主机 IP', '严重性', '状态 / 发现时间', '操作']
 
@@ -71,14 +77,15 @@ const filteredVulns = computed(() => {
 async function load() {
   loading.value = true
   const d = await apiCall<any>(async () => {
-    let url = '/api/v1/scan/findings?limit=500'
+    let url = `/api/v1/scan/findings?page=${page.value}&page_size=${pageSize.value}`
     if (sevFlt.value !== "ALL")    url += `&severity=${sevFlt.value}`
     if (statusFlt.value !== "ALL") url += `&status=${statusFlt.value}`
     return await api.get<any>(url)
   })
   if (d) {
     vulns.value = d.items ?? d.data?.items ?? d.data ?? []
-    stats.value.total    = vulns.value.length
+    total.value = d.total ?? vulns.value.length
+    stats.value.total    = total.value
     stats.value.critical = vulns.value.filter(v => v.severity === '严重').length
     stats.value.high     = vulns.value.filter(v => v.severity === '高危').length
     stats.value.fixed    = vulns.value.filter(v => v.status === 'fixed').length
@@ -104,7 +111,7 @@ const statSummaries = computed(() => [
   { label: '漏洞总数', val: stats.value.total, icon: Bug, color: 'text-primary' },
   { label: '严重威胁', val: stats.value.critical, icon: Flame, color: 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]' },
   { label: '高危漏洞', val: stats.value.high, icon: AlertTriangle, color: 'text-orange-400' },
-  { label: '已修复', val: stats.value.fixed, icon: ShieldCheck, color: 'text-emerald-400' }
+  { label: '安全', val: stats.value.fixed, icon: ShieldCheck, color: 'text-emerald-400' }
 ])
 
 onMounted(load)
@@ -252,6 +259,7 @@ onMounted(load)
             </tbody>
           </table>
         </div>
+        <Pagination v-model:page="page" v-model:page-size="pageSize" :total="total" @update:page="load" @update:page-size="load" />
       </CardContent>
     </Card>
   </div>

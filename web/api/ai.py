@@ -102,6 +102,12 @@ def ai_chat_stream():
     """
     unified_log('AIChat', f'Stream Request from={request.remote_addr}', 'INFO')
 
+    # 检查 AI 是否启用
+    cfg_now = _load_cfg()
+    ai_enabled = cfg_now.get('ai', {}).get('enabled', False)
+    if not ai_enabled:
+        return err('AI 功能已禁用，请在设置中开启')
+
     body         = _body()
     message      = body.get('message', '').strip()
     session_id   = body.get('session_id')
@@ -137,8 +143,6 @@ def ai_chat_stream():
     # 2. 保存并追加用户消息
     history.append({'role': 'user', 'content': message, 'ts': _now_iso()})
     AiModel.save_message(sid, 'user', message)
-    
-    cfg_now = _load_cfg()
 
     def generate():
         # 如果是新会话，流开始的第一帧直接告诉前端建立的会话 ID
@@ -194,11 +198,11 @@ def ai_chat_stream():
 
         for tc in tool_calls_received:
             res = execute_tool(tc['name'], tc['arguments'], cfg_now)
-            yield f"data: {json.dumps({'tool_result': res[:1000] + '...' if len(res)>1000 else res}, ensure_ascii=False)}\n\n"
-            
-            # 保存工具执行结果
+            yield f"data: {json.dumps({'tool_result': res[:1000] + '...' if len(res)>1000 else res, 'tool_call_id': tc['id']}, ensure_ascii=False)}\n\n"
+
+            # 保存工具执行结果（包含 tool_call_id）
             history.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': res, 'ts': _now_iso()})
-            AiModel.save_message(sid, 'tool', res)
+            AiModel.save_message(sid, 'tool', res, tool_call_id=tc['id'])
 
         # 第二轮：整合结果
         second_reply = []

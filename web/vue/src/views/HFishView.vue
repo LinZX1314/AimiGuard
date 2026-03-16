@@ -1,385 +1,516 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { use }    from 'echarts/core'
-import { CanvasRenderer }  from 'echarts/renderers'
-import { BarChart, PieChart } from 'echarts/charts'
-import {
-  GridComponent, TitleComponent, TooltipComponent,
-  LegendComponent, DataZoomComponent
-} from 'echarts/components'
+import { ref, computed, onMounted } from 'vue'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { api, apiCall } from '@/api/index'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Pagination } from '@/components/ui/pagination'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { 
-  RefreshCw, 
-  RotateCw, 
-  Search, 
-  Earth, 
-  PieChart as PieChartIcon, 
-  LayoutGrid, 
-  List, 
+  RefreshCw,
+  RotateCw,
+  Search,
+  ChevronDown,
+  ChevronRight,
+  Shield,
+  Server,
   Globe,
-  Settings2,
-  XCircle,
-  AlertTriangle
+  Clock3,
+  Copy,
+  Check,
+  Activity,
+  AlertTriangle,
 } from 'lucide-vue-next'
 
-use([CanvasRenderer, BarChart, PieChart, GridComponent, TitleComponent,
-     TooltipComponent, LegendComponent, DataZoomComponent])
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
-const loading   = ref(false)
-const logs      = ref<any[]>([])
-const pieLogs   = ref<any[]>([])
-const stats     = ref({ total_attacks: 0 })
-const services  = ref<string[]>([])
-const search    = ref('')
-const svcFilter = ref<string>("ALL")
+interface HFishTypeItem {
+  name: string
+  total_attacks: number
+  latest_attack_time?: string
+  latest_attack_ip?: string
+  latest_client_id?: string
+  latest_ip_location?: string
+  latest_threat_level?: string
+}
 
-// Nmap host dialog
-const nmapDialog = ref(false)
-const nmapIp     = ref('')
-const nmapHost   = ref<any>(null)
+interface HFishLogItem {
+  id: number
+  attack_ip: string
+  ip_location: string
+  service_name?: string
+  service_port: number | string | null
+  client_id: string
+  client_name?: string
+  attack_time?: string
+  create_time_str?: string
+  create_time_timestamp?: number
+  threat_level: string
+  payload: string
+}
 
-const headers = ['攻击 IP', '归属地', '服务类型', '端口', '时间']
+const loadingTypes = ref(false)
+const loadingDetail = ref(false)
+const search = ref('')
+const copiedId = ref<number | null>(null)
+
+const totalAttacks = ref(0)
+const typeTabs = ref<HFishTypeItem[]>([])
+const expandedService = ref<string | null>(null)
+
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+
+const detailStats = ref({
+  total_attacks: 0,
+  unique_nodes: 0,
+  unique_ips: 0,
+  latest_attack_time: '-',
+})
+
+const trend = ref({
+  labels: [] as string[],
+  values: [] as number[],
+})
+
+const logs = ref<HFishLogItem[]>([])
+
+const statCards = computed(() => [
+  { key: 'total', title: '攻击总数量', value: detailStats.value.total_attacks, icon: Shield, color: 'text-cyan-400' },
+  { key: 'nodes', title: '攻击节点数', value: detailStats.value.unique_nodes, icon: Server, color: 'text-emerald-400' },
+  { key: 'ips', title: '来源 IP 数', value: detailStats.value.unique_ips, icon: Globe, color: 'text-amber-400' },
+  { key: 'latest', title: '最新攻击时间', value: detailStats.value.latest_attack_time, icon: Clock3, color: 'text-violet-400' },
+])
+
+const serviceCards = computed(() => {
+  if (!search.value) return typeTabs.value
+  const kw = search.value.toLowerCase()
+  return typeTabs.value.filter((item) =>
+    (item.name || '').toLowerCase().includes(kw) ||
+    (item.latest_attack_ip || '').toLowerCase().includes(kw) ||
+    (item.latest_client_id || '').toLowerCase().includes(kw),
+  )
+})
 
 const filteredLogs = computed(() => {
-  let result = logs.value
-  if (search.value) {
-    const s = search.value.toLowerCase()
-    result = result.filter(l => 
-      (l.attack_ip || '').toLowerCase().includes(s) || 
-      (l.ip_location || '').toLowerCase().includes(s) ||
-      (l.service_name || '').toLowerCase().includes(s)
-    )
-  }
-  return result
+  const kw = search.value.toLowerCase()
+  if (!kw) return logs.value
+  return logs.value.filter((item) =>
+    (item.attack_ip || '').toLowerCase().includes(kw) ||
+    (item.client_id || '').toLowerCase().includes(kw) ||
+    (item.ip_location || '').toLowerCase().includes(kw) ||
+    (item.payload || '').toLowerCase().includes(kw),
+  )
 })
 
-function normalizeLogs(payload: unknown): any[] {
-  if (Array.isArray(payload)) return payload
-  if (payload && typeof payload === 'object') {
-    const obj = payload as { items?: unknown }
-    if (Array.isArray(obj.items)) return obj.items
-  }
-  return []
-}
-
-// ── ECharts options ──────────────────────────────────────────────────────
-const CHART_THEME = {
-  textStyle: { color: 'rgba(255,255,255,.7)', fontFamily: 'inherit' },
+const trendOption = computed(() => ({
   backgroundColor: 'transparent',
-}
-const locationBarOption = computed(() => {
-  const counter: Record<string, number> = {}
-  for (const log of logs.value) {
-    const ip = log.attack_ip || '未知'
-    counter[ip] = (counter[ip] ?? 0) + (Number(log.attack_count) || 1)
-  }
-  const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 15)
-  return {
-    ...CHART_THEME,
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '8%', bottom: '3%', top: '5%', containLabel: true },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(255,255,255,.06)' } }, axisLabel: { color: '#64748b' } },
-    yAxis: {
-      type: 'category',
-      data: sorted.map(x => x[0]).reverse(),
-      axisLabel: { fontSize: 11, color: '#94a3b8' }
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: { type: 'line' },
+  },
+  grid: { left: '3%', right: '4%', top: '12%', bottom: '8%', containLabel: true },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: trend.value.labels,
+    axisLabel: {
+      color: '#94a3b8',
+      fontSize: 10,
+      formatter: (val: string) => val.slice(5),
     },
-    series: [{
-      type: 'bar',
-      data: sorted.map(x => x[1]).reverse(),
-      itemStyle: {
-        borderRadius: [0, 4, 4, 0],
-        color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
-          colorStops: [{ offset: 0, color: '#8B5CF6' }, { offset: 1, color: '#00E5FF' }] }
+    axisLine: { lineStyle: { color: 'rgba(148,163,184,.3)' } },
+  },
+  yAxis: {
+    type: 'value',
+    minInterval: 1,
+    axisLabel: { color: '#94a3b8', fontSize: 10 },
+    splitLine: { lineStyle: { color: 'rgba(148,163,184,.12)' } },
+  },
+  series: [
+    {
+      type: 'line',
+      smooth: true,
+      data: trend.value.values,
+      symbol: 'circle',
+      symbolSize: 6,
+      lineStyle: { width: 3, color: '#22d3ee' },
+      itemStyle: { color: '#06b6d4' },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(34,211,238,.35)' },
+            { offset: 1, color: 'rgba(34,211,238,.02)' },
+          ],
+        },
       },
-      label: { show: true, position: 'right', fontSize: 10, color: '#94a3b8' }
-    }]
-  }
-})
+    },
+  ],
+}))
 
-const servicePieOption = computed(() => {
-  const counter: Record<string, number> = {}
-  for (const log of pieLogs.value) {
-    const svc = log.service_name || '未知'
-    counter[svc] = (counter[svc] ?? 0) + (Number(log.attack_count) || 1)
-  }
-  const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 8)
-  const COLORS = ['#00E5FF','#8B5CF6','#F472B6','#10B981','#F59E0B','#3B82F6','#EF4444','#FCA5A5']
-  return {
-    ...CHART_THEME,
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { orient: 'vertical', right: '0', top: 'center',
-      textStyle: { color: '#94a3b8', fontSize: 10 } },
-    series: [{
-      type: 'pie',
-      radius: ['50%', '80%'],
-      center: ['35%', '50%'],
-      data: sorted.map(([name, value], i) => ({
-        name, value, itemStyle: { color: COLORS[i % COLORS.length] }
-      })),
-      label: { show: false },
-      itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 }
-    }]
-  }
-})
-
-async function loadStats() {
-  const d = await apiCall<any>(async () => await api.get<any>('/api/v1/defense/hfish/stats'))
-  if (d) {
-    const sd = d ?? {}
-    stats.value.total_attacks = (sd.service_stats ?? []).reduce((a:number,s:any) => a + s.count, 0)
-    services.value = (sd.service_stats ?? []).map((s:any) => s.name)
-  }
-}
-
-async function loadLogs() {
-  loading.value = true
+async function loadTypes() {
+  loadingTypes.value = true
   try {
-    const url = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value !== 'ALL' ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
-    const d = await api.get<any>(url)
-    logs.value = normalizeLogs(d)
-    pieLogs.value = logs.value
-  } catch(e) { console.error(e) }
-  loading.value = false
+    const res = await api.get<any>('/api/v1/defense/hfish/stats')
+    const serviceStats = res?.service_stats ?? []
+    const baseCards: HFishTypeItem[] = serviceStats.map((s: any) => ({
+      name: s.name || '未知',
+      total_attacks: Number(s.count || 0),
+    }))
+
+    // 补充每个服务的最新攻击信息，形成横向卡片摘要
+    const settled = await Promise.allSettled(
+      baseCards.map(async (card) => {
+        const url = `/api/v1/defense/hfish/logs?page=1&page_size=1&service_name=${encodeURIComponent(card.name)}`
+        const d = await api.get<any>(url)
+        const latest = (d?.items ?? [])[0]
+        return {
+          ...card,
+          latest_attack_time: latest?.create_time_str || '-',
+          latest_attack_ip: latest?.attack_ip || '-',
+          latest_client_id: latest?.client_id || '-',
+          latest_ip_location: latest?.ip_location || '未知',
+          latest_threat_level: latest?.threat_level || 'unknown',
+        } as HFishTypeItem
+      }),
+    )
+
+    typeTabs.value = settled.map((x, i) => (x.status === 'fulfilled' ? x.value : baseCards[i]))
+    totalAttacks.value = typeTabs.value.reduce((sum, item) => sum + item.total_attacks, 0)
+  } catch (e) {
+    console.error(e)
+  }
+  loadingTypes.value = false
 }
 
-async function showNmap(ip: string) {
-  nmapIp.value = ip
-  nmapHost.value = null
-  nmapDialog.value = true
-  const d = await apiCall<any>(async () => await api.get<any>(`/api/nmap/host/${ip}`))
-  nmapHost.value = d ?? null
+async function loadServiceDetail(serviceName: string) {
+  loadingDetail.value = true
+  try {
+    const encoded = encodeURIComponent(serviceName)
+    const listUrl = `/api/v1/defense/hfish/logs?page=${page.value}&page_size=${pageSize.value}&service_name=${encoded}`
+    const listRes = await api.get<any>(listUrl)
+    const items = (listRes?.items ?? []) as HFishLogItem[]
+    logs.value = items.map((item) => ({
+      ...item,
+      attack_time: item.attack_time || item.create_time_str || '-',
+    }))
+    total.value = Number(listRes?.total ?? 0)
+
+    // 当前蜜罐服务的聚合统计
+    const aggUrl = `/api/v1/defense/hfish/logs?page=1&page_size=1000&aggregated=1&service_name=${encoded}`
+    const aggRes = await api.get<any>(aggUrl)
+    const aggItems = aggRes?.items ?? []
+    const uniqueIps = aggItems.length
+    const totalAttackCount = aggItems.reduce((sum: number, row: any) => sum + Number(row.attack_count || 0), 0)
+
+    // 为了得到更稳定的节点统计与趋势，取当前服务较大样本
+    const sampleUrl = `/api/v1/defense/hfish/logs?page=1&page_size=1000&service_name=${encoded}`
+    const sampleRes = await api.get<any>(sampleUrl)
+    const sampleLogs = (sampleRes?.items ?? []) as HFishLogItem[]
+    const nodeSet = new Set(sampleLogs.map((x) => x.client_id).filter(Boolean))
+
+    detailStats.value = {
+      total_attacks: totalAttackCount || total.value,
+      unique_nodes: nodeSet.size,
+      unique_ips: uniqueIps,
+      latest_attack_time: (sampleLogs[0]?.create_time_str || logs.value[0]?.attack_time || '-'),
+    }
+
+    // 当前服务攻击趋势：按天聚合，避免前端过密
+    const counter = new Map<string, number>()
+    sampleLogs.forEach((item) => {
+      const raw = (item.create_time_str || item.attack_time || '').slice(0, 10)
+      if (!raw) return
+      const key = raw
+      counter.set(key, (counter.get(key) || 0) + 1)
+    })
+    const sorted = [...counter.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    trend.value = {
+      labels: sorted.map((x) => x[0]),
+      values: sorted.map((x) => x[1]),
+    }
+  } catch (e) {
+    console.error(e)
+  }
+  loadingDetail.value = false
+}
+
+async function switchType(name: string) {
+  if (expandedService.value === name) {
+    expandedService.value = null
+    return
+  }
+  expandedService.value = name
+  page.value = 1
+  await loadServiceDetail(name)
 }
 
 async function manualSync() {
-  loading.value = true
+  loadingDetail.value = true
   const ok = await apiCall(async () => {
     await api.post('/api/v1/defense/hfish/sync', {})
-    loadStats()
-    loadLogs()
   }, { errorMsg: '同步失败' })
   if (ok) {
-    await loadStats()
-    await loadLogs()
+    await loadTypes()
+    if (expandedService.value) {
+      await loadServiceDetail(expandedService.value)
+    }
   }
-  loading.value = false
+  loadingDetail.value = false
 }
 
-watch([svcFilter], loadLogs)
-onMounted(() => { loadStats(); loadLogs() })
+async function onPageChange(next: number) {
+  page.value = next
+  if (expandedService.value) {
+    await loadServiceDetail(expandedService.value)
+  }
+}
+
+async function onPageSizeChange(next: number) {
+  pageSize.value = next
+  page.value = 1
+  if (expandedService.value) {
+    await loadServiceDetail(expandedService.value)
+  }
+}
+
+function threatClass(level: string) {
+  if (level === 'high' || level === '高危') return 'bg-red-500/10 text-red-400 border-red-500/30'
+  if (level === 'medium' || level === '中危') return 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+  if (level === 'low' || level === '低危') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+  return 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+}
+
+function threatLabel(level: string) {
+  if (!level) return ''
+  const l = level.toLowerCase()
+  if (l === 'high') return '高危'
+  if (l === 'medium') return '中危'
+  if (l === 'low') return '低危'
+  return level
+}
+
+async function copyLog(item: HFishLogItem) {
+  const text = [
+    `ID: ${item.id ?? '-'}`,
+    `攻击时间: ${item.attack_time || item.create_time_str || '-'}`,
+    `时间戳: ${item.create_time_timestamp ?? '-'}`,
+    `蜜罐服务: ${item.service_name || expandedService.value || '-'}`,
+    `服务端口: ${item.service_port ?? '-'}`,
+    `来源IP: ${item.attack_ip || '-'}`,
+    `归属地: ${item.ip_location || '未知'}`,
+    `节点名称: ${item.client_name || '-'}`,
+    `攻击节点: ${item.client_id || '-'}`,
+    `威胁等级: ${threatLabel(item.threat_level || '')}`,
+    `详情: ${item.payload || '-'}`,
+  ].join('\n')
+  await navigator.clipboard.writeText(text)
+  copiedId.value = item.id
+  setTimeout(() => {
+    if (copiedId.value === item.id) copiedId.value = null
+  }, 1200)
+}
+
+onMounted(async () => {
+  await loadTypes()
+})
 </script>
 
 <template>
   <div class="p-6 space-y-6">
-    <!-- Stats Bar -->
-    <Card class="bg-blue-500/5 border-blue-500/10 border-l-[4px] border-l-blue-500">
-      <CardContent class="p-5 flex justify-between items-center">
+    <Card class="bg-cyan-500/5 border-cyan-500/20 border-l-[4px] border-l-cyan-400">
+      <CardContent class="p-5 flex items-center justify-between gap-4">
         <div>
-          <p class="text-xs font-medium text-blue-400 uppercase tracking-wider mb-1">攻击日志总数</p>
-          <h2 class="text-4xl font-bold tracking-tight text-blue-500">{{ stats.total_attacks }}</h2>
+          <p class="text-xs font-semibold tracking-[0.12em] text-cyan-400 uppercase">HFish 攻击总量</p>
+          <h2 class="text-4xl font-bold text-cyan-300 mt-1">{{ totalAttacks }}</h2>
         </div>
-        <Button variant="outline" size="sm" @click="manualSync" :disabled="loading" class="bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-all">
-          <RotateCw v-if="loading" class="mr-2 h-4 w-4 animate-spin" />
-          <RefreshCw v-else class="mr-2 h-4 w-4" />
+        <Button
+          variant="outline"
+          size="sm"
+          @click="manualSync"
+          :disabled="loadingDetail"
+          class="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
+        >
+          <RotateCw v-if="loadingDetail" class="h-4 w-4 mr-2 animate-spin" />
+          <RefreshCw v-else class="h-4 w-4 mr-2" />
           手动同步
         </Button>
       </CardContent>
     </Card>
 
-    <!-- Charts row -->
-    <div class="grid grid-cols-1 md:grid-cols-12 gap-6" v-if="logs.length">
-      <Card class="md:col-span-7 bg-card/40 border border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <Globe class="h-4 w-4 text-primary" />
-            攻击来源 Top 15（IP）
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="h-[300px]">
-            <VChart :option="locationBarOption" autoresize />
-          </div>
-        </CardContent>
-      </Card>
-      <Card class="md:col-span-5 bg-card/40 border border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <PieChartIcon class="h-4 w-4 text-primary" />
-            攻击服务分布
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="h-[300px]">
-            <VChart :option="servicePieOption" autoresize />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Table Card -->
     <Card class="bg-card/40 border border-border/50">
-      <CardHeader class="pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-          <CardTitle class="text-lg font-bold">攻击记录明细</CardTitle>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="relative w-64">
-            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input v-model="search" placeholder="搜索攻击 IP 或服务" class="pl-9 h-9 bg-black/20" />
-          </div>
-          <Select v-model="svcFilter">
-            <SelectTrigger class="w-40 h-9 bg-black/20">
-              <SelectValue placeholder="服务类型" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">全部服务</SelectItem>
-              <SelectItem v-for="s in services" :key="s" :value="s">{{ s }}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="ghost" size="icon" @click="loadLogs" :disabled="loading">
-            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
-          </Button>
+      <CardHeader class="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <CardTitle class="text-base flex items-center gap-2">
+          <Activity class="h-4 w-4 text-cyan-300" />
+          蜜罐服务攻击列表
+        </CardTitle>
+        <div class="relative w-full md:w-80">
+          <Search class="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+          <Input v-model="search" class="pl-9 bg-black/20" placeholder="筛选服务名 / 攻击IP / 节点" />
         </div>
       </CardHeader>
-      <CardContent class="p-0">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="bg-muted/20 border-b border-border/50 text-muted-foreground">
-                <th v-for="h in headers" :key="h" class="text-left py-3 px-4 font-semibold uppercase text-[11px] tracking-wider">{{ h }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-if="loading">
-                <tr v-for="i in 5" :key="i" class="border-b border-border/20 last:border-0">
-                  <td v-for="j in headers.length" :key="j" class="py-4 px-4"><Skeleton class="h-4 w-full" /></td>
-                </tr>
-              </template>
-              <template v-else-if="filteredLogs.length">
-                <tr v-for="(item, idx) in filteredLogs" :key="idx" class="border-b border-border/10 last:border-0 hover:bg-white/5 transition-colors">
-                  <td class="py-3 px-4">
-                    <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
-                  </td>
-                  <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
-                  <td class="py-3 px-4">
-                    <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
-                  </td>
-                  <td class="py-3 px-4 text-slate-400 font-mono">{{ item.service_port || '-' }}</td>
-                  <td class="py-3 px-4 text-slate-500 text-xs">{{ item.create_time_str }}</td>
-                </tr>
-              </template>
-              <tr v-else>
-                <td :colspan="headers.length" class="py-20 text-center text-muted-foreground italic">暂无满足条件的攻击记录</td>
-              </tr>
-            </tbody>
-          </table>
+
+      <CardContent class="space-y-3">
+        <div class="hidden md:grid md:grid-cols-12 text-[11px] text-slate-500 uppercase tracking-wider px-4">
+          <div class="md:col-span-2">蜜罐服务</div>
+          <div class="md:col-span-2">被攻击数量</div>
+          <div class="md:col-span-2">被攻击节点</div>
+          <div class="md:col-span-2">攻击来源</div>
+          <div class="md:col-span-2">最近攻击时间</div>
+          <div class="md:col-span-2 text-right">操作</div>
         </div>
+
+        <template v-if="loadingTypes">
+          <div v-for="i in 8" :key="i" class="rounded-xl border border-white/10 bg-black/20 p-4">
+            <Skeleton class="h-5 w-full" />
+          </div>
+        </template>
+
+        <template v-else-if="serviceCards.length">
+          <div
+            v-for="item in serviceCards"
+            :key="item.name"
+            class="rounded-xl border border-white/10 bg-black/20 overflow-hidden"
+          >
+            <button
+              type="button"
+              class="w-full px-4 py-3 hover:bg-white/5 transition-colors"
+              @click="switchType(item.name)"
+            >
+              <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center text-left">
+                <div class="md:col-span-2 font-semibold text-slate-100 flex items-center gap-2">
+                  <ChevronDown v-if="expandedService === item.name" class="h-4 w-4 text-cyan-300" />
+                  <ChevronRight v-else class="h-4 w-4 text-slate-500" />
+                  <span>{{ item.name }}</span>
+                </div>
+                <div class="md:col-span-2 text-cyan-300 font-bold">{{ item.total_attacks }}</div>
+                <div class="md:col-span-2 text-slate-300">{{ item.latest_client_id || '-' }}</div>
+                <div class="md:col-span-2 text-slate-300">{{ item.latest_attack_ip || '-' }}</div>
+                <div class="md:col-span-2 text-slate-400 text-xs">{{ item.latest_attack_time || '-' }}</div>
+                <div class="md:col-span-2 flex md:justify-end">
+                  <Badge variant="outline" :class="threatClass(item.latest_threat_level || '')">
+                    {{ expandedService === item.name ? '收起' : '展开' }}
+                  </Badge>
+                </div>
+              </div>
+            </button>
+
+            <div v-if="expandedService === item.name" class="border-t border-white/10 bg-slate-950/40 p-4 space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <Card v-for="s in statCards" :key="s.key" class="bg-black/20 border-white/10">
+                  <CardContent class="p-3">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-[11px] text-slate-400">{{ s.title }}</p>
+                        <p class="text-lg font-bold text-slate-100 mt-1">{{ s.value }}</p>
+                      </div>
+                      <component :is="s.icon" class="h-4 w-4" :class="s.color" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card class="bg-black/20 border-white/10">
+                <CardHeader class="pb-2">
+                  <CardTitle class="text-sm">当前蜜罐攻击趋势</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div class="h-[240px]">
+                    <VChart :option="trendOption" autoresize />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div class="space-y-2">
+                <div v-if="loadingDetail" class="space-y-2">
+                  <div v-for="k in 3" :key="k" class="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <Skeleton class="h-5 w-full" />
+                  </div>
+                </div>
+
+                <template v-else-if="filteredLogs.length">
+                  <div
+                    v-for="log in filteredLogs"
+                    :key="log.id"
+                    class="rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                  >
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                      <div class="md:col-span-3 space-y-1">
+                        <div class="text-xs text-slate-400">{{ log.create_time_str || log.attack_time || '-' }}</div>
+                        <div class="text-[11px] text-slate-500">ts: {{ log.create_time_timestamp ?? '-' }}</div>
+                        <div class="text-[11px] text-slate-500">id: {{ log.id }}</div>
+                      </div>
+
+                      <div class="md:col-span-2 space-y-1">
+                        <div class="text-cyan-200 font-semibold">{{ log.attack_ip || '-' }}</div>
+                        <div class="text-[11px] text-slate-500">{{ log.ip_location || '未知' }}</div>
+                      </div>
+
+                      <div class="md:col-span-3 space-y-1 text-xs text-slate-300">
+                        <div>
+                          <span class="text-slate-500">节点名称: </span>{{ log.client_name || '未知节点' }}
+                        </div>
+                        <div>
+                          <span class="text-slate-500">节点ID: </span>
+                          <span class="font-mono text-[11px] break-all">{{ log.client_id || '-' }}</span>
+                        </div>
+                        <div>
+                          <span class="text-slate-500">服务: </span>{{ log.service_name || expandedService || '-' }}
+                        </div>
+                        <div>
+                          <span class="text-slate-500">端口: </span>{{ log.service_port ?? '-' }}
+                        </div>
+                      </div>
+
+                      <div class="md:col-span-3 text-xs text-slate-300 break-all leading-relaxed">
+                        {{ log.payload || '-' }}
+                      </div>
+
+                      <div class="md:col-span-1 flex md:flex-col items-end gap-2">
+                        <Badge v-if="log.threat_level" variant="outline" :class="threatClass(log.threat_level || '')">
+                          {{ threatLabel(log.threat_level || '') }}
+                        </Badge>
+                        <Button variant="outline" size="sm" class="h-8" @click="copyLog(log)">
+                          <Check v-if="copiedId === log.id" class="h-4 w-4 mr-1 text-emerald-400" />
+                          <Copy v-else class="h-4 w-4 mr-1" />
+                          {{ copiedId === log.id ? '已复制' : '复制' }}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-else class="py-6 text-center text-slate-500 flex items-center justify-center gap-2">
+                  <AlertTriangle class="h-4 w-4" />
+                  当前蜜罐暂无攻击明细
+                </div>
+              </div>
+
+              <Pagination
+                v-model:page="page"
+                v-model:page-size="pageSize"
+                :total="total"
+                @update:page="onPageChange"
+                @update:page-size="onPageSizeChange"
+              />
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="py-10 text-center text-slate-500">没有匹配的蜜罐服务</div>
       </CardContent>
     </Card>
-
-    <!-- Nmap Dialog -->
-    <Dialog v-model:open="nmapDialog">
-      <DialogContent class="sm:max-w-[560px] bg-slate-900 border-white/10 text-slate-100">
-        <DialogHeader>
-          <DialogTitle class="flex items-center gap-2 text-xl">
-            <Settings2 class="h-5 w-5 text-primary" />
-            扫描信息 - {{ nmapIp }}
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div v-if="nmapHost" class="space-y-6 pt-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-1">
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">当前状态</p>
-              <Badge :variant="nmapHost.state === 'up' ? 'default' : 'secondary'" 
-                     :class="nmapHost.state === 'up' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : ''">
-                {{ nmapHost.state === 'up' ? '在线' : '离线' }}
-              </Badge>
-            </div>
-            <div class="space-y-1 text-right">
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">主机名</p>
-              <p class="font-medium">{{ nmapHost.hostname || '-' }}</p>
-            </div>
-          </div>
-
-          <div class="p-4 bg-black/30 rounded-xl border border-white/5 grid grid-cols-1 gap-4">
-            <div class="flex justify-between items-center text-sm">
-              <span class="text-slate-400">MAC 地址</span>
-              <span class="font-mono">{{ nmapHost.mac_address || '-' }}</span>
-            </div>
-            <div class="border-t border-white/5 pt-2 flex justify-between items-center text-sm">
-              <span class="text-slate-400">厂商信息</span>
-              <span>{{ nmapHost.vendor || '-' }}</span>
-            </div>
-            <div class="border-t border-white/5 pt-2 flex justify-between items-center text-sm">
-              <span class="text-slate-400">操作系统</span>
-              <span class="flex items-center gap-1.5 font-medium"><Globe class="h-3.5 w-3.5 text-primary" /> {{ nmapHost.os_type || '-' }}</span>
-            </div>
-          </div>
-
-          <div v-if="nmapHost.services?.length" class="space-y-3">
-            <h4 class="text-sm font-semibold flex items-center gap-2">
-              <LayoutGrid class="h-4 w-4 text-primary" />
-              开放端口
-            </h4>
-            <div class="rounded-xl border border-white/5 overflow-hidden">
-              <table class="w-full text-xs">
-                <thead class="bg-white/5">
-                  <tr class="text-slate-500">
-                    <th class="py-2.5 px-4 text-left font-medium">端口</th>
-                    <th class="py-2.5 px-4 text-left font-medium">协议</th>
-                    <th class="py-2.5 px-4 text-left font-medium text-right">服务名称</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5">
-                  <tr v-for="s in nmapHost.services" :key="s.port" class="hover:bg-white/5 px-4">
-                    <td class="py-2.5 px-4 font-bold text-primary">{{ s.port }}</td>
-                    <td class="py-2.5 px-4 uppercase text-slate-500">TCP</td>
-                    <td class="py-2.5 px-4 text-right">
-                      <Badge variant="outline" class="border-white/10 text-slate-300 font-normal">{{ s.service }}</Badge>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div v-else class="py-12 flex flex-col items-center justify-center gap-3 text-slate-500 italic">
-          <XCircle class="h-10 w-10 opacity-20" />
-          未找到该 IP 的扫描记录
-        </div>
-
-        <div class="flex justify-end pt-4">
-          <Button variant="secondary" @click="nmapDialog = false">关闭窗口</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>
-
-<style scoped>
-.truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-</style>

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { api } from '@/api/index'
 import {
   MessageSquare,
@@ -332,8 +333,13 @@ function stopGenerating() {
 
 // Markdown -------------------------------------------------------------------
 function renderMd(text: string): string {
-  const html = marked.parse(text, { breaks: true, gfm: true }) as string
-  return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
+  const rawHtml = marked.parse(text, { breaks: true, gfm: true }) as string
+  // 对 marked 输出进行消毒，防止 XSS 攻击
+  const safeHtml = DOMPurify.sanitize(rawHtml, {
+    ADD_ATTR: ['target'],  // 允许 target 属性
+    ADD_TAGS: ['details', 'summary']  // 允许 details/summary 标签
+  })
+  return safeHtml.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
 }
 
 function formatJson(value: unknown): string {
@@ -627,13 +633,33 @@ async function send(extraParams: any = {}) {
               typeQueue = ''
             }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
-            // 找到最后一个 tool_call，把结果关联过去
-            const lastToolCall = (assistantMsg as any).tool_calls?.slice(-1)[0]
+            // 优先使用后端返回的 tool_call_id 匹配，否则 fallback 到最后一个 tool_call
+            const matchedToolCall = parsed.tool_call_id
+              ? (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === parsed.tool_call_id)
+              : (assistantMsg as any).tool_calls?.slice(-1)[0]
             ;(assistantMsg as any).tool_results.push({
-              name: lastToolCall?.name || 'tool',
-              tool_call_id: lastToolCall?.id,
+              name: matchedToolCall?.name || 'tool',
+              tool_call_id: parsed.tool_call_id || matchedToolCall?.id,
               content: parsed.tool_result,
             })
+            nextTick(() => scrollBottom())
+          }
+          // 错误处理：后端返回的错误信息
+          if (parsed.error) {
+            if (typeQueue) {
+              const hasTools = (assistantMsg as any).tool_calls?.length > 0
+              if (hasTools) {
+                assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
+              } else {
+                assistantMsg.content += typeQueue
+              }
+              typeQueue = ''
+            }
+            // 在消息中显示错误
+            const errorContent = assistantMsg.content || assistantMsg.post_content
+            if (!errorContent) {
+              assistantMsg.content = `⚠️ ${parsed.error}`
+            }
             nextTick(() => scrollBottom())
           }
           if (parsed.session_id && !sessionId) {

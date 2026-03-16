@@ -18,6 +18,7 @@ import {
   Ban, 
   CheckCircle2, 
   Circle,
+  Activity,
   AlertTriangle,
   Flame
 } from 'lucide-vue-next'

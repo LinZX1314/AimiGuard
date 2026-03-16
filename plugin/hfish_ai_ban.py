@@ -27,6 +27,7 @@ def analyze_and_ban_attack_ips(logs: list, cfg: dict) -> dict:
     ai_cfg = cfg.get('ai', {})
     ai_enabled = ai_cfg.get('enabled', False)
     auto_ban = ai_cfg.get('auto_ban', False)
+    # ban_threshold 配置项已废弃：实际封禁逻辑由 AI 模型输出 [BAN] 标记决定
 
     ban_count = 0
     analysis_results = {}

@@ -146,6 +146,7 @@ def init_db():
             response TEXT,        -- 旧版兼容：response
             content TEXT,         -- 新版统一：content
             tool_calls TEXT,      -- 存储 JSON 格式的工具库调用
+            tool_call_id TEXT,    -- tool 消息对应的 tool_call_id
             create_time TEXT NOT NULL,
             FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id)
         )
@@ -181,6 +182,9 @@ def init_db():
     except: pass
     try:
         cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN tool_calls TEXT')
+    except: pass
+    try:
+        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN tool_call_id TEXT')
     except: pass
     
     conn.commit()

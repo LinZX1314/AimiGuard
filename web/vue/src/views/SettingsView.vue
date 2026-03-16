@@ -22,24 +22,26 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { 
-  Save, 
-  Info, 
-  CheckCircle2, 
-  Circle, 
-  RotateCw, 
-  Trash2, 
-  Plus, 
-  Code, 
-  Link, 
-  Network, 
-  Bot, 
+import {
+  Save,
+  Info,
+  CheckCircle2,
+  Circle,
+  RotateCw,
+  Trash2,
+  Plus,
+  Code,
+  Link,
+  Network,
+  Bot,
   Activity,
   Bug,
   Flame,
   Key,
   Settings,
-  XCircle
+  XCircle,
+  Eye,
+  EyeOff
 } from 'lucide-vue-next'
 
 const uiStore = useUiStore()
@@ -49,7 +51,10 @@ let statusTimer: ReturnType<typeof setInterval>
 
 const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60,     sync_enabled: false })
 const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T5', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
-const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false, ban_threshold: 80 })
+const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false })
+
+// API Key 显示/隐藏状态
+const showApiKey = ref(false)
 
 // Feedback
 const feedback = ref<{ show: boolean, text: string, type: 'success' | 'error' | 'none' }>({ show: false, text: '', type: 'none' })
@@ -373,18 +378,28 @@ const chainItems = [
           </div>
           <div class="space-y-2">
             <Label class="text-xs font-semibold text-slate-400">API 访问令牌 (Key)</Label>
-            <Input v-model="aiCfg.api_key" type="password" placeholder="••••••••••••" class="bg-black/20" />
+            <div class="relative">
+              <Input
+                v-model="aiCfg.api_key"
+                :type="showApiKey ? 'text' : 'password'"
+                placeholder="••••••••••••"
+                class="bg-black/20 pr-10"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                class="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                @click="showApiKey = !showApiKey"
+                type="button"
+              >
+                <Eye v-if="!showApiKey" :size="16" />
+                <EyeOff v-else :size="16" />
+              </Button>
+            </div>
           </div>
           <div class="space-y-2">
             <Label class="text-xs font-semibold text-slate-400">自定义接口代理 (Base URL)</Label>
             <Input v-model="aiCfg.base_url" placeholder="https://api.openai.com/v1" class="bg-black/20" />
-          </div>
-          <div class="space-y-2">
-            <Label class="text-xs font-semibold text-slate-400">自动化判定置信度阈值 (%)</Label>
-            <div class="flex items-center gap-3">
-              <Input v-model.number="aiCfg.ban_threshold" type="number" class="bg-black/20" />
-              <div class="text-[10px] text-slate-500 italic max-w-[120px] leading-tight">高于此数值将不经由人类批准直接触发 ACL 封禁。</div>
-            </div>
           </div>
         </div>
       </CardContent>

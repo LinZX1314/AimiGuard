@@ -22,7 +22,6 @@ def system_ai_config_get():
         'model_name': ai.get('model', ''),
         'enabled': ai.get('enabled', False),
         'auto_ban': ai.get('auto_ban', False),
-        'ban_threshold': ai.get('ban_threshold', 80),
         'api_key_configured': bool(ai.get('api_key', '')),
     })
 
@@ -44,11 +43,6 @@ def system_ai_config_save():
         ai['enabled'] = _as_bool(body['enabled'])
     if 'auto_ban' in body:
         ai['auto_ban'] = _as_bool(body['auto_ban'])
-    if 'ban_threshold' in body:
-        try:
-            ai['ban_threshold'] = int(body['ban_threshold'])
-        except Exception:
-            pass
     if 'api_key' in body and body['api_key']:
         ai['api_key'] = body['api_key']
     _save_cfg(cfg)

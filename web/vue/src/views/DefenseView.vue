@@ -6,12 +6,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { 
-  ShieldAlert, 
-  RefreshCw, 
-  Check, 
-  X, 
-  ShieldMinus, 
+import { Pagination } from '@/components/ui/pagination'
+import {
+  ShieldAlert,
+  RefreshCw,
+  Check,
+  X,
+  ShieldMinus,
   ShieldCheck,
   RotateCw,
   Bot,
@@ -23,8 +24,8 @@ import {
 const loading = ref(false)
 const events  = ref<any[]>([])
 const page    = ref(1)
+const pageSize = ref(50)
 const total   = ref(0)
-const pageSize = 50
 
 const headers = ['来源资产', '次数', '威胁指纹', 'AI 深度研判', '状态', '处理建议']
 
@@ -44,7 +45,7 @@ function unwrap<T>(payload: any): T {
 async function load() {
   loading.value = true
   const d = await apiCall<any>(async () => {
-    const url = `/api/v1/defense/events?page=${page.value}&page_size=${pageSize}`
+    const url = `/api/v1/defense/events?page=${page.value}&page_size=${pageSize.value}`
     const res = await api.get<any>(url)
     return unwrap<any>(res)
   })
@@ -206,6 +207,7 @@ onMounted(load)
             </tbody>
           </table>
         </div>
+        <Pagination v-model:page="page" v-model:page-size="pageSize" :total="total" @update:page="load" @update:page-size="load" />
       </CardContent>
     </Card>
   </div>

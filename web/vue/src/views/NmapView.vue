@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
@@ -21,18 +22,21 @@ import {
 } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { 
-  Radar, 
-  RefreshCw, 
-  Search, 
-  Info, 
-  Bot, 
+import { Pagination } from '@/components/ui/pagination'
+import {
+  Radar,
+  RefreshCw,
+  Search,
+  Info,
+  Bot,
   ShieldCheck,
+  CheckCircle2,
   Monitor,
   Cpu,
   Network,
   Activity,
   History,
+  Server,
   XCircle,
   PackageSearch
 } from 'lucide-vue-next'
@@ -46,6 +50,11 @@ const stats    = ref({ online: 0 })
 const search   = ref('')
 const vendorFlt= ref<string>("ALL")
 const currentScanId = ref<string>("NONE")
+
+// Pagination
+const page     = ref(1)
+const pageSize = ref(50)
+const total    = ref(0)
 
 // Host detail dialog
 const detailDlg = ref(false)
@@ -89,11 +98,12 @@ async function loadHosts() {
   if (currentScanId.value === "NONE") return
   loading.value = true
   const d = await apiCall<any>(async () => {
-    let url = `/api/nmap/hosts?limit=500&scan_id=${currentScanId.value}`
+    let url = `/api/nmap/hosts?page=${page.value}&page_size=${pageSize.value}&scan_id=${currentScanId.value}`
     return await api.get<any>(url)
   })
   if (d) {
-    hosts.value = Array.isArray(d) ? d : (d.data ?? [])
+    hosts.value = d.items ?? (Array.isArray(d) ? d : (d.data ?? []))
+    total.value = d.total ?? hosts.value.length
     const online = hosts.value.filter(h => h.state === 'up')
     stats.value.online = online.length
   }
@@ -296,6 +306,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             </tbody>
           </table>
         </div>
+        <Pagination v-model:page="page" v-model:page-size="pageSize" :total="total" @update:page="loadHosts" @update:page-size="loadHosts" />
       </CardContent>
     </Card>
 
