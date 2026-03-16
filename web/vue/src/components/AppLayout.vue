@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
+import ParticleBackground from '@/components/ParticleBackground.vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,12 +25,25 @@ import {
   ChevronDown,
   User,
   Menu,
-  Siren
+  Siren,
+  Sun,
+  Moon
 } from 'lucide-vue-next'
+
+import { useThemeAnimation } from '@/composables/useThemeAnimation'
+import { ref } from 'vue'
 
 const router = useRouter()
 const route  = useRoute()
 const auth   = useAuthStore()
+const { toggleTheme } = useThemeAnimation()
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
+function handleToggleTheme(e: MouseEvent) {
+  toggleTheme(e)
+  isDark.value = !isDark.value
+}
+
 
 const logoUrl = new URL('@/assets/aimiguard-logo.png', import.meta.url).href
 
@@ -62,9 +76,10 @@ function handleLogout() {
 </script>
 
 <template>
-  <div class="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans">
+  <div class="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
+    <ParticleBackground />
     <!-- Sidebar -->
-    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex">
+    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10 bg-background/80 backdrop-blur-md">
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
         <Avatar class="h-8 w-8 mr-3 drop-shadow-[0_0_4px_rgba(0,229,255,0.3)] bg-transparent">
@@ -125,7 +140,14 @@ function handleLogout() {
           <h1 class="text-base font-semibold">{{ currentTitle }}</h1>
         </div>
 
-        <div class="flex items-center">
+        <div class="flex items-center gap-2">
+          <!-- Theme Toggle Button -->
+          <Button variant="ghost" size="icon" @click="handleToggleTheme" class="rounded-full mr-2">
+            <Sun v-if="!isDark" class="h-[1.2rem] w-[1.2rem] transition-all" />
+            <Moon v-else class="h-[1.2rem] w-[1.2rem] transition-all" />
+            <span class="sr-only">Toggle theme</span>
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <Button variant="ghost" class="h-10 pl-2 pr-2 sm:pr-4 rounded-full flex items-center hover:bg-muted">
@@ -163,8 +185,12 @@ function handleLogout() {
       </header>
 
       <!-- Main Router View -->
-      <main class="flex-1 overflow-auto bg-background/50 relative">
-        <router-view />
+      <main class="flex-1 overflow-auto bg-background/50 relative z-10">
+        <router-view v-slot="{ Component }">
+          <transition name="fade-slide" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </main>
     </div>
   </div>
