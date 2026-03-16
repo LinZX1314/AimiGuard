@@ -90,7 +90,7 @@ let mediaStream: MediaStream | null = null
 let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let sourceNode: MediaStreamAudioSourceNode | null = null
-let frequencyData: Uint8Array | null = null
+let frequencyData: Uint8Array<ArrayBuffer> = new Uint8Array(0)
 let animationFrameId: number | null = null
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -120,7 +120,7 @@ function stopWaveform() {
     audioContext = null
   }
   analyser = null
-  frequencyData = null
+  frequencyData = new Uint8Array(0)
   resetWaveform()
 }
 
@@ -179,10 +179,10 @@ async function startWaveform() {
     if (audioContext?.state === 'suspended') await audioContext.resume()
     if (!audioContext) return
 
-    analyser = audioContext.createAnalyser()
+    analyser = ctx.createAnalyser()
     analyser.fftSize = 256
     analyser.smoothingTimeConstant = 0.82
-    sourceNode = audioContext.createMediaStreamSource(mediaStream)
+    sourceNode = ctx.createMediaStreamSource(mediaStream)
     sourceNode.connect(analyser)
     frequencyData = new Uint8Array(analyser.frequencyBinCount)
     renderWaveformFrame()
@@ -311,6 +311,17 @@ function speak(text: string) {
   utt.rate = 1.1
   window.speechSynthesis.speak(utt)
 }
+function toggleListen() {
+  if (!recognition) return
+  if (listening.value) {
+    recognition.stop()
+    listening.value = false
+  } else {
+    recognition.start()
+    listening.value = true
+  }
+}
+
 function toggleTts() {
   // 切换 TTS 开关时，停止当前正在播放的语音
   if (ttsEnabled.value && window.speechSynthesis) {
