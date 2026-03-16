@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { marked } from 'marked'
 import { api } from '@/api/index'
@@ -15,6 +15,7 @@ import {
   Volume2,
   VolumeX,
   Send,
+  Square,
   User,
   History,
   Settings,
@@ -76,8 +77,10 @@ const loading  = ref(false)
 const sending  = ref(false)
 const currentSession = ref<number | null>(null)
 const chatBox  = ref<HTMLElement | null>(null)
+const chatEnd = ref<HTMLElement | null>(null)
+const activeChatController = ref<AbortController | null>(null)
 
-// ── STT ──────────────────────────────────────────────────────────────────
+// STT ------------------------------------------------------------------------
 const listening = ref(false)
 const voiceDialog = ref(false)
 const voiceError = ref('')
@@ -303,7 +306,7 @@ function toggleListen() {
 }
 
 
-// ── TTS ──────────────────────────────────────────────────────────────────
+// TTS ------------------------------------------------------------------------
 const ttsEnabled = ref(true)
 function speak(text: string) {
   if (!ttsEnabled.value || !window.speechSynthesis) return
@@ -323,7 +326,11 @@ function toggleTts() {
   ttsEnabled.value = !ttsEnabled.value
 }
 
-// ── Markdown ─────────────────────────────────────────────────────────────
+function stopGenerating() {
+  activeChatController.value?.abort()
+}
+
+// Markdown -------------------------------------------------------------------
 function renderMd(text: string): string {
   const html = marked.parse(text, { breaks: true, gfm: true }) as string
   return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
@@ -374,7 +381,7 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
       while (cursor < source.length) {
         const next = source[cursor]
         if (next.role === 'tool') {
-          // 尝试匹配对应的 tool_call，如果后端没存 id，则按顺序绑定
+          // 尝试匹配对应的 tool_call，如果后端没有返回 id，则按顺序绑定
           let matchedCall = current.tool_calls?.find(tc => tc.id === next.tool_call_id)
           if (!matchedCall && seqIndex < current.tool_calls.length) {
             matchedCall = current.tool_calls[seqIndex]
@@ -451,11 +458,16 @@ function toolResultKey(parentKey: string, result: ToolResult, index: number): st
   return `${parentKey}-tool-${result.tool_call_id || result.name || index}`
 }
 
+watch(messages, async () => {
+  await nextTick()
+  scrollBottom()
+}, { deep: true })
+
 async function loadSessions() {
   try {
     const d = await api.get<any>('/api/v1/ai/sessions')
     const list = d.data ?? d
-    // 如果存在未发消息的新建会话占位副产品，保留在列表里
+
     if (currentSession.value === -1) {
       sessions.value = [
         { id: -1, title: '新对话', created_at: new Date().toLocaleString() },
@@ -497,13 +509,19 @@ async function send(extraParams: any = {}) {
   if (!text || sending.value) return
   input.value = ''
   const userMsg = { role: 'user' as const, content: text }
-  messages.value.push(userMsg)
+  messages.value.push(userMsg as any)
+  await nextTick()
+  scrollBottom()
+
   sending.value = true
 
-  // 使用 reactive 包装，确保闭包内的修改能触发 Vue 响应式更新
+  // 使用 reactive 包装，确保闭包内的修改也能触发 Vue 响应式更新
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
   messages.value.push(assistantMsg as any)
   await nextTick(); scrollBottom()
+
+  const controller = new AbortController()
+  activeChatController.value = controller
 
   try {
     const body: any = { message: text, ...extraParams }
@@ -519,7 +537,8 @@ async function send(extraParams: any = {}) {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      credentials: 'include'
+      credentials: 'include',
+      signal: controller.signal
     })
 
     if (!response.ok) {
@@ -535,7 +554,7 @@ async function send(extraParams: any = {}) {
 
     let isNewSession = !currentSession.value || currentSession.value === -1
     let sessionId = currentSession.value === -1 ? null : currentSession.value
-    let buffer = '' // 添加缓冲区
+    let buffer = '' // 增量缓冲区
     
     // 用于打字机效果的队列
     let typeQueue = ''
@@ -556,7 +575,7 @@ async function send(extraParams: any = {}) {
           typeQueue = typeQueue.slice(popCount)
           nextTick(() => scrollBottom())
         }
-      }, 30) // 30ms 刷新频率体验最佳
+      }, 30) // 30ms 刷新频率，兼顾流畅度与性能
     }
 
     while (true) {
@@ -566,7 +585,7 @@ async function send(extraParams: any = {}) {
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       
-      // 保留最后一个可能不完整的行
+      // 保留最后一段可能不完整的行
       buffer = lines.pop() || ''
 
       for (const line of lines) {
@@ -601,7 +620,7 @@ async function send(extraParams: any = {}) {
             })
             nextTick(() => scrollBottom())
           }
-          // 工具结果：扫描/执行完毕
+          // 工具结果：工具执行完毕
           if (parsed.tool_result) {
             if (typeQueue) {
               assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
@@ -633,15 +652,30 @@ async function send(extraParams: any = {}) {
     // 语音播报
     speak(assistantMsg.content)
   } catch(e: unknown) {
-    assistantMsg.content = `⚠️ ${e instanceof Error ? e.message : '请求失败'}`
+    const isAbort = e instanceof DOMException
+      ? e.name === 'AbortError'
+      : e instanceof Error && e.name === 'AbortError'
+
+    if (isAbort) {
+      const hasContent = Boolean(assistantMsg.content || assistantMsg.post_content || assistantMsg.tool_calls?.length || assistantMsg.tool_results?.length)
+      if (!hasContent) {
+        assistantMsg.content = '已停止生成'
+      }
+    } else {
+      assistantMsg.content = `⚠️ ${e instanceof Error ? e.message : '请求失败'}`
+    }
+  } finally {
+    if (activeChatController.value === controller) {
+      activeChatController.value = null
+    }
+    sending.value = false
   }
-  sending.value = false
 }
 
 function newChat() {
   messages.value = []
   currentSession.value = -1
-  // 移除旧的未发消息的占位对话，避免堆积
+  // 移除旧的未发送消息的占位对话，避免堆积
   sessions.value = sessions.value.filter(s => s.id !== -1)
   sessions.value.unshift({
     id: -1,
@@ -651,7 +685,14 @@ function newChat() {
 }
 
 function scrollBottom() {
-  if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
+  if (chatEnd.value) {
+    chatEnd.value.scrollIntoView({ block: 'end', behavior: 'smooth' })
+    return
+  }
+
+  if (chatBox.value) {
+    chatBox.value.scrollTop = chatBox.value.scrollHeight
+  }
 }
 
 import { useRoute } from 'vue-router'
@@ -660,7 +701,7 @@ const route = useRoute()
 async function onPageLoad() {
   await loadSessions()
 
-  // 处理 URL传参上下文
+  // 处理 URL 传参上下文
   const { context_type, context_id } = route.query
   if (context_type && context_id) {
     // 自动发起一个分析请求
@@ -675,6 +716,7 @@ async function onPageLoad() {
 onMounted(onPageLoad)
 onBeforeUnmount(() => {
   cleanupVoiceCapture()
+  stopGenerating()
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
@@ -735,8 +777,8 @@ onBeforeUnmount(() => {
             <div class="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-full flex items-center justify-center text-muted-foreground shadow-2xl">
               <Bot :size="40" class="text-primary/80" />
             </div>
-            <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">玄枢 AI 助手</h3>
-            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入指令开始对话，支持自然语言触发扫描与分析</p>
+            <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">AimiGuard AI 助手</h3>
+            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入指令开始对话，支持自然语言触发扫描与分析。</p>
           </div>
 
           <!-- Message List -->
@@ -848,6 +890,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </ScrollArea>
+      <div ref="chatEnd" class="h-px w-full" aria-hidden="true"></div>
 
       <!-- Input Area -->
       <div class="absolute bottom-0 left-0 right-0 pb-3 bg-gradient-to-t from-background/95 from-75% to-transparent pointer-events-none flex justify-center z-10 w-full">
@@ -856,10 +899,10 @@ onBeforeUnmount(() => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="icon"
-                    class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative"
+                    class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative cursor-pointer"
                     :class="[listening ? 'text-destructive hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/10']"
                     :disabled="!recognition"
                     @click="toggleListen"
@@ -874,13 +917,12 @@ onBeforeUnmount(() => {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            
+
             <Textarea
               v-model="input"
               class="flex-1 bg-transparent border-0 text-foreground font-sans text-[15px] leading-relaxed py-2.5 resize-none max-h-[150px] min-h-[44px] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none scrollbar-hide"
-              placeholder="何事相询？ (Enter 发送，Shift+Enter 换行)"
+              placeholder="请输入你的问题（Enter 发送，Shift+Enter 换行）"
               :rows="1"
-              :disabled="sending"
               @keydown.enter.exact.prevent="send"
               @keydown.enter.shift.stop
             />
@@ -889,10 +931,10 @@ onBeforeUnmount(() => {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="icon"
-                      class="h-[38px] w-[38px] rounded-full"
+                      class="h-[38px] w-[38px] rounded-full cursor-pointer"
                       :class="[ttsEnabled ? 'text-primary' : 'text-muted-foreground']"
                       @click="toggleTts"
                     >
@@ -903,17 +945,32 @@ onBeforeUnmount(() => {
                   <TooltipContent>AI 语音播报</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              
-              <Button 
-                class="h-[38px] w-[38px] rounded-full transition-all"
-                :class="[sending || !input.trim() ? 'opacity-50 cursor-not-allowed bg-white/10 text-white/30 hover:bg-white/10' : 'bg-primary text-primary-foreground hover:scale-105 shadow-md shadow-primary/20']"
-                :disabled="sending || !input.trim()"
-                size="icon"
-                @click="send" 
-              >
-                <div v-if="sending" class="animate-spin h-5 w-5 border-2 border-foreground border-t-transparent rounded-full"></div>
-                <Send v-else :size="18" class="ml-0.5" />
-              </Button>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      v-if="sending"
+                      size="icon"
+                      class="h-[38px] w-[38px] rounded-full cursor-pointer border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive shadow-sm transition-all"
+                      @click="stopGenerating"
+                    >
+                      <Square :size="16" fill="currentColor" />
+                    </Button>
+                    <Button
+                      v-else
+                      class="h-[38px] w-[38px] rounded-full transition-all cursor-pointer"
+                      :class="!input.trim() ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted' : 'bg-primary text-primary-foreground hover:scale-105 shadow-md shadow-primary/20'"
+                      :disabled="!input.trim()"
+                      size="icon"
+                      @click="send"
+                    >
+                      <Send :size="18" class="ml-0.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ sending ? '停止生成' : '发送消息' }}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
           <div class="text-center text-[11px] text-muted-foreground/60 mt-3 pointer-events-auto">AI 生成的内容仅供参考，请谨慎验证。</div>
@@ -922,6 +979,7 @@ onBeforeUnmount(() => {
     </main>
   </div>
 </template>
+
 
 <style>
 /* Markdown Content Overrides */
@@ -946,3 +1004,6 @@ onBeforeUnmount(() => {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
+
+
+

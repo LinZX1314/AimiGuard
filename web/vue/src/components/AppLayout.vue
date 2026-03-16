@@ -43,10 +43,17 @@ const navItems = [
   { title: '系统设置',   icon: Settings,        to: '/settings' },
 ]
 
-const currentTitle = computed(() => {
-  const match = navItems.find(n => n.to === route.path) 
-  return match?.title ?? '玄枢·AI攻防指挥官'
+const currentNavItem = computed(() => {
+  return navItems.find(item => {
+    if (item.to === '/') {
+      return route.path === '/'
+    }
+
+    return route.path === item.to || route.path.startsWith(`${item.to}/`)
+  }) ?? null
 })
+
+const currentTitle = computed(() => currentNavItem.value?.title ?? '玄枢·AI攻防指挥官')
 
 function handleLogout() {
   auth.logout()
@@ -57,7 +64,7 @@ function handleLogout() {
 <template>
   <div class="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans">
     <!-- Sidebar -->
-    <aside class="w-64 flex-shrink-0 border-r border-[hsl(var(--border))] bg-card flex flex-col hidden md:flex">
+    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] bg-card flex flex-col hidden md:flex">
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
         <Avatar class="h-8 w-8 mr-3 drop-shadow-[0_0_4px_rgba(0,229,255,0.3)] bg-transparent">
@@ -96,13 +103,7 @@ function handleLogout() {
               ]"
             >
               <div class="mr-3 transition-transform group-hover:scale-110">
-                <LayoutDashboard v-if="item.title === '总览大屏'" :size="18" :stroke-width="2" />
-                <Bug v-else-if="item.title === 'HFish 蜜罐'" :size="18" :stroke-width="2" />
-                <Radar v-else-if="item.title === 'Nmap 扫描'" :size="18" :stroke-width="2" />
-                <Siren v-else-if="item.title === '漏洞管理'" :size="18" :stroke-width="2" />
-                <ShieldAlert v-else-if="item.title === '防御事件'" :size="18" :stroke-width="2" />
-                <Bot v-else-if="item.title === 'AI 助手'" :size="18" :stroke-width="2" />
-                <Settings v-else-if="item.title === '系统设置'" :size="18" :stroke-width="2" />
+                <component :is="item.icon" :size="18" :stroke-width="2" />
               </div>
               {{ item.title }}
             </a>
@@ -120,7 +121,7 @@ function handleLogout() {
           <Button variant="ghost" size="icon" class="md:hidden mr-2">
             <Menu class="h-5 w-5" />
           </Button>
-          <ShieldAlert class="h-5 w-5 text-primary mr-2" />
+          <component :is="currentNavItem?.icon ?? ShieldAlert" class="h-5 w-5 text-primary mr-2" />
           <h1 class="text-base font-semibold">{{ currentTitle }}</h1>
         </div>
 

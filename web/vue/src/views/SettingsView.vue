@@ -37,7 +37,9 @@ import {
   Activity,
   Bug,
   Flame,
-  Key
+  Key,
+  Settings,
+  XCircle
 } from 'lucide-vue-next'
 
 const uiStore = useUiStore()
