@@ -130,7 +130,7 @@ function handleLogout() {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Top Header -->
-      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] backdrop-blur-sm flex items-center justify-between px-4 sm:px-6">
+      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] bg-background/60 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 relative z-10">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
           <Button variant="ghost" size="icon" class="md:hidden mr-2">
@@ -185,7 +185,7 @@ function handleLogout() {
       </header>
 
       <!-- Main Router View -->
-      <main class="flex-1 overflow-auto bg-background/50 relative z-10">
+      <main class="flex-1 overflow-auto bg-transparent relative z-10">
         <router-view v-slot="{ Component }">
           <transition name="fade-slide" mode="out-in">
             <component :is="Component" />
