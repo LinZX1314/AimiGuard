@@ -8,7 +8,7 @@ import {
   LegendComponent, DataZoomComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { api } from '@/api/index'
+import { api, apiCall } from '@/api/index'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -45,7 +45,6 @@ use([CanvasRenderer, BarChart, PieChart, GridComponent, TitleComponent,
      TooltipComponent, LegendComponent, DataZoomComponent])
 
 const loading   = ref(false)
-const viewMode  = ref<'detail' | 'aggregated'>('aggregated')
 const logs      = ref<any[]>([])
 const pieLogs   = ref<any[]>([])
 const stats     = ref({ total_attacks: 0 })
@@ -58,9 +57,7 @@ const nmapDialog = ref(false)
 const nmapIp     = ref('')
 const nmapHost   = ref<any>(null)
 
-const aggHeaders = ['攻击 IP', '归属地', '攻击次数', '服务分类', '最后活跃', 'AI 判定', 'AI 分析']
-const detailHeaders = ['攻击 IP', '归属地', '服务类型', '端口', '时间']
-const headers = computed(() => viewMode.value === 'aggregated' ? aggHeaders : detailHeaders)
+const headers = ['攻击 IP', '归属地', '服务类型', '端口', '时间']
 
 const filteredLogs = computed(() => {
   let result = logs.value
@@ -146,27 +143,21 @@ const servicePieOption = computed(() => {
 })
 
 async function loadStats() {
-  try {
-    const d = await api.get<any>('/api/v1/defense/hfish/stats')
+  const d = await apiCall<any>(async () => await api.get<any>('/api/v1/defense/hfish/stats'))
+  if (d) {
     const sd = d ?? {}
     stats.value.total_attacks = (sd.service_stats ?? []).reduce((a:number,s:any) => a + s.count, 0)
     services.value = (sd.service_stats ?? []).map((s:any) => s.name)
-  } catch(e) { console.error(e) }
+  }
 }
 
 async function loadLogs() {
   loading.value = true
   try {
-    let url = viewMode.value === 'aggregated'
-      ? '/api/v1/defense/hfish/logs?limit=5000&aggregated=1'
-      : '/api/v1/defense/hfish/logs?limit=5000'
-    if (svcFilter.value !== "ALL") url += `&service_name=${encodeURIComponent(svcFilter.value)}`
+    const url = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value !== 'ALL' ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
     const d = await api.get<any>(url)
     logs.value = normalizeLogs(d)
-
-    const pieUrl = `/api/v1/defense/hfish/logs?limit=5000${svcFilter.value !== "ALL" ? '&service_name=' + encodeURIComponent(svcFilter.value) : ''}`
-    const pieD = await api.get<any>(pieUrl)
-    pieLogs.value = normalizeLogs(pieD)
+    pieLogs.value = logs.value
   } catch(e) { console.error(e) }
   loading.value = false
 }
@@ -175,23 +166,25 @@ async function showNmap(ip: string) {
   nmapIp.value = ip
   nmapHost.value = null
   nmapDialog.value = true
-  try {
-    const d = await api.get<any>(`/api/nmap/host/${ip}`)
-    nmapHost.value = d
-  } catch { nmapHost.value = null }
+  const d = await apiCall<any>(async () => await api.get<any>(`/api/nmap/host/${ip}`))
+  nmapHost.value = d ?? null
 }
 
 async function manualSync() {
   loading.value = true
-  try {
+  const ok = await apiCall(async () => {
     await api.post('/api/v1/defense/hfish/sync', {})
+    loadStats()
+    loadLogs()
+  }, { errorMsg: '同步失败' })
+  if (ok) {
     await loadStats()
     await loadLogs()
-  } catch(e) { console.error(e) }
+  }
   loading.value = false
 }
 
-watch([viewMode, svcFilter], loadLogs)
+watch([svcFilter], loadLogs)
 onMounted(() => { loadStats(); loadLogs() })
 </script>
 
@@ -205,8 +198,8 @@ onMounted(() => { loadStats(); loadLogs() })
           <h2 class="text-4xl font-bold tracking-tight text-blue-500">{{ stats.total_attacks }}</h2>
         </div>
         <Button variant="outline" size="sm" @click="manualSync" :disabled="loading" class="bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-all">
-          <RotateCw v-if="loading" :size="16" class="mr-2 animate-spin" />
-          <RefreshCw v-else :size="16" class="mr-2" />
+          <RotateCw v-if="loading" class="mr-2 h-4 w-4 animate-spin" />
+          <RefreshCw v-else class="mr-2 h-4 w-4" />
           手动同步
         </Button>
       </CardContent>
@@ -217,7 +210,7 @@ onMounted(() => { loadStats(); loadLogs() })
       <Card class="md:col-span-7 bg-card/40 border border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <Globe :size="16" class="text-primary" />
+            <Globe class="h-4 w-4 text-primary" />
             攻击来源 Top 15（IP）
           </CardTitle>
         </CardHeader>
@@ -230,7 +223,7 @@ onMounted(() => { loadStats(); loadLogs() })
       <Card class="md:col-span-5 bg-card/40 border border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <PieChartIcon :size="16" class="text-primary" />
+            <PieChartIcon class="h-4 w-4 text-primary" />
             攻击服务分布
           </CardTitle>
         </CardHeader>
@@ -246,25 +239,7 @@ onMounted(() => { loadStats(); loadLogs() })
     <Card class="bg-card/40 border border-border/50">
       <CardHeader class="pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="flex items-center gap-4">
-          <CardTitle class="text-lg font-bold">攻击记录</CardTitle>
-          <div class="flex p-0.5 bg-muted/30 rounded-lg border border-border/50">
-            <button 
-              @click="viewMode = 'aggregated'"
-              class="flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-              :class="viewMode === 'aggregated' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-white/5'"
-            >
-              <LayoutGrid class="h-3.5 w-3.5 mr-1.5" />
-              折叠
-            </button>
-            <button 
-              @click="viewMode = 'detail'"
-              class="flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-              :class="viewMode === 'detail' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-white/5'"
-            >
-              <List class="h-3.5 w-3.5 mr-1.5" />
-              明细
-            </button>
-          </div>
+          <CardTitle class="text-lg font-bold">攻击记录明细</CardTitle>
         </div>
         <div class="flex items-center gap-3">
           <div class="relative w-64">
@@ -301,43 +276,15 @@ onMounted(() => { loadStats(); loadLogs() })
               </template>
               <template v-else-if="filteredLogs.length">
                 <tr v-for="(item, idx) in filteredLogs" :key="idx" class="border-b border-border/10 last:border-0 hover:bg-white/5 transition-colors">
-                  <!-- Aggregated View Rows -->
-                  <template v-if="viewMode === 'aggregated'">
-                    <td class="py-3 px-4">
-                      <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
-                    </td>
-                    <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
-                    <td class="py-3 px-4">
-                      <Badge variant="secondary" class="bg-blue-500/10 text-blue-400 border-blue-500/20">{{ item.attack_count }} 次</Badge>
-                    </td>
-                    <td class="py-3 px-4">
-                      <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
-                    </td>
-                    <td class="py-3 px-4 text-slate-500 text-xs">{{ item.latest_time }}</td>
-                    <td class="py-3 px-4">
-                      <Badge v-if="item.decision" :variant="item.decision.includes('封禁') ? 'destructive' : 'default'" class="font-medium">
-                        {{ item.decision }}
-                      </Badge>
-                      <span v-else class="text-slate-600">-</span>
-                    </td>
-                    <td class="py-3 px-4">
-                      <div class="max-w-[300px] text-xs leading-relaxed text-slate-400 italic truncate" :title="item.ai_analysis">
-                        {{ item.ai_analysis || '暂无分析' }}
-                      </div>
-                    </td>
-                  </template>
-                  <!-- Detail View Rows -->
-                  <template v-else>
-                    <td class="py-3 px-4">
-                      <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
-                    </td>
-                    <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
-                    <td class="py-3 px-4">
-                      <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
-                    </td>
-                    <td class="py-3 px-4 text-slate-400 font-mono">{{ item.service_port || '-' }}</td>
-                    <td class="py-3 px-4 text-slate-500 text-xs">{{ item.create_time_str }}</td>
-                  </template>
+                  <td class="py-3 px-4">
+                    <button @click="showNmap(item.attack_ip)" class="text-primary hover:underline font-medium">{{ item.attack_ip || '-' }}</button>
+                  </td>
+                  <td class="py-3 px-4 text-slate-400 font-medium">{{ item.ip_location || '未知' }}</td>
+                  <td class="py-3 px-4">
+                    <Badge variant="outline" class="border-primary/20 text-primary">{{ item.service_name || '-' }}</Badge>
+                  </td>
+                  <td class="py-3 px-4 text-slate-400 font-mono">{{ item.service_port || '-' }}</td>
+                  <td class="py-3 px-4 text-slate-500 text-xs">{{ item.create_time_str }}</td>
                 </tr>
               </template>
               <tr v-else>

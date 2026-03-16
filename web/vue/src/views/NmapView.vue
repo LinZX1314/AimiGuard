@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { api } from '@/api/index'
+import { api, apiCall } from '@/api/index'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -78,23 +78,25 @@ const filteredHosts = computed(() => {
 })
 
 async function loadScans() {
-  try {
-    const d = await api.get<any>('/api/nmap/scans')
+  const d = await apiCall<any>(async () => await api.get<any>('/api/nmap/scans'))
+  if (d) {
     scans.value = Array.isArray(d) ? d : (d.data ?? [])
     if (scans.value.length) currentScanId.value = String(scans.value[0].id)
-  } catch(e) { console.error(e) }
+  }
 }
 
 async function loadHosts() {
   if (currentScanId.value === "NONE") return
   loading.value = true
-  try {
+  const d = await apiCall<any>(async () => {
     let url = `/api/nmap/hosts?limit=500&scan_id=${currentScanId.value}`
-    const d = await api.get<any>(url)
+    return await api.get<any>(url)
+  })
+  if (d) {
     hosts.value = Array.isArray(d) ? d : (d.data ?? [])
     const online = hosts.value.filter(h => h.state === 'up')
     stats.value.online = online.length
-  } catch(e) { console.error(e) }
+  }
   loading.value = false
 }
 

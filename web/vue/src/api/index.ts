@@ -1,4 +1,14 @@
 const BASE = ''
+const ERROR_STORE_KEY = '__errorStore'
+
+function getErrorStore() {
+  // 延迟获取避免循环依赖
+  return (window as any)[ERROR_STORE_KEY]
+}
+
+function setErrorStore(store: any) {
+  (window as any)[ERROR_STORE_KEY] = store
+}
 
 type ApiEnvelope<T> = {
   code?: number
@@ -61,4 +71,33 @@ export const api = {
   put:    <T>(url: string, body: unknown)            => request<T>('PUT',    url, body),
   patch:  <T>(url: string, body: unknown)            => request<T>('PATCH',  url, body),
   delete: <T>(url: string)                           => request<T>('DELETE', url),
+}
+
+export function notifyError(msg: string) {
+  const store = getErrorStore()
+  if (store) {
+    store.error(msg)
+  } else {
+    console.error('[API Error]', msg)
+  }
+}
+export function setErrorStoreRef(store: any) {
+  setErrorStore(store)
+}
+
+// API 调用包装器：自动处理错误并显示通知
+export async function apiCall<T>(
+  fn: () => Promise<T>,
+  options?: { silent?: boolean; errorMsg?: string }
+): Promise<T | undefined> {
+  try {
+    return await fn()
+  } catch (e) {
+    const msg = options?.errorMsg || (e instanceof Error ? e.message : '请求失败')
+    notifyError(msg)
+    if (!options?.silent) {
+      console.error('[API Error]', msg, e)
+    }
+    return undefined
+  }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { api } from '@/api/index'
+import { api, apiCall } from '@/api/index'
 import { useUiStore } from '@/stores/ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
@@ -87,8 +87,8 @@ async function loadStatus() {
 }
 
 async function loadSettings() {
-  try {
-    const d = await api.get<any>('/api/v1/settings')
+  const d = await apiCall<any>(async () => await api.get<any>('/api/v1/settings'), { silent: true })
+  if (d) {
     const sd = d.data ?? d
     if (sd.hfish) { Object.assign(hfish.value, sd.hfish); hfish.value.api_key = '' }
     if (sd.nmap)  {
@@ -98,13 +98,13 @@ async function loadSettings() {
       nmap.value.scan_enabled     = sd.nmap.scan_enabled  ?? false
       nmap.value.vuln_scripts_text = JSON.stringify(sd.nmap.vuln_scripts_by_tag ?? {}, null, 2)
     }
-  } catch(e) { console.error(e) }
+  }
 
-  try {
-    const ai = await api.get<any>('/api/v1/system/ai-config')
+  const ai = await apiCall<any>(async () => await api.get<any>('/api/v1/system/ai-config'), { silent: true })
+  if (ai) {
     Object.assign(aiCfg.value, ai.data ?? ai)
     aiCfg.value.api_key = ''
-  } catch {}
+  }
 }
 
 async function saveSettings() {

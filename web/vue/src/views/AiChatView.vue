@@ -179,13 +179,15 @@ async function startWaveform() {
     if (audioContext?.state === 'suspended') await audioContext.resume()
     if (!audioContext) return
 
-    analyser = ctx.createAnalyser()
+    analyser = audioContext.createAnalyser()
     analyser.fftSize = 256
     analyser.smoothingTimeConstant = 0.82
-    sourceNode = ctx.createMediaStreamSource(mediaStream)
-    sourceNode.connect(analyser)
-    frequencyData = new Uint8Array(analyser.frequencyBinCount)
-    renderWaveformFrame()
+    sourceNode = audioContext.createMediaStreamSource(mediaStream)
+    if (sourceNode && analyser) {
+      sourceNode.connect(analyser)
+      frequencyData = new Uint8Array(analyser.frequencyBinCount)
+      renderWaveformFrame()
+    }
   } catch (error) {
     console.error('启动麦克风波形失败:', error)
     voiceError.value = '无法访问麦克风，请确认浏览器权限已开启。'
@@ -311,16 +313,7 @@ function speak(text: string) {
   utt.rate = 1.1
   window.speechSynthesis.speak(utt)
 }
-function toggleListen() {
-  if (!recognition) return
-  if (listening.value) {
-    recognition.stop()
-    listening.value = false
-  } else {
-    recognition.start()
-    listening.value = true
-  }
-}
+
 
 function toggleTts() {
   // 切换 TTS 开关时，停止当前正在播放的语音

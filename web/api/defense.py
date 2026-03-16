@@ -134,27 +134,29 @@ def defense_events():
     except Exception:
         pass  # 字段可能已存在
 
-    # 查询events，关联AI分析结果
+    # 查询events，按 IP 合并，关联AI分析结果
     q = """
         SELECT
-            al.id,
+            MAX(al.id) as id,
             al.attack_ip,
-            al.service_name as event_type,
-            al.threat_level as severity,
-            al.create_time_str as created_at,
+            MAX(al.ip_location) as ip_location,
+            COUNT(*) as attack_count,
+            GROUP_CONCAT(DISTINCT al.service_name) as event_type,
+            MAX(al.create_time_str) as created_at,
             am.decision as ai_decision,
             am.analysis_text as ai_analysis,
             COALESCE(am.status, 'pending') as status
         FROM attack_logs al
         LEFT JOIN ai_analysis_logs am ON al.attack_ip = am.ip
-        ORDER BY al.id DESC
+        GROUP BY al.attack_ip
+        ORDER BY id DESC
         LIMIT ? OFFSET ?
     """
     c.execute(q, [page_size, offset])
     rows = [dict(r) for r in c.fetchall()]
 
-    # 获取总数
-    c.execute("SELECT COUNT(*) as total FROM attack_logs")
+    # 获取总IP数
+    c.execute("SELECT COUNT(DISTINCT attack_ip) as total FROM attack_logs")
     total = c.fetchone()['total']
 
     conn.close()

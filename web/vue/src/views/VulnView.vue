@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { api } from '@/api/index'
+import { api, apiCall } from '@/api/index'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -70,31 +70,34 @@ const filteredVulns = computed(() => {
 
 async function load() {
   loading.value = true
-  try {
+  const d = await apiCall<any>(async () => {
     let url = '/api/v1/scan/findings?limit=500'
     if (sevFlt.value !== "ALL")    url += `&severity=${sevFlt.value}`
     if (statusFlt.value !== "ALL") url += `&status=${statusFlt.value}`
-    const d = await api.get<any>(url)
+    return await api.get<any>(url)
+  })
+  if (d) {
     vulns.value = d.items ?? d.data?.items ?? d.data ?? []
     stats.value.total    = vulns.value.length
     stats.value.critical = vulns.value.filter(v => v.severity === '严重').length
     stats.value.high     = vulns.value.filter(v => v.severity === '高危').length
     stats.value.fixed    = vulns.value.filter(v => v.status === 'fixed').length
-  } catch(e) { console.error(e) }
+  }
   loading.value = false
 }
 
 async function startVulnScan() {
   scanning.value = true
-  try { await api.post('/api/nmap/vuln/scan', {}) } catch {}
+  await apiCall(async () => await api.post('/api/nmap/vuln/scan', {}), { errorMsg: '漏洞扫描启动失败' })
   scanning.value = false
 }
 
 async function markStatus(id: number, status: string) {
-  try {
+  const ok = await apiCall(async () => {
     await api.put(`/api/v1/scan/findings/${id}/status`, { status })
-    await load()
-  } catch(e) { console.error(e) }
+    load()
+  }, { errorMsg: '状态更新失败' })
+  if (ok) load()
 }
 
 const statSummaries = computed(() => [

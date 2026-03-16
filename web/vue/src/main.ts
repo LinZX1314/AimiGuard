@@ -5,6 +5,8 @@ import './assets/index.css'
 
 import App from './App.vue'
 import { routes } from './router/index'
+import { useErrorStore } from './stores/error'
+import { setErrorStoreRef } from './api/index'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -13,6 +15,10 @@ const router = createRouter({
 
 const pinia = createPinia()
 const app = createApp(App)
+
+// 初始化错误store引用
+const errorStore = useErrorStore(pinia)
+setErrorStoreRef(errorStore)
 
 app.use(pinia)
 app.use(router)
