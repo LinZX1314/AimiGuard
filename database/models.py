@@ -60,6 +60,13 @@ class NmapModel:
             return [dict(row) for row in rows]
 
     @staticmethod
+    def clear_scan_history():
+        """清理 Nmap 扫描历史（scans + hosts）。"""
+        with get_db_cursor() as cursor:
+            cursor.execute("DELETE FROM hosts")
+            cursor.execute("DELETE FROM scans")
+
+    @staticmethod
     def get_assets(limit=100, offset=0, mac_address=None, ip=None):
         with get_db_cursor() as cursor:
             query = "SELECT * FROM assets WHERE 1=1"

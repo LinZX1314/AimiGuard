@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Search,
   Info,
+  Trash2,
   Bot,
   CheckCircle2,
   Monitor,
@@ -149,9 +150,58 @@ async function startScan() {
   }
 }
 
+async function clearScanHistory() {
+  if (!window.confirm('确认清理全部扫描历史吗？该操作不可恢复。')) {
+    return
+  }
+
+  const done = await apiCall(async () => api.post('/api/nmap/scans/clear', {}))
+  if (!done) {
+    return
+  }
+
+  scans.value = []
+  currentScanId.value = 'NONE'
+  hosts.value = []
+  total.value = 0
+  page.value = 1
+  stats.value.online = 0
+}
+
+function buildServicesFallback(host: any) {
+  const services = Array.isArray(host?.services) ? host.services : []
+  if (services.length > 0) {
+    return services
+  }
+  const openPorts = Array.isArray(host?.open_ports) ? host.open_ports : []
+  return openPorts.map((port: any) => ({
+    port,
+    service: 'unknown',
+    product: '-',
+    version: '',
+  }))
+}
+
 async function openDetail(host: any) {
-  detailHost.value = host
+  detailHost.value = {
+    ...host,
+    services: buildServicesFallback(host),
+  }
   detailDlg.value = true
+
+  const ip = host?.ip
+  if (!ip) return
+
+  const detail = await apiCall<any>(async () =>
+    api.get<any>(`/api/nmap/host/${encodeURIComponent(ip)}?scan_id=${encodeURIComponent(currentScanId.value)}`)
+  , { silent: true })
+
+  if (detail) {
+    detailHost.value = {
+      ...detail,
+      services: buildServicesFallback(detail),
+    }
+  }
 }
 
 function analyzeWithAi(host: any) {
@@ -190,6 +240,16 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
           <Button @click="startScan" :disabled="scanning" class="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/10">
             <Radar :size="16" class="mr-2" :class="{ 'animate-pulse': scanning }" />
             手动扫描
+          </Button>
+
+          <Button
+            variant="outline"
+            @click="clearScanHistory"
+            :disabled="scanning"
+            class="border-destructive/40 text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 :size="15" class="mr-2" />
+            清理扫描历史
           </Button>
 
           <div class="flex-1"></div>
@@ -315,8 +375,8 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
 
     <!-- Detail Dialog -->
     <Dialog v-model:open="detailDlg">
-      <DialogContent class="sm:max-w-[600px] bg-slate-900 border-white/10 text-slate-100 p-0 overflow-hidden">
-        <div class="p-6 bg-gradient-to-r from-slate-900 to-indigo-900/20 border-b border-white/5">
+      <DialogContent class="sm:max-w-[600px] bg-background border-border text-foreground p-0 overflow-hidden">
+        <div class="p-6 bg-gradient-to-r from-muted/70 to-primary/10 border-b border-border/60">
           <DialogTitle class="flex items-center gap-3 text-2xl">
             <div class="h-10 w-10 flex items-center justify-center bg-primary/20 rounded-xl">
               <Server class="h-6 w-6 text-primary" />
@@ -333,7 +393,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-4">
                 <div class="space-y-1">
-                  <div class="flex items-center gap-2 text-slate-500 text-[10px] uppercase tracking-wider font-bold">
+                  <div class="flex items-center gap-2 text-muted-foreground text-[10px] uppercase tracking-wider font-bold">
                     <Activity class="h-3 w-3" /> 网络状态
                   </div>
                   <Badge :variant="detailHost.state === 'up' ? 'default' : 'secondary'" class="bg-emerald-500/20 text-emerald-400 border-emerald-500/10">
@@ -341,36 +401,36 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                   </Badge>
                 </div>
                 <div class="space-y-1 text-xs">
-                  <div class="flex items-center gap-2 text-slate-500 text-[10px] uppercase tracking-wider font-bold">
+                  <div class="flex items-center gap-2 text-muted-foreground text-[10px] uppercase tracking-wider font-bold">
                     <History class="h-3 w-3" /> 厂商信息
                   </div>
-                  <p class="font-medium text-slate-200">{{ detailHost.vendor || '-' }}</p>
+                  <p class="font-medium text-foreground">{{ detailHost.vendor || '-' }}</p>
                 </div>
               </div>
               <div class="space-y-4">
                 <div class="space-y-1 text-right">
-                  <div class="flex items-center justify-end gap-2 text-slate-500 text-[10px] uppercase tracking-wider font-bold">
+                  <div class="flex items-center justify-end gap-2 text-muted-foreground text-[10px] uppercase tracking-wider font-bold">
                     主机名 <Monitor class="h-3 w-3" />
                   </div>
-                  <p class="font-medium text-slate-200">{{ detailHost.hostname || '-' }}</p>
+                  <p class="font-medium text-foreground">{{ detailHost.hostname || '-' }}</p>
                 </div>
                 <div class="space-y-1 text-right text-xs">
-                  <div class="flex items-center justify-end gap-2 text-slate-500 text-[10px] uppercase tracking-wider font-bold">
+                  <div class="flex items-center justify-end gap-2 text-muted-foreground text-[10px] uppercase tracking-wider font-bold">
                     操作系统 <Cpu class="h-3 w-3" />
                   </div>
-                  <p class="font-medium text-slate-200">{{ detailHost.os_type || '-' }} ({{ detailHost.os_accuracy }}%)</p>
+                  <p class="font-medium text-foreground">{{ detailHost.os_type || '-' }} ({{ detailHost.os_accuracy }}%)</p>
                 </div>
               </div>
             </div>
 
-            <div class="p-4 bg-black/40 rounded-xl border border-white/5 space-y-3 font-mono text-[13px]">
+            <div class="p-4 bg-muted/40 rounded-xl border border-border/60 space-y-3 font-mono text-[13px]">
               <div class="flex justify-between">
-                <span class="text-slate-500">MAC 地址:</span>
-                <span class="text-slate-200">{{ detailHost.mac_address || '-' }}</span>
+                <span class="text-muted-foreground">MAC 地址:</span>
+                <span class="text-foreground">{{ detailHost.mac_address || '未知 MAC' }}</span>
               </div>
-              <div class="flex justify-between border-t border-white/5 pt-2">
-                <span class="text-slate-500">OS 标签:</span>
-                <span class="text-slate-200 text-xs">{{ detailHost.os_tags || '-' }}</span>
+              <div class="flex justify-between border-t border-border/60 pt-2">
+                <span class="text-muted-foreground">OS 标签:</span>
+                <span class="text-foreground text-xs">{{ detailHost.os_tags || '-' }}</span>
               </div>
             </div>
 
@@ -378,21 +438,21 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
               <h4 class="text-sm font-semibold flex items-center gap-2 text-primary">
                 <PackageSearch class="h-4 w-4" /> 开放服务与版本
               </h4>
-              <div class="rounded-xl border border-white/5 overflow-hidden">
+              <div class="rounded-xl border border-border/60 overflow-hidden">
                 <table class="w-full text-xs">
-                  <thead class="bg-white/5">
-                    <tr class="text-slate-500">
+                  <thead class="bg-muted/40">
+                    <tr class="text-muted-foreground">
                       <th class="py-2 px-4 text-left font-medium">端口/协议</th>
                       <th class="py-2 px-4 text-left font-medium">服务</th>
                       <th class="py-2 px-4 text-right font-medium">应用版本</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-white/5">
-                    <tr v-for="s in detailHost.services" :key="s.port" class="hover:bg-white/5">
-                      <td class="py-2.5 px-4"><span class="font-bold text-primary">{{ s.port }}</span> <span class="text-slate-600 ml-1">TCP</span></td>
+                  <tbody class="divide-y divide-border/60">
+                    <tr v-for="s in detailHost.services" :key="s.port" class="hover:bg-muted/40">
+                      <td class="py-2.5 px-4"><span class="font-bold text-primary">{{ s.port }}</span> <span class="text-muted-foreground ml-1">TCP</span></td>
                       <td class="py-2.5 px-4 font-medium">{{ s.service }}</td>
                       <td class="py-2.5 px-4 text-right">
-                        <Badge variant="outline" class="border-white/10 text-slate-400 font-normal py-0">
+                        <Badge variant="outline" class="border-border text-muted-foreground font-normal py-0">
                           {{ s.product || '-' }} {{ s.version }}
                         </Badge>
                       </td>
@@ -404,8 +464,8 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
           </div>
         </ScrollArea>
 
-        <div class="p-6 bg-slate-900/50 border-t border-white/5 flex flex-wrap justify-between gap-3">
-          <Button variant="secondary" @click="detailDlg = false" class="bg-white/5 border-white/10 hover:bg-white/10">关闭</Button>
+        <div class="p-6 bg-muted/30 border-t border-border/60 flex flex-wrap justify-between gap-3">
+          <Button variant="secondary" @click="detailDlg = false" class="bg-muted border-border hover:bg-muted/70">关闭</Button>
           <Button @click="analyzeWithAi(detailHost)" class="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
             <Bot class="mr-2 h-4 w-4" /> AI 深度安全性分析
           </Button>

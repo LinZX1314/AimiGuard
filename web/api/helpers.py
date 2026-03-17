@@ -183,12 +183,64 @@ def _run_daemon(task):
 def _normalize_host_fields(host: dict | None) -> dict | None:
     if not host:
         return host
-    for key in ('open_ports', 'services'):
-        value = host.get(key)
-        if isinstance(value, str) and value:
-            try:
-                host[key] = json.loads(value)
-            except Exception:
-                host[key] = [p.strip() for p in value.split(',') if p.strip()]
+
+    # open_ports: 优先 JSON，其次按逗号拆分并转数字
+    open_ports = host.get('open_ports')
+    if isinstance(open_ports, str) and open_ports:
+        try:
+            parsed_ports = json.loads(open_ports)
+            if isinstance(parsed_ports, list):
+                host['open_ports'] = [int(p) if str(p).isdigit() else p for p in parsed_ports]
+            else:
+                host['open_ports'] = []
+        except Exception:
+            host['open_ports'] = [int(p.strip()) for p in open_ports.split(',') if p.strip().isdigit()]
+
+    # services: 兼容 JSON / 历史字符串(80/http nginx 1.25; 443/https ...)
+    services = host.get('services')
+    if isinstance(services, str) and services:
+        try:
+            parsed_services = json.loads(services)
+            if isinstance(parsed_services, list):
+                host['services'] = parsed_services
+            else:
+                host['services'] = []
+        except Exception:
+            normalized = []
+            for item in [seg.strip() for seg in services.split(';') if seg.strip()]:
+                first_space = item.find(' ')
+                head = item if first_space == -1 else item[:first_space]
+                tail = '' if first_space == -1 else item[first_space + 1:].strip()
+
+                port, service = '', ''
+                if '/' in head:
+                    port, service = head.split('/', 1)
+                else:
+                    port = head
+
+                product, version = '', ''
+                if tail:
+                    parts = tail.split()
+                    if parts:
+                        # 末位若含数字则视为版本，其余归产品名
+                        if any(ch.isdigit() for ch in parts[-1]):
+                            version = parts[-1]
+                            product = ' '.join(parts[:-1]).strip()
+                        else:
+                            product = tail
+
+                normalized.append({
+                    'port': int(port) if str(port).isdigit() else (port or '-'),
+                    'service': service or '-',
+                    'product': product or '-',
+                    'version': version or '',
+                })
+            host['services'] = normalized
+
+    if not isinstance(host.get('open_ports'), list):
+        host['open_ports'] = []
+    if not isinstance(host.get('services'), list):
+        host['services'] = []
+
     return host
 

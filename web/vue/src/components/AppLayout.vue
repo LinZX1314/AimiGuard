@@ -38,6 +38,7 @@ import { useThemeAnimation } from '@/composables/useThemeAnimation'
 import { useUiStore } from '@/stores/ui'
 import { defenseApi } from '@/api/defense'
 import { api } from '@/api/index'
+import RouteLoading from '@/components/RouteLoading.vue'
 
 const router = useRouter()
 const route  = useRoute()
@@ -412,9 +413,14 @@ onUnmounted(() => {
 
       <!-- Main Router View -->
       <main class="flex-1 overflow-auto bg-transparent relative z-10">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade-slide" mode="out-in">
-            <component :is="Component" />
+            <Suspense>
+              <component :is="Component" :key="route.fullPath" />
+              <template #fallback>
+                <RouteLoading />
+              </template>
+            </Suspense>
           </transition>
         </router-view>
       </main>

@@ -15,6 +15,14 @@ def v1_nmap_scans():
     return ok(NmapModel.get_scans())
 
 
+@nmap_bp.route('/scans/clear', methods=['POST'])
+@require_auth
+def v1_nmap_scans_clear():
+    """Clear nmap scan history"""
+    NmapModel.clear_scan_history()
+    return ok({'cleared': True})
+
+
 @nmap_bp.route('/hosts', methods=['GET'])
 @require_auth
 def v1_nmap_hosts():
@@ -45,5 +53,7 @@ def v1_nmap_hosts():
 @require_auth
 def v1_nmap_host(ip: str):
     """Get host by IP"""
-    h = NmapModel.get_host_by_ip(ip)
+    scan_id_raw = request.args.get('scan_id')
+    scan_id = int(scan_id_raw) if scan_id_raw and str(scan_id_raw).isdigit() else None
+    h = NmapModel.get_host_by_ip(ip, scan_id=scan_id)
     return ok(_normalize_host_fields(h))
