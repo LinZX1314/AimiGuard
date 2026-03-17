@@ -36,26 +36,18 @@ def _save_cfg(cfg):
 # ─── JWT Config ───────────────────────────────────────────────────────────────
 import secrets
 
-# 生成或加载 JWT 密钥
-_JWT_SECRET_FILE = os.path.join(BASE_DIR, '.jwt_secret')
 def _get_or_create_jwt_secret():
-    """获取或创建 JWT 密钥（持久化到文件）"""
-    if os.path.exists(_JWT_SECRET_FILE):
-        try:
-            with open(_JWT_SECRET_FILE, 'r') as f:
-                return f.read().strip()
-        except Exception:
-            pass
-    
-    # 生成新的强随机密钥
+    """获取或创建 JWT 密钥（持久化到 config.json）"""
+    cfg = _load_cfg()
+
+    # 如果 config.json 中已有密钥，直接返回
+    if cfg.get('jwt_secret'):
+        return cfg['jwt_secret']
+
+    # 生成新的强随机密钥并保存到 config.json
     secret = secrets.token_urlsafe(32)
-    try:
-        with open(_JWT_SECRET_FILE, 'w') as f:
-            f.write(secret)
-        # 设置文件权限为仅所有者可读写
-        os.chmod(_JWT_SECRET_FILE, 0o600)
-    except Exception:
-        pass
+    cfg['jwt_secret'] = secret
+    _save_cfg(cfg)
     return secret
 
 _JWT_SECRET = os.environ.get('AIMIGUARD_SECRET') or _get_or_create_jwt_secret()

@@ -25,14 +25,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Activity,
   Bot,
-  CheckCircle2,
   Circle,
-  Network,
-  Radar,
   Server,
   Sparkles,
   Globe,
-  ScanLine,
+  Radar,
   Router,
   ShieldAlert,
   Bug,
@@ -55,8 +52,6 @@ ChartJS.register(
   Filler,
 )
 
-type MainView = 'map' | 'topology' | 'lan' | 'switch'
-
 interface TopMetrics {
   hfish_total: number
   hfish_high: number
@@ -74,15 +69,11 @@ interface ScreenPayload {
   hot_services: Array<{ name: string; count: number }>
   recent_attacks: Array<{ attack_ip: string; ip_location?: string; service_name?: string; threat_level?: string; create_time_str?: string }>
   defense_events: Array<{ attack_ip: string; ip_location?: string; attack_count: number; latest_time?: string; ai_status?: string; ai_decision?: string }>
-  topology: { nodes: Array<{ id: string; label: string; type: string; status: string }>; links: Array<{ source: string; target: string; type: string }> }
-  lan_hosts: Array<{ ip: string; hostname: string; state: string; os_type: string; open_ports: string[] }>
-  switches: Array<{ host: string; port: number; acl_number: number; enabled: boolean }>
 }
 
 const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
-const activeView = ref<MainView>('map')
 
 const aiMessages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
 const aiInput = ref('')
@@ -105,9 +96,6 @@ const payload = ref<ScreenPayload>({
   hot_services: [],
   recent_attacks: [],
   defense_events: [],
-  topology: { nodes: [], links: [] },
-  lan_hosts: [],
-  switches: [],
 })
 
 const metricCards = computed(() => [
@@ -255,14 +243,6 @@ function formatThreatLevel(level?: string) {
   return level
 }
 
-function formatOnlineStatus(status?: string) {
-  if (!status) return '未知'
-  const lower = status.toLowerCase()
-  if (lower === 'online' || lower === 'up') return '在线'
-  if (lower === 'offline' || lower === 'down') return '离线'
-  return '未知'
-}
-
 async function loadScreen() {
   if (!payload.value.recent_attacks.length) {
     loading.value = true
@@ -306,7 +286,7 @@ async function sendAiMessage(prompt?: string) {
         message: text,
         session_id: aiSessionId.value ?? undefined,
         context_type: 'dashboard',
-        context_id: String(activeView.value),
+        context_id: 'map',
       }),
     })
 
@@ -426,11 +406,11 @@ onUnmounted(() => {
       <!-- 中栏：主战场 -->
       <main class="min-h-0 flex flex-col gap-4 overflow-hidden">
         <Card class="shrink-0">
-          <CardContent class="p-3 flex items-center gap-2 overflow-x-auto">
-            <Button :variant="activeView === 'map' ? 'default' : 'outline'" size="sm" @click="activeView = 'map'"><Globe class="h-4 w-4 mr-1" /> 攻击地图</Button>
-            <Button :variant="activeView === 'topology' ? 'default' : 'outline'" size="sm" @click="activeView = 'topology'"><Network class="h-4 w-4 mr-1" /> 网络拓扑</Button>
-            <Button :variant="activeView === 'lan' ? 'default' : 'outline'" size="sm" @click="activeView = 'lan'"><ScanLine class="h-4 w-4 mr-1" /> 内网侦测</Button>
-            <Button :variant="activeView === 'switch' ? 'default' : 'outline'" size="sm" @click="activeView = 'switch'"><Router class="h-4 w-4 mr-1" /> 交换机策略</Button>
+          <CardContent class="p-3">
+            <div class="flex items-center gap-2">
+              <Globe class="h-4 w-4 text-primary" />
+              <span class="text-sm font-medium">攻击地图</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -438,17 +418,14 @@ onUnmounted(() => {
           <CardHeader class="pb-2">
             <CardTitle class="text-sm flex items-center gap-2">
               <Radar class="h-4 w-4 text-primary" />
-              <span v-if="activeView === 'map'">攻击地图面板</span>
-              <span v-else-if="activeView === 'topology'">网络拓扑视图</span>
-              <span v-else-if="activeView === 'lan'">内网资产侦测</span>
-              <span v-else>交换机策略与状态</span>
+              攻击地图面板
             </CardTitle>
           </CardHeader>
           <CardContent class="h-[calc(100%-48px)] overflow-hidden p-0">
             <ScrollArea class="h-full px-6 pb-6">
             <div v-if="loadError" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{{ loadError }}</div>
 
-            <template v-else-if="activeView === 'map'">
+            <template v-else>
               <div class="h-[30rem] xl:h-[34rem] rounded-xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_16%,rgba(34,211,238,0.2),transparent_45%),radial-gradient(circle_at_86%_4%,rgba(56,189,248,0.22),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(15,118,110,0.2),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.62),rgba(2,6,23,0.92))] p-2 shadow-[0_0_0_1px_rgba(34,211,238,0.1),0_20px_50px_rgba(2,132,199,0.22)]">
                 <div class="relative h-full w-full overflow-hidden rounded-lg border border-cyan-500/20 bg-slate-950/45">
                   <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet">
@@ -504,51 +481,6 @@ onUnmounted(() => {
                     </div>
                     <Badge variant="outline">{{ formatThreatLevel(item.threat_level) }}</Badge>
                   </div>
-                </div>
-              </div>
-            </template>
-
-            <template v-else-if="activeView === 'topology'">
-              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div v-for="node in payload.topology.nodes" :key="node.id" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div class="flex items-center justify-between">
-                    <p class="font-medium">{{ node.label }}</p>
-                    <Badge :class="formatOnlineStatus(node.status) === '在线' ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ formatOnlineStatus(node.status) }}</Badge>
-                  </div>
-                  <p class="mt-1 text-xs text-muted-foreground">类型: {{ node.type }}</p>
-                </div>
-              </div>
-              <div class="mt-4 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                <p class="text-xs text-muted-foreground mb-2">链路关系</p>
-                <div class="space-y-1 text-sm">
-                  <div v-for="(link, idx) in payload.topology.links" :key="idx">{{ link.source }} -> {{ link.target }} ({{ link.type }})</div>
-                </div>
-              </div>
-            </template>
-
-            <template v-else-if="activeView === 'lan'">
-              <div class="space-y-2">
-                <div v-for="host in payload.lan_hosts" :key="host.ip" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="font-mono text-sm">{{ host.ip }}</p>
-                      <p class="text-xs text-muted-foreground">{{ host.hostname }} · {{ host.os_type }}</p>
-                    </div>
-                    <Badge :class="formatOnlineStatus(host.state) === '在线' ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ formatOnlineStatus(host.state) }}</Badge>
-                  </div>
-                  <p class="mt-1 text-xs text-muted-foreground">开放端口: {{ host.open_ports.length ? host.open_ports.join(', ') : '-' }}</p>
-                </div>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="space-y-2">
-                <div v-for="sw in payload.switches" :key="sw.host" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div class="flex items-center justify-between">
-                    <p class="font-mono text-sm">{{ sw.host }}:{{ sw.port }}</p>
-                    <Badge :class="sw.enabled ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ sw.enabled ? '启用' : '停用' }}</Badge>
-                  </div>
-                  <p class="mt-1 text-xs text-muted-foreground">ACL: {{ sw.acl_number }}</p>
                 </div>
               </div>
             </template>

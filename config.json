@@ -1,4 +1,5 @@
 {
+  "jwt_secret": "uNs6GAbbQaqw9Cx5qc9we9X7J27fCR0_W0G_3k0s6go",
   "hfish": {
     "host_port": "192.168.0.5:4433",
     "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
