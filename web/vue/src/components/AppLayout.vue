@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
-import ParticleBackground from '@/components/ParticleBackground.vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,8 +75,7 @@ function handleLogout() {
 </script>
 
 <template>
-  <div class="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans relative">
-    <ParticleBackground />
+  <div class="flex h-screen w-full bg-transparent text-foreground overflow-hidden font-sans relative">
     <!-- Sidebar -->
     <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10 bg-background/80 backdrop-blur-md">
       <!-- Logo -->
