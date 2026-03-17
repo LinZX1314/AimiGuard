@@ -1,11 +1,14 @@
 import os
 import sys
+import json
 from datetime import datetime
+from contextlib import contextmanager
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
-from database.db import get_connection
+from database.db import get_connection, get_db_cursor
+
 
 def _time_str_to_timestamp(time_str: str) -> int:
     """将 `%Y-%m-%d %H:%M:%S` 时间字符串转为秒级时间戳；失败返回 0。"""
@@ -14,122 +17,107 @@ def _time_str_to_timestamp(time_str: str) -> int:
     except Exception:
         return 0
 
+
 class NmapModel:
     """Nmap 结果查询模型：仅封装读取类接口。"""
     @staticmethod
     def get_latest_scan_id():
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
-        result = cursor.fetchone()
-        conn.close()
-        return dict(result)['id'] if result else None
+        with get_db_cursor() as cursor:
+            cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+            result = cursor.fetchone()
+            return dict(result)['id'] if result else None
 
     @staticmethod
     def get_hosts(scan_id=None, limit=100, offset=0, state=None):
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        if scan_id is None:
-            cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
-            row = cursor.fetchone()
-            scan_id = row['id'] if row else None
-        
-        if scan_id is None:
-            conn.close()
-            return []
-        
-        query = "SELECT * FROM hosts WHERE scan_id = ?"
-        params = [scan_id]
-        
-        if state:
-            query += " AND state = ?"
-            params.append(state)
+        with get_db_cursor() as cursor:
+            if scan_id is None:
+                cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+                row = cursor.fetchone()
+                scan_id = row['id'] if row else None
             
-        query += " ORDER BY ip LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-        
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+            if scan_id is None:
+                return []
+            
+            query = "SELECT * FROM hosts WHERE scan_id = ?"
+            params = [scan_id]
+            
+            if state:
+                query += " AND state = ?"
+                params.append(state)
+                
+            query += " ORDER BY ip LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     @staticmethod
     def get_scans():
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scans ORDER BY scan_time DESC LIMIT 50")
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT * FROM scans ORDER BY scan_time DESC LIMIT 50")
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     @staticmethod
     def get_assets(limit=100, offset=0, mac_address=None, ip=None):
-        conn = get_connection()
-        cursor = conn.cursor()
-        query = "SELECT * FROM assets WHERE 1=1"
-        params = []
-        if mac_address:
-            query += " AND mac_address LIKE ?"
-            params.append(f"%{mac_address}%")
-        if ip:
-            query += " AND current_ip LIKE ?"
-            params.append(f"%{ip}%")
-            
-        query += " ORDER BY last_seen DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_db_cursor() as cursor:
+            query = "SELECT * FROM assets WHERE 1=1"
+            params = []
+            if mac_address:
+                query += " AND mac_address LIKE ?"
+                params.append(f"%{mac_address}%")
+            if ip:
+                query += " AND current_ip LIKE ?"
+                params.append(f"%{ip}%")
+                
+            query += " ORDER BY last_seen DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     @staticmethod
     def get_asset_ip_history(asset_id=None, mac_address=None, limit=200):
-        conn = get_connection()
-        cursor = conn.cursor()
-        resolved_asset_id = asset_id
-        if resolved_asset_id is None and mac_address:
-            cursor.execute("SELECT id FROM assets WHERE mac_address = ?", (mac_address,))
-            row = cursor.fetchone()
-            resolved_asset_id = row["id"] if row else None
-            
-        if resolved_asset_id is None:
-            conn.close()
-            return []
-            
-        cursor.execute("""
-            SELECT id, asset_id, ip, scan_id, seen_time 
-            FROM asset_ip_history 
-            WHERE asset_id = ? 
-            ORDER BY seen_time DESC 
-            LIMIT ?
-        """, (resolved_asset_id, limit))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with get_db_cursor() as cursor:
+            resolved_asset_id = asset_id
+            if resolved_asset_id is None and mac_address:
+                cursor.execute("SELECT id FROM assets WHERE mac_address = ?", (mac_address,))
+                row = cursor.fetchone()
+                resolved_asset_id = row["id"] if row else None
+                
+            if resolved_asset_id is None:
+                return []
+                
+            cursor.execute("""
+                SELECT id, asset_id, ip, scan_id, seen_time 
+                FROM asset_ip_history 
+                WHERE asset_id = ? 
+                ORDER BY seen_time DESC 
+                LIMIT ?
+            """, (resolved_asset_id, limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     @staticmethod
     def get_stats():
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
-            row = cursor.fetchone()
-            latest_scan_id = row['id'] if row else None
-            if latest_scan_id is None:
-                conn.close()
-                return {"total": 0, "state_stats": [], "vendor_stats": []}
+            with get_db_cursor() as cursor:
+                cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+                row = cursor.fetchone()
+                latest_scan_id = row['id'] if row else None
+                if latest_scan_id is None:
+                    return {"total": 0, "state_stats": [], "vendor_stats": []}
 
-            cursor.execute("SELECT state, COUNT(*) as count FROM hosts WHERE scan_id = ? GROUP BY state", (latest_scan_id,))
-            state_stats = [{"state": r[0], "count": r[1]} for r in cursor.fetchall()]
+                cursor.execute("SELECT state, COUNT(*) as count FROM hosts WHERE scan_id = ? GROUP BY state", (latest_scan_id,))
+                state_stats = [{"state": r[0], "count": r[1]} for r in cursor.fetchall()]
 
-            cursor.execute("SELECT vendor, COUNT(*) as count FROM hosts WHERE scan_id = ? AND vendor != '' GROUP BY vendor ORDER BY count DESC LIMIT 10", (latest_scan_id,))
-            vendor_stats = [{"vendor": r[0], "count": r[1]} for r in cursor.fetchall()]
+                cursor.execute("SELECT vendor, COUNT(*) as count FROM hosts WHERE scan_id = ? AND vendor != '' GROUP BY vendor ORDER BY count DESC LIMIT 10", (latest_scan_id,))
+                vendor_stats = [{"vendor": r[0], "count": r[1]} for r in cursor.fetchall()]
 
-            cursor.execute("SELECT COUNT(*) FROM hosts WHERE scan_id = ?", (latest_scan_id,))
-            total = cursor.fetchone()[0]
-            conn.close()
-            return {"total": total, "state_stats": state_stats, "vendor_stats": vendor_stats}
+                cursor.execute("SELECT COUNT(*) FROM hosts WHERE scan_id = ?", (latest_scan_id,))
+                total = cursor.fetchone()[0]
+                return {"total": total, "state_stats": state_stats, "vendor_stats": vendor_stats}
         except Exception:
             return {"total": 0, "state_stats": [], "vendor_stats": []}
 
@@ -164,8 +152,10 @@ class NmapModel:
         conn.close()
         return dict(row) if row else None
 
+
 class ScannerModel:
     """Nmap 扫描落库模型：负责 scans/hosts/assets 写入。"""
+
     @staticmethod
     def create_scan(ip_ranges, arguments, scan_time):
         conn = get_connection()
@@ -256,8 +246,10 @@ class ScannerModel:
         conn.commit()
         conn.close()
 
+
 class VulnModel:
     """漏洞扫描结果模型。"""
+
     @staticmethod
     def get_vuln_results(limit=1000, offset=0):
         conn = get_connection()
@@ -271,7 +263,7 @@ class VulnModel:
         rows = cursor.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-        
+
     @staticmethod
     def get_vuln_stats():
         conn = get_connection()
@@ -288,15 +280,15 @@ class VulnModel:
             if row[0] == "vulnerable": stats['vulnerable'] = row[1]
             elif row[0] == "safe": stats['safe'] = row[1]
             elif row[0] == "error": stats['error'] = row[1]
-            
+
         cursor.execute("SELECT COUNT(DISTINCT mac_address) FROM vuln_scan_results WHERE vuln_result = 'vulnerable'")
         vuln_devs = cursor.fetchone()
         if vuln_devs:
             stats['vulnerable_devices'] = vuln_devs[0]
-            
+
         conn.close()
         return stats
-        
+
     @staticmethod
     def mark_safe(mac_address, vuln_name):
         conn = get_connection()
@@ -344,8 +336,10 @@ class VulnModel:
             conn.close()
         return success
 
+
 class HFishModel:
     """HFish 攻击日志模型。"""
+
     @staticmethod
     def get_attack_logs(limit=100, offset=0, threat_level=None, service_name=None):
         conn = get_connection()
@@ -358,7 +352,7 @@ class HFishModel:
         if service_name:
             query += " AND service_name = ?"
             params.append(service_name)
-            
+
         query += " ORDER BY create_time_timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         cursor.execute(query, params)
@@ -461,27 +455,29 @@ class HFishModel:
         conn.close()
         return count
 
+
 class StatsModel:
     """首页汇总统计模型（保留给兼容接口调用）。"""
+
     @staticmethod
     def get_dashboard_summary():
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("SELECT COUNT(*) FROM hosts WHERE state = 'up' AND scan_id = (SELECT id FROM scans ORDER BY id DESC LIMIT 1)")
         online_devices = cursor.fetchone()[0] or 0
-        
+
         cursor.execute("SELECT COUNT(DISTINCT mac_address) FROM vuln_scan_results WHERE vuln_result = 'vulnerable'")
         vuln_devices = cursor.fetchone()[0] or 0
-        
+
         cursor.execute("SELECT COUNT(*) FROM attack_logs WHERE create_time_str >= date('now', '-24 hours')")
         attacks_24h = cursor.fetchone()[0] or 0
-        
+
         cursor.execute("SELECT MAX(scan_time) FROM scans")
         last_scan = cursor.fetchone()[0] or "尚未扫描"
-        
+
         conn.close()
-        
+
         return {
             "online_devices": online_devices,
             "vulnerable_devices": vuln_devices,
@@ -489,11 +485,12 @@ class StatsModel:
             "last_scan": last_scan
         }
 
+
 class AiModel:
     """AI 分析与会话历史持久化模型。"""
+
     @staticmethod
     def save_analysis(ip, analysis_text, decision, status='pending'):
-        from datetime import datetime
         scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
@@ -517,7 +514,7 @@ class AiModel:
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
-        
+
     @staticmethod
     def get_all_analyses():
         conn = get_connection()
@@ -531,7 +528,6 @@ class AiModel:
 
     @staticmethod
     def create_session(title="新对话", context_type=None, context_id=None):
-        from datetime import datetime
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
@@ -573,8 +569,6 @@ class AiModel:
             tool_calls: 工具调用信息 (仅 assistant 消息)
             tool_call_id: 工具调用ID (仅 tool 消息)
         """
-        from datetime import datetime
-        import json
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
@@ -604,7 +598,6 @@ class AiModel:
     @staticmethod
     def get_messages(session_id):
         """获取指定会话的所有消息历史"""
-        import json
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM ai_chat_history WHERE session_id = ? ORDER BY id ASC', (session_id,))
@@ -616,7 +609,7 @@ class AiModel:
             d = dict(r)
             msg = {
                 'role': d['role'],
-                'content': d['content'] or d['response'] or d['query'], # 兼容旧字段
+                'content': d['content'] or d['response'] or d['query'],  # 兼容旧字段
                 'ts': d['create_time']
             }
             if d.get('tool_calls'):
@@ -696,3 +689,4 @@ class SwitchAclModel:
         cursor.execute('DELETE FROM switch_acl_rules')
         conn.commit()
         conn.close()
+

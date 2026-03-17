@@ -18,7 +18,15 @@ watch(() => auth.isLoggedIn, (v) => {
 </script>
 
 <template>
-  <router-view />
+  <router-view v-slot="{ Component, route }">
+    <transition
+      :name="route.meta.public ? 'login-fade' : 'page-fade'"
+      mode="out-in"
+      appear
+    >
+      <component :is="Component" :key="route.path" />
+    </transition>
+  </router-view>
   <!-- Global Error Toast -->
   <Transition
     enter-active-class="transition-all duration-300 ease-out"

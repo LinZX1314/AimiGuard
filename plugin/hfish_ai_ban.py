@@ -116,6 +116,10 @@ IP信息：
             ban_match = re.search(r'\[BAN\][\s：:]*原因[：:]*(.+)', analysis_text, re.IGNORECASE)
             if ban_match:
                 ban_reason = ban_match.group(1).strip()
+                if len(ban_reason) < 5:  # 原因太短，可能解析错误
+                    ban_reason = '攻击频率或威胁等级过高'
+            else:
+                ban_reason = '攻击频率或威胁等级过高'
             logger.info(f"AI判定需要封禁: {ip}, 原因: {ban_reason}")
         elif '[NOBAN]' in analysis_stripped:
             should_ban = False
@@ -123,9 +127,14 @@ IP信息：
             noban_match = re.search(r'\[NOBAN\][\s：:]*原因[：:]*(.+)', analysis_text, re.IGNORECASE)
             if noban_match:
                 ban_reason = noban_match.group(1).strip()
+            else:
+                ban_reason = '威胁等级低或攻击频率正常'
             logger.info(f"AI判定不需要封禁: {ip}, 原因: {ban_reason}")
         else:
-            logger.warning(f"AI返回格式未知: {analysis_text[:100]}")
+            # 格式无法识别，默认不封禁但记录错误
+            should_ban = False
+            ban_reason = f'AI返回格式无法解析: {analysis_text[:50]}...'
+            logger.error(f"AI返回格式未知: {analysis_text[:100]}")
 
         decision = '封禁' if should_ban else '不封禁'
 
@@ -146,13 +155,18 @@ IP信息：
 
             logger.info(f"封禁结果: {ban_result}")
 
-            # 检查封禁是否成功
+            # 检查封禁是否成功，并更新数据库状态
             if ban_result.get('ok'):
                 ban_count += 1
                 AiModel.save_analysis(ip, analysis_text, '已封禁', status='approved')
                 logger.info(f"IP {ip} 封禁成功")
             else:
-                logger.warning(f"IP {ip} 封禁失败: {ban_result.get('error', '未知错误')}")
+                # 封禁失败，更新状态为失败
+                AiModel.save_analysis(ip, analysis_text, '封禁失败', status='error')
+                logger.error(f"IP {ip} 封禁失败: {ban_result.get('error', '未知错误')}")
+        else:
+            # 不需要封禁或封禁未启用，更新状态
+            AiModel.save_analysis(ip, analysis_text, decision, status='analyzed')
 
     return {
         'success': True,

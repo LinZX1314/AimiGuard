@@ -18,8 +18,8 @@ defense_bp = Blueprint('defense', __name__, url_prefix='/api/v1/defense')
 @require_auth
 def defense_hfish_logs():
     """Get HFish attack logs with pagination"""
-    page = _parse_int_arg('page', 1)
-    page_size = _parse_int_arg('page_size', 50)
+    page = _parse_int_arg('page', 1, max_value=10000)
+    page_size = _parse_int_arg('page_size', 50, max_value=500)
     offset = (page - 1) * page_size
     aggregated = _as_bool(request.args.get('aggregated', '0'))
     service_name = request.args.get('service_name')
@@ -91,7 +91,7 @@ def defense_hfish_types():
             COUNT(*) as total_attacks,
             COUNT(DISTINCT attack_ip) as unique_ips,
             COUNT(DISTINCT client_id) as unique_nodes,
-            MAX(create_time) as latest_attack_time,
+            MAX(create_time_str) as latest_attack_time,
             MAX(create_time_str) as latest_attack_time_str
         FROM attack_logs
         GROUP BY service_name
@@ -157,10 +157,10 @@ def defense_hfish_type_detail(service_name):
 
     trend_q = f"""
         SELECT
-            strftime('%Y-%m-%d %H:00', create_time) as hour,
+            strftime('%Y-%m-%d %H:00', create_time_str) as hour,
             COUNT(*) as count
         FROM attack_logs {where_sql}
-        AND create_time >= datetime('now', '-7 days')
+        AND create_time_str >= datetime('now', '-7 days')
         GROUP BY hour
         ORDER BY hour ASC
     """
@@ -182,9 +182,9 @@ def defense_hfish_type_detail(service_name):
     logs_q = f"""
         SELECT
             id, attack_ip, ip_location, service_name, service_port,
-            client_id, create_time_str, threat_level, payload
+            client_id, create_time_str, threat_level
         FROM attack_logs {where_sql}
-        ORDER BY create_time DESC
+        ORDER BY create_time_timestamp DESC
         LIMIT ? OFFSET ?
     """
     c.execute(logs_q, params + [page_size, offset])
@@ -200,7 +200,6 @@ def defense_hfish_type_detail(service_name):
             'client_id': row['client_id'],
             'attack_time': row['create_time_str'],
             'threat_level': row['threat_level'],
-            'payload': row['payload']
         })
 
     # 5. Get total count for pagination

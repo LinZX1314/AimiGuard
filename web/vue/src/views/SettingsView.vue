@@ -187,45 +187,6 @@ const chainItems = [
       </CardContent>
     </Card>
 
-    <Card class="bg-card/40 border border-border/50">
-      <CardHeader>
-        <CardTitle class="text-base font-bold flex items-center gap-2">
-          <Settings :size="16" class="text-primary" />
-          界面主题定制
-        </CardTitle>
-        <CardDescription class="text-xs">仅保留亮色与暗色两种界面模式</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div class="grid grid-cols-2 gap-4">
-          <div 
-            v-for="t in ['dark', 'light']" 
-            :key="t"
-            class="group cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3"
-            :class="[uiStore.theme === t ? 'border-primary bg-primary/10' : 'border-border/50 bg-muted/5 hover:border-border']"
-            @click="uiStore.setTheme(t as any)"
-          >
-            <div class="w-full h-20 rounded-lg flex items-center justify-center relative overflow-hidden" 
-                 :class="[
-                   t === 'dark'
-                     ? 'bg-slate-950 border-cyan-500/20 shadow-[inset_0_0_20px_rgba(34,211,238,0.2)]'
-                     : 'bg-white border-slate-200 shadow-[0_0_15px_rgba(0,0,0,0.05)]'
-                 ]"
-            >
-              <div class="flex flex-col gap-1 w-1/2">
-                <div class="h-1.5 w-full rounded-full" :class="[
-                   t === 'dark' ? 'bg-cyan-400' : 'bg-slate-900'
-                ]"></div>
-                <div class="h-1 w-3/4 rounded-full" :class="t === 'dark' ? 'bg-white/20' : 'bg-slate-200'"></div>
-              </div>
-            </div>
-            <span class="text-xs font-bold uppercase tracking-wider">
-              {{ t === 'dark' ? '暗色模式' : '亮色模式' }}
-            </span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-
     <!-- HFish Config -->
     <Card class="bg-card/40 border border-border/50">
       <CardHeader>

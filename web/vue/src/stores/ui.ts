@@ -11,6 +11,16 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = t
   }
 
+  window.addEventListener('storage', (event) => {
+    if (event.key !== 'ag-theme') {
+      return
+    }
+    const nextTheme = event.newValue
+    if (nextTheme === 'light' || nextTheme === 'dark') {
+      theme.value = nextTheme
+    }
+  })
+
   watch(theme, (newTheme) => {
     localStorage.setItem('ag-theme', newTheme)
     // 同步 .dark 类，确保 shadcn / tailwind dark: 样式一致生效

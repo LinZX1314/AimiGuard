@@ -164,8 +164,8 @@ def _dhcp_query(args: dict, cfg: dict = None) -> dict:
             },
             'arguments': {
                 'type': 'string',
-                'description': 'nmap参数，默认 -sV -T5，常用：-sV(版本) -O(系统) -p(端口) -sn(仅ping)',
-                'default': '-sV -T5',
+                'description': 'nmap参数，默认 -sS -T5，常用：-sV(版本) -O(系统) -p(端口) -sn(仅ping)',
+                'default': '-sS -T5',
             },
         },
         'required': ['target'],
@@ -188,8 +188,8 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': f'无法导入模块: {e}'}
 
     target = str(args.get('target', '')).strip()
-    raw_args = args.get('arguments', '-sV -T5')
-    nmap_args = str(raw_args).strip() or '-sV -T5'
+    raw_args = args.get('arguments', '-sS -T5')
+    nmap_args = str(raw_args).strip() or '-sS -T5'
 
     if not target:
         return {'ok': False, 'error': '缺少 target 参数'}
@@ -257,8 +257,6 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
     """交换机ACL配置工具"""
     import time
     import telnetlib3 as telnetlib
-
-    from database.models import SwitchAclModel
 
     from database.models import SwitchAclModel
 

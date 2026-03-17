@@ -21,8 +21,11 @@ from utils.logger import log as unified_log
 
 ai_bp = Blueprint('ai', __name__)
 
-# 运行时会话缓存（LRU 结构或简单字典，用于加速当前对话）
-_chat_sessions: dict[int, list] = {}
+# 运行时会话缓存（LRU 结构，防止内存泄漏）
+from collections import OrderedDict
+
+_MAX_SESSIONS = 100  # 最大缓存的会话数
+_chat_sessions: OrderedDict[int, list] = OrderedDict()
 _session_lock = threading.Lock()
 
 
@@ -49,17 +52,24 @@ def _get_system_context() -> str:
 
 
 def _get_history(session_id: int) -> list:
-    """从内存或数据库获取会话历史"""
+    """从内存或数据库获取会话历史（LRU 缓存）"""
     with _session_lock:
         if session_id in _chat_sessions:
+            # LRU: 移到末尾表示最近使用
+            _chat_sessions.move_to_end(session_id)
             return _chat_sessions[session_id]
         
         # 内存没有，尝试从 DB 加载
         history = AiModel.get_messages(session_id)
         if history:
             _chat_sessions[session_id] = history
-            return history
-    return []
+            _chat_sessions.move_to_end(session_id)
+            
+            # 超过上限时删除最旧的会话
+            if len(_chat_sessions) > _MAX_SESSIONS:
+                _chat_sessions.popitem(last=False)
+        
+        return history
 
 
 # ──────────────────────────────────────────────────────────────────────────────

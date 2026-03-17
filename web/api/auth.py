@@ -3,7 +3,8 @@ Auth Module - Authentication endpoints
 """
 from flask import Blueprint, jsonify, g
 from .helpers import (
-    require_auth, ok, err, _body, _load_cfg, _make_token, _DEFAULT_USERS
+    require_auth, ok, err, _body, _load_cfg, _make_token, _DEFAULT_USERS,
+    _verify_password
 )
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
@@ -18,7 +19,17 @@ def auth_login():
 
     cfg = _load_cfg()
     users = cfg.get('users', _DEFAULT_USERS)
-    matched = next((u for u in users if u['username'] == username and u['password'] == password), None)
+    
+    # 查找用户并验证密码
+    matched = None
+    for u in users:
+        if u['username'] == username:
+            # 支持新的 password_hash 字段和旧的 password 字段
+            password_hash = u.get('password_hash') or u.get('password', '')
+            if _verify_password(password, password_hash):
+                matched = u
+                break
+    
     if not matched:
         return err('用户名或密码错误', 401)
 

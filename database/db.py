@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import sys
+from contextlib import contextmanager
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logger import log
@@ -13,6 +14,31 @@ def get_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+@contextmanager
+def get_db_cursor():
+    """
+    数据库连接上下文管理器，自动处理异常和关闭连接
+    
+    使用示例:
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT * FROM users")
+            return cursor.fetchall()
+    """
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        yield cursor
+        conn.commit()
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        log("Database", f"数据库操作失败: {e}", "ERROR")
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 def init_db():
     """初始化数据库表结构"""
@@ -82,6 +108,14 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_mac ON assets(mac_address)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_ip ON assets(current_ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_asset_ip_history_asset ON asset_ip_history(asset_id)')
+    
+    # 性能优化索引
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)')
 
     # ================= 漏洞扫描相关表 =================
     cursor.execute('''

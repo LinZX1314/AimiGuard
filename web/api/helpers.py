@@ -34,9 +34,42 @@ def _save_cfg(cfg):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 # ─── JWT Config ───────────────────────────────────────────────────────────────
-_JWT_SECRET = os.environ.get('AIMIGUARD_SECRET', 'aimiguard-secret-key-2026')
+import secrets
+
+# 生成或加载 JWT 密钥
+_JWT_SECRET_FILE = os.path.join(BASE_DIR, '.jwt_secret')
+def _get_or_create_jwt_secret():
+    """获取或创建 JWT 密钥（持久化到文件）"""
+    if os.path.exists(_JWT_SECRET_FILE):
+        try:
+            with open(_JWT_SECRET_FILE, 'r') as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    
+    # 生成新的强随机密钥
+    secret = secrets.token_urlsafe(32)
+    try:
+        with open(_JWT_SECRET_FILE, 'w') as f:
+            f.write(secret)
+        # 设置文件权限为仅所有者可读写
+        os.chmod(_JWT_SECRET_FILE, 0o600)
+    except Exception:
+        pass
+    return secret
+
+_JWT_SECRET = os.environ.get('AIMIGUARD_SECRET') or _get_or_create_jwt_secret()
 _JWT_TTL = 86400 * 7  # 7 days
-_DEFAULT_USERS = [{'username': 'admin', 'password': 'admin123', 'role': 'admin'}]
+
+# 默认用户（密码使用 bcrypt 哈希）
+# 原始密码: admin123
+_DEFAULT_USERS = [
+    {
+        'username': 'admin', 
+        'password_hash': '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4wq.4fG5t5X9YzDa',
+        'role': 'admin'
+    }
+]
 
 # ─── JWT Functions ───────────────────────────────────────────────────────────
 def _b64e(data: bytes) -> str:
@@ -93,6 +126,19 @@ def require_auth(f):
         return f(*args, **kwargs)
     return wrapped
 
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    """验证密码（支持 bcrypt 哈希和明文）"""
+    import bcrypt
+    try:
+        # 如果是 bcrypt 哈希（以 $2b$ 开头）
+        if password_hash.startswith('$2b$') or password_hash.startswith('$2a$'):
+            return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+        # 兼容旧的明文密码（不推荐，仅用于迁移）
+        return password == password_hash
+    except Exception:
+        return False
+
 # ─── Response Helpers ───────────────────────────────────────────────────────
 def ok(data=None, **extra):
     """统一成功响应结构"""
@@ -118,10 +164,16 @@ def _as_bool(value) -> bool:
         return value.strip().lower() in ('1', 'true', 'yes', 'on')
     return bool(value)
 
-def _parse_int_arg(name: str, default: int) -> int:
+def _parse_int_arg(name: str, default: int, max_value: int = None) -> int:
+    """解析整数参数，支持最大值限制"""
     raw = request.args.get(name, default)
     try:
-        return int(raw)
+        value = int(raw)
+        # 应用最大值限制
+        if max_value is not None:
+            value = min(value, max_value)
+        # 确保非负
+        return max(value, 0)
     except Exception:
         return default
 

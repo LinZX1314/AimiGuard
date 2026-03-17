@@ -37,9 +37,22 @@ def timestamp_to_time(timestamp):
     """时间戳转可读时间"""
     if timestamp == 0:
         return "N/A"
-    if timestamp > 10000000000:
+    
+    # 判断时间戳单位（秒/毫秒/微秒）
+    # 秒级: ~1e9 (2001年) ~1e10 (2286年)
+    # 毫秒级: ~1e12 (2001年)
+    # 微秒级: ~1e15 (2001年)
+    
+    if timestamp > 1e14:  # 微秒级
+        timestamp = timestamp / 1_000_000
+    elif timestamp > 1e12:  # 毫秒级
         timestamp = timestamp / 1000
-    return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    
+    try:
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except (OSError, OverflowError, ValueError) as e:
+        log("HFish", f"时间戳转换失败: {timestamp}, error: {e}", "ERROR")
+        return "Invalid Timestamp"
 
 
 def _format_error(host_port, err_msg):

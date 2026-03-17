@@ -31,18 +31,20 @@ import {
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
 import { ref } from 'vue'
+import { useUiStore } from '@/stores/ui'
 
 const router = useRouter()
 const route  = useRoute()
 const auth   = useAuthStore()
+const uiStore = useUiStore()
 const { toggleTheme } = useThemeAnimation()
-const isDark = ref(document.documentElement.classList.contains('dark'))
+const isDark = computed(() => uiStore.theme === 'dark')
 
 function handleToggleTheme(e: MouseEvent) {
-  toggleTheme(e)
-  isDark.value = !isDark.value
+  toggleTheme(e, () => {
+    uiStore.setTheme(uiStore.theme === 'dark' ? 'light' : 'dark')
+  })
 }
-
 
 const logoUrl = new URL('@/assets/aimiguard-logo.png', import.meta.url).href
 
@@ -108,14 +110,19 @@ function handleLogout() {
             <a
               :href="href"
               @click="navigate"
-              class="flex items-center px-3 py-2.5 rounded-md text-sm transition-colors group"
+              class="flex items-center px-3 py-2.5 rounded-md text-sm group relative overflow-hidden transition-all duration-300 ease-out"
               :class="[
                 isExactActive || (item.to !== '/' && route.path.startsWith(item.to))
                    ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_rgba(0,229,255,0.1)]'
                   : 'text-slate-400 hover:bg-white/5 hover:text-foreground'
               ]"
             >
-              <div class="mr-3 transition-transform group-hover:scale-110">
+              <!-- Active indicator bar -->
+              <div
+                class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-primary transition-all duration-300 ease-out"
+                :class="isExactActive || (item.to !== '/' && route.path.startsWith(item.to)) ? 'h-5 opacity-100' : 'h-0 opacity-0'"
+              ></div>
+              <div class="mr-3 transition-transform duration-200 group-hover:scale-110">
                 <component :is="item.icon" :size="18" :stroke-width="2" />
               </div>
               {{ item.title }}
@@ -143,7 +150,7 @@ function handleLogout() {
           <Button variant="ghost" size="icon" @click="handleToggleTheme" class="rounded-full mr-2">
             <Sun v-if="!isDark" class="h-[1.2rem] w-[1.2rem] transition-all" />
             <Moon v-else class="h-[1.2rem] w-[1.2rem] transition-all" />
-            <span class="sr-only">Toggle theme</span>
+            <span class="sr-only">切换主题</span>
           </Button>
 
           <DropdownMenu>

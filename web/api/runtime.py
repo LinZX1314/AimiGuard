@@ -5,11 +5,17 @@ import os, sys, json, time
 import threading
 from .helpers import BASE_DIR, _load_cfg
 
-# Global state
+# Global state with locks for thread safety
 _is_scanning = False
 _is_vuln_scanning = False
 _sync_thread_started = False
 _scan_thread_started = False
+
+# Locks for protecting global state
+_scan_lock = threading.Lock()
+_vuln_lock = threading.Lock()
+_sync_lock = threading.Lock()
+_thread_lock = threading.Lock()
 
 
 def _run_daemon(task):
@@ -24,19 +30,26 @@ def _runtime_log(level: str, msg: str):
 
 
 def get_runtime_scan_status() -> dict:
+    with _scan_lock:
+        scanning = _is_scanning
+    with _vuln_lock:
+        vuln_scanning = _is_vuln_scanning
     return {
-        'is_scanning': _is_scanning,
-        'is_vuln_scanning': _is_vuln_scanning,
+        'is_scanning': scanning,
+        'is_vuln_scanning': vuln_scanning,
     }
 
 
 def run_nmap_scan(ip_ranges, arguments):
     """后台执行一次 Nmap 扫描"""
     global _is_scanning
-    if _is_scanning:
-        return
-
-    _is_scanning = True
+    
+    # 原子检查并设置标志
+    with _scan_lock:
+        if _is_scanning:
+            return
+        _is_scanning = True
+    
     try:
         sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
         import network_scan
@@ -44,16 +57,20 @@ def run_nmap_scan(ip_ranges, arguments):
     except Exception as e:
         _runtime_log('error', f'Nmap 扫描执行失败: {e}')
     finally:
-        _is_scanning = False
+        with _scan_lock:
+            _is_scanning = False
 
 
 def run_vuln_scan_task():
     """后台执行一次漏洞扫描任务"""
     global _is_vuln_scanning
-    if _is_vuln_scanning:
-        return
-
-    _is_vuln_scanning = True
+    
+    # 原子检查并设置标志
+    with _vuln_lock:
+        if _is_vuln_scanning:
+            return
+        _is_vuln_scanning = True
+    
     try:
         from database.models import NmapModel
         hosts_data = NmapModel.get_latest_up_hosts()
@@ -68,7 +85,8 @@ def run_vuln_scan_task():
     except Exception as e:
         _runtime_log('error', f'漏洞扫描执行失败: {e}')
     finally:
-        _is_vuln_scanning = False
+        with _vuln_lock:
+            _is_vuln_scanning = False
 
 
 def run_hfish_sync():
@@ -127,7 +145,7 @@ def run_nmap_scan_loop():
             cfg = _load_cfg()
             nmap_cfg = cfg.get('nmap', {})
             ip_ranges = nmap_cfg.get('ip_ranges', [])
-            arguments = nmap_cfg.get('arguments', '-sV -T5')
+            arguments = nmap_cfg.get('arguments', '-sS -T5')
             scan_interval = nmap_cfg.get('scan_interval', 0)
 
             if not ip_ranges or not arguments:
@@ -147,12 +165,13 @@ def start_runtime_workers():
     global _sync_thread_started, _scan_thread_started
     cfg = _load_cfg()
 
-    if cfg.get('hfish', {}).get('sync_enabled', False) and not _sync_thread_started:
-        threading.Thread(target=run_hfish_sync_loop, daemon=True).start()
-        _sync_thread_started = True
-        _runtime_log('info', 'HFish 同步线程已启动')
+    with _thread_lock:
+        if cfg.get('hfish', {}).get('sync_enabled', False) and not _sync_thread_started:
+            threading.Thread(target=run_hfish_sync_loop, daemon=True).start()
+            _sync_thread_started = True
+            _runtime_log('info', 'HFish 同步线程已启动')
 
-    if cfg.get('nmap', {}).get('scan_enabled', False) and not _scan_thread_started:
-        threading.Thread(target=run_nmap_scan_loop, daemon=True).start()
-        _scan_thread_started = True
-        _runtime_log('info', 'Nmap 扫描线程已启动')
+        if cfg.get('nmap', {}).get('scan_enabled', False) and not _scan_thread_started:
+            threading.Thread(target=run_nmap_scan_loop, daemon=True).start()
+            _scan_thread_started = True
+            _runtime_log('info', 'Nmap 扫描线程已启动')

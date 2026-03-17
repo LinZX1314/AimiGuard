@@ -13,8 +13,8 @@ scan_bp = Blueprint('scan', __name__, url_prefix='/api/v1/scan')
 @require_auth
 def scan_findings():
     """Get vulnerability findings with pagination"""
-    page = _parse_int_arg('page', 1)
-    page_size = _parse_int_arg('page_size', 50)
+    page = _parse_int_arg('page', 1, max_value=10000)
+    page_size = _parse_int_arg('page_size', 50, max_value=500)
     severity = request.args.get('severity')
     status = request.args.get('status')
     offset = (page - 1) * page_size
@@ -25,11 +25,14 @@ def scan_findings():
     # Build query with filters
     where_clauses = []
     params = []
+    
+    # 严重性映射：前端中文 -> 数据库值
+    SEV_MAP = {'严重': 'vulnerable', '高危': 'vulnerable', '中危': 'error', '低危': 'safe', '信息': 'safe'}
     if severity:
-        SEV_MAP = {'严重': 'vulnerable', '高危': 'vulnerable', '中危': 'error', '低危': 'safe', '信息': 'safe'}
-        # Simplified mapping - adjust as needed
+        # 将中文严重性映射到数据库值
+        db_severity = SEV_MAP.get(severity, severity)
         where_clauses.append('vuln_result = ?')
-        params.append(severity)
+        params.append(db_severity)
 
     where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
 
@@ -45,6 +48,7 @@ def scan_findings():
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
 
+    # 数据库值 -> 前端中文
     SEV = {'vulnerable': '高危', 'error': '中危', 'safe': '低危'}
     STA = {'vulnerable': 'open', 'safe': 'fixed', 'error': 'open'}
     findings = [{

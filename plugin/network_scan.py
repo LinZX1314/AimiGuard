@@ -65,7 +65,7 @@ def get_vuln_scripts_map():
     return {}
 
 
-def scan_hosts(ip_range, arguments='-sV -O -T5'):
+def scan_hosts(ip_range, arguments='-sS -O -T5'):
     """
     扫描指定 IP 范围
 

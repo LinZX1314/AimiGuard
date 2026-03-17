@@ -67,13 +67,13 @@ body::after {
   pointer-events: none;
   z-index: -2;
   /* 亮色模式：微微的蓝紫色光晕 */
-  background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 60%);
+  background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
   animation: ambient-glow 8s ease-in-out infinite alternate;
 }
 
 .dark body::after {
-  /* 暗色模式：赛博朋克深邃青蓝光晕 */
-  background: radial-gradient(circle at 50% 50%, rgba(0, 229, 255, 0.07) 0%, transparent 65%);
+  /* 暗色模式：赛博朋克深邃青蓝光晕，扩大范围，增强可见度 */
+  background: radial-gradient(circle at 50% 50%, rgba(0, 229, 255, 0.25) 0%, transparent 80%);
 }
 
 @keyframes ambient-glow {
@@ -91,19 +91,19 @@ body::before {
   /* 基础网格大小 */
   background-size: 50px 50px;
   /* 亮色模式网格颜色：更明显的黑灰线条 */
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
   /* 中心辐射渐变遮罩，边缘模糊消失 */
-  mask-image: radial-gradient(circle at center, black 50%, transparent 90%);
-  -webkit-mask-image: radial-gradient(circle at center, black 50%, transparent 90%);
+  mask-image: radial-gradient(circle at center, black 60%, transparent 95%);
+  -webkit-mask-image: radial-gradient(circle at center, black 60%, transparent 95%);
   transition: background-image 0.5s ease;
   animation: grid-pan 20s linear infinite;
 }
 
 .dark body::before {
-  /* 暗色模式网格颜色：黑灰色的暗纹网格，交织青色微光 */
-  background-image: linear-gradient(to right, rgba(0, 229, 255, 0.04) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+  /* 暗色模式网格颜色：黑灰色的暗纹网格，交织青色微光，增加透明度使其更加明显 */
+  background-image: linear-gradient(to right, rgba(0, 229, 255, 0.2) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 229, 255, 0.2) 1px, transparent 1px);
 }
 
 @keyframes grid-pan {
@@ -166,4 +166,52 @@ html.view-transitioning body,
 html.view-transitioning body * {
   transition-property: none !important;
   animation-duration: 0s !important;
+}
+
+/* login-fade - 登录页 ↔ 主布局平滑过渡 */
+.login-fade-enter-active {
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.login-fade-leave-active {
+  transition: opacity 0.3s ease-in, transform 0.3s ease-in;
+}
+.login-fade-enter-from {
+  opacity: 0;
+  transform: scale(1.03);
+}
+.login-fade-enter-to {
+  opacity: 1;
+  transform: scale(1);
+}
+.login-fade-leave-from {
+  opacity: 1;
+  transform: scale(1);
+}
+.login-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+/* page-fade - 主布局出入场 */
+.page-fade-enter-active {
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.page-fade-leave-active {
+  transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+}
+.page-fade-enter-to {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+.page-fade-leave-from {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -10px, 0);
 }
