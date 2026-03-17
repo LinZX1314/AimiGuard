@@ -728,7 +728,16 @@ async function onPageLoad() {
   await loadSessions()
 
   // 处理 URL 上下文参数
-  const { context_type, context_id } = route.query
+  const { context_type, context_id, prompt } = route.query
+  if (prompt) {
+    input.value = String(prompt)
+    await send({
+      ...(context_type ? { context_type: String(context_type) } : {}),
+      ...(context_id ? { context_id: String(context_id) } : {}),
+    })
+    return
+  }
+
   if (context_type && context_id) {
     // 自动注入上下文提问
     input.value = `请帮我分析这个目标：${context_id}`

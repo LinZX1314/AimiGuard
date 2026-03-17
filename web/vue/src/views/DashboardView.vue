@@ -1,334 +1,726 @@
-<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+﻿<script setup lang="ts">
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api/index'
-import { Line, Doughnut, Bar } from 'vue-chartjs'
+import { Line, Bar } from 'vue-chartjs'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { MapChart, LinesChart, EffectScatterChart } from 'echarts/charts'
+import { GeoComponent, TooltipComponent as ETooltipComponent } from 'echarts/components'
+import { registerMap } from 'echarts/core'
+import VChart from 'vue-echarts'
+import { feature } from 'topojson-client'
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement,
-  LineElement, ArcElement, BarElement, Title, Tooltip, Legend, Filler
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  ArcElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
 } from 'chart.js'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { 
-  History, 
-  ShieldAlert, 
-  Server, 
-  Bug, 
-  Bot, 
-  Ban, 
-  CheckCircle2, 
-  Circle,
+import { Textarea } from '@/components/ui/textarea'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
   Activity,
-  AlertTriangle,
-  Flame
+  Bot,
+  CheckCircle2,
+  Circle,
+  Network,
+  Radar,
+  Server,
+  Sparkles,
+  Globe,
+  ScanLine,
+  Router,
+  Send,
+  Loader2,
 } from 'lucide-vue-next'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement,
-  ArcElement, BarElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  ArcElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+)
 
-interface Metrics {
-  hfish_total: number; hfish_high: number; nmap_online: number;
-  vuln_open: number; ai_decisions: number; blocked_ips: number
+use([CanvasRenderer, MapChart, LinesChart, EffectScatterChart, GeoComponent, ETooltipComponent])
+
+type MainView = 'map' | 'topology' | 'lan' | 'switch'
+
+interface TopMetrics {
+  hfish_total: number
+  hfish_high: number
+  nmap_online: number
+  vuln_open: number
+  ai_decisions: number
+  blocked_ips: number
 }
-const EMPTY_METRICS: Metrics = {
-  hfish_total: 0,
-  hfish_high: 0,
-  nmap_online: 0,
-  vuln_open: 0,
-  ai_decisions: 0,
-  blocked_ips: 0,
+
+interface ScreenPayload {
+  top_metrics: TopMetrics
+  chain_status: Record<string, boolean>
+  trends: { labels: string[]; counts: number[] }
+  threat_distribution: { levels: string[]; counts: number[] }
+  hot_services: Array<{ name: string; count: number }>
+  recent_attacks: Array<{ attack_ip: string; ip_location?: string; service_name?: string; threat_level?: string; create_time_str?: string }>
+  defense_events: Array<{ attack_ip: string; ip_location?: string; attack_count: number; latest_time?: string; ai_status?: string; ai_decision?: string }>
+  topology: { nodes: Array<{ id: string; label: string; type: string; status: string }>; links: Array<{ source: string; target: string; type: string }> }
+  lan_hosts: Array<{ ip: string; hostname: string; state: string; os_type: string; open_ports: string[] }>
+  switches: Array<{ host: string; port: number; acl_number: number; enabled: boolean }>
 }
-const metrics = ref<Metrics>({ ...EMPTY_METRICS })
-const chainStatus = ref<Record<string, boolean>>({})
-const trends = ref<{ labels: string[], counts: number[] }>({ labels: [], counts: [] })
-const hfishStats = ref<{ levels: string[], counts: number[], colors: string[], services: Record<string, number> }>({ levels: [], counts: [], colors: [], services: {} })
+
+const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
-const partialError = ref<string[]>([])
+const activeView = ref<MainView>('map')
+const mapReady = ref(false)
 
-const THREAT_COLORS: Record<string, string> = {
-  '高危': '#EF4444', '中危': '#F59E0B', '低危': '#3B82F6', '信息': '#9CA3AF'
-}
-const statCards = [
-  { label: '攻击日志总数',  key: 'hfish_total',   color: 'text-blue-400',   bg: 'bg-blue-400/10', border: 'border-blue-400/20', icon: History },
-  { label: '高危攻击',      key: 'hfish_high',    color: 'text-red-400',    bg: 'bg-red-400/10',  border: 'border-red-400/20',  icon: ShieldAlert },
-  { label: '在线主机',      key: 'nmap_online',   color: 'text-emerald-400', bg: 'bg-emerald-400/10', border: 'border-emerald-400/20', icon: Server },
-  { label: '待修漏洞',      key: 'vuln_open',     color: 'text-amber-400',  bg: 'bg-amber-400/10', border: 'border-amber-400/20', icon: Bug },
-  { label: 'AI 封禁决策',   key: 'ai_decisions',  color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20', icon: Bot },
-  { label: '已封禁 IP',     key: 'blocked_ips',   color: 'text-slate-400',   bg: 'bg-slate-400/10',   border: 'border-slate-400/20',   icon: Ban },
+const aiMessages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+const aiInput = ref('')
+const aiLoading = ref(false)
+const aiError = ref('')
+const aiSessionId = ref<number | null>(null)
+const aiEndRef = ref<HTMLElement | null>(null)
+
+const quickPrompts = [
+  { label: '态势总览', prompt: '请输出当前态势总览和最高优先级风险。' },
+  { label: '防御动作', prompt: '请基于当前攻击来源给出30分钟防御动作清单。' },
+  { label: '链路体检', prompt: '请评估当前链路健康与潜在瓶颈。' },
 ]
+
+const payload = ref<ScreenPayload>({
+  top_metrics: { hfish_total: 0, hfish_high: 0, nmap_online: 0, vuln_open: 0, ai_decisions: 0, blocked_ips: 0 },
+  chain_status: {},
+  trends: { labels: [], counts: [] },
+  threat_distribution: { levels: [], counts: [] },
+  hot_services: [],
+  recent_attacks: [],
+  defense_events: [],
+  topology: { nodes: [], links: [] },
+  lan_hosts: [],
+  switches: [],
+})
+
+const metricCards = computed(() => [
+  { key: 'hfish_total', label: '攻击日志总数', value: payload.value.top_metrics.hfish_total, color: 'text-cyan-400' },
+  { key: 'hfish_high', label: '高危攻击', value: payload.value.top_metrics.hfish_high, color: 'text-red-400' },
+  { key: 'nmap_online', label: '在线主机', value: payload.value.top_metrics.nmap_online, color: 'text-emerald-400' },
+  { key: 'vuln_open', label: '待修漏洞', value: payload.value.top_metrics.vuln_open, color: 'text-amber-400' },
+  { key: 'ai_decisions', label: 'AI 决策数', value: payload.value.top_metrics.ai_decisions, color: 'text-violet-400' },
+  { key: 'blocked_ips', label: '已封禁 IP', value: payload.value.top_metrics.blocked_ips, color: 'text-slate-400' },
+])
+
 const chainItems = [
-  { label: 'HFish 同步',   key: 'hfish_sync'   },
-  { label: 'Nmap 扫描',    key: 'nmap_scan'    },
-  { label: 'AI 分析',      key: 'ai_analysis'  },
-  { label: 'ACL 封禁',     key: 'acl_auto_ban' },
+  { key: 'hfish_sync', label: 'HFish 同步' },
+  { key: 'nmap_scan', label: 'Nmap 扫描' },
+  { key: 'ai_analysis', label: 'AI 分析' },
+  { key: 'acl_auto_ban', label: 'ACL 封禁' },
 ]
+
+const chinaTarget = [116.4074, 39.9042] as [number, number]
+
+const chinaFallbackCities = [
+  [116.4074, 39.9042], // 北京
+  [121.4737, 31.2304], // 上海
+  [113.2644, 23.1291], // 广州
+  [114.0579, 22.5431], // 深圳
+  [104.0665, 30.5728], // 成都
+  [108.9398, 34.3416], // 西安
+  [118.7969, 32.0603], // 南京
+  [120.1551, 30.2741], // 杭州
+]
+
+const globalAttackSeeds = [
+  [-74.006, 40.7128],
+  [-0.1276, 51.5072],
+  [2.3522, 48.8566],
+  [13.405, 52.52],
+  [151.2093, -33.8688],
+  [139.6917, 35.6895],
+  [77.209, 28.6139],
+  [37.6173, 55.7558],
+  [-46.6333, -23.5505],
+  [31.2357, 30.0444],
+  [103.8198, 1.3521],
+  [18.4241, -33.9249],
+]
+
+function hashSeed(source: string) {
+  let h = 0
+  for (let i = 0; i < source.length; i += 1) {
+    h = (h << 5) - h + source.charCodeAt(i)
+    h |= 0
+  }
+  return Math.abs(h)
+}
+
+function resolveSourceCoord(ip?: string, location?: string) {
+  const seed = hashSeed(`${ip ?? 'unknown'}-${location ?? 'unknown'}`)
+  const rawLoc = (location ?? '').trim()
+  const loc = rawLoc.toLowerCase()
+  const maybeChina = /中国|china|beijing|shanghai|guangzhou|shenzhen|chengdu|xian|hangzhou|nanjing/.test(loc)
+  if (!rawLoc || maybeChina) {
+    return chinaFallbackCities[seed % chinaFallbackCities.length] as [number, number]
+  }
+  return globalAttackSeeds[seed % globalAttackSeeds.length] as [number, number]
+}
+
+const trendData = computed(() => ({
+  labels: payload.value.trends.labels,
+  datasets: [{
+    label: '攻击次数',
+    data: payload.value.trends.counts,
+    borderColor: '#06b6d4',
+    backgroundColor: 'rgba(6, 182, 212, 0.12)',
+    fill: true,
+    tension: 0.35,
+    pointRadius: 2,
+    borderWidth: 2,
+  }],
+}))
 
 const trendOptions = {
-  responsive: true, maintainAspectRatio: false,
+  responsive: true,
+  maintainAspectRatio: false,
   plugins: { legend: { display: false } },
-  scales: { 
-    x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } }, 
-    y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } } 
+  scales: {
+    x: { grid: { color: 'rgba(148,163,184,.12)' }, ticks: { color: '#94a3b8' } },
+    y: { grid: { color: 'rgba(148,163,184,.12)' }, ticks: { color: '#94a3b8' } },
+  },
+}
+
+const globalMapOption = computed(() => {
+  const points = payload.value.recent_attacks.slice(0, 20).map((item, idx) => {
+    const coord = resolveSourceCoord(item.attack_ip, item.ip_location)
+    const level = formatThreatLevel(item.threat_level)
+    const intensity = level === '高危' ? 3 : level === '中危' ? 2 : 1
+    return {
+      id: `${item.attack_ip}-${idx}`,
+      attack_ip: item.attack_ip,
+      ip_location: item.ip_location || '未知地区',
+      service_name: item.service_name || '未知服务',
+      threat_level: level,
+      create_time_str: item.create_time_str || '-',
+      sourceCoord: coord,
+      value: intensity,
+    }
+  })
+
+  return {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(2, 6, 23, 0.92)',
+      borderColor: 'rgba(56, 189, 248, 0.6)',
+      borderWidth: 1,
+      textStyle: {
+        color: '#e2e8f0',
+        fontSize: 12,
+      },
+      extraCssText: 'box-shadow: 0 12px 28px rgba(14, 116, 144, 0.35); border-radius: 10px; padding: 10px 12px;',
+      formatter: (params: any) => {
+        const data = params?.data
+        if (!data) return ''
+        if (data.isTarget) {
+          return [
+            '<div style="font-weight:700;color:#67e8f9;margin-bottom:6px;">防护中心节点</div>',
+            '<div>中心位置：<span style="color:#bae6fd">中国 · 北京</span></div>',
+            `<div>实时攻击总量：<span style="color:#fef08a">${payload.value.top_metrics.hfish_total}</span></div>`,
+            `<div>高危攻击数：<span style="color:#fca5a5">${payload.value.top_metrics.hfish_high}</span></div>`,
+          ].join('')
+        }
+        return [
+          '<div style="font-weight:700;color:#67e8f9;margin-bottom:6px;">攻击来源详情</div>',
+          `<div>来源 IP：<span style="color:#e2e8f0">${data.attack_ip}</span></div>`,
+          `<div>来源位置：<span style="color:#bae6fd">${data.ip_location}</span></div>`,
+          `<div>攻击服务：<span style="color:#ddd6fe">${data.service_name}</span></div>`,
+          `<div>威胁等级：<span style="color:#fca5a5">${data.threat_level}</span></div>`,
+          `<div>发生时间：<span style="color:#cbd5e1">${data.create_time_str || '-'}</span></div>`,
+          '<div style="margin-top:4px;color:#7dd3fc;">目标中心：中国 · 北京</div>',
+        ].join('')
+      },
+    },
+    geo: {
+      map: 'world',
+      roam: true,
+      zoom: 1.28,
+      center: [104, 34],
+      itemStyle: {
+        areaColor: 'rgba(15, 23, 42, 0.78)',
+        borderColor: 'rgba(56, 189, 248, 0.28)',
+        borderWidth: 0.9,
+      },
+      emphasis: {
+        itemStyle: {
+          areaColor: 'rgba(34, 211, 238, 0.32)',
+          borderColor: 'rgba(125, 211, 252, 0.82)',
+        },
+      },
+    },
+    series: [
+      {
+        name: '攻击飞线',
+        type: 'lines',
+        coordinateSystem: 'geo',
+        zlevel: 3,
+        effect: {
+          show: true,
+          period: 2.4,
+          trailLength: 0.34,
+          symbol: 'arrow',
+          symbolSize: 8,
+          color: '#22d3ee',
+        },
+        lineStyle: {
+          color: 'rgba(56, 189, 248, 0.72)',
+          width: 1.25,
+          curveness: 0.28,
+          opacity: 0.78,
+        },
+        data: points.map((p) => ({
+          coords: [p.sourceCoord, chinaTarget],
+          value: p.value,
+          attack_ip: p.attack_ip,
+          ip_location: p.ip_location,
+          service_name: p.service_name,
+          threat_level: p.threat_level,
+          create_time_str: p.create_time_str,
+        })),
+      },
+      {
+        name: '来源节点',
+        type: 'effectScatter',
+        coordinateSystem: 'geo',
+        zlevel: 4,
+        rippleEffect: {
+          brushType: 'stroke',
+          scale: 2.8,
+        },
+        symbolSize: (val: any) => 6 + Number(val?.[2] ?? 1) * 2,
+        itemStyle: {
+          color: '#f59e0b',
+          shadowBlur: 12,
+          shadowColor: 'rgba(245, 158, 11, 0.5)',
+        },
+        data: points.map((p) => ({
+          name: p.attack_ip,
+          value: [...p.sourceCoord, p.value],
+          attack_ip: p.attack_ip,
+          ip_location: p.ip_location,
+          service_name: p.service_name,
+          threat_level: p.threat_level,
+          create_time_str: p.create_time_str,
+        })),
+      },
+      {
+        name: '防护中心',
+        type: 'effectScatter',
+        coordinateSystem: 'geo',
+        zlevel: 5,
+        rippleEffect: {
+          brushType: 'fill',
+          scale: 4,
+        },
+        symbolSize: 14,
+        itemStyle: {
+          color: '#22c55e',
+          shadowBlur: 16,
+          shadowColor: 'rgba(34, 197, 94, 0.55)',
+        },
+        data: [{
+          name: '中国·北京',
+          value: [...chinaTarget, 5],
+          isTarget: true,
+        }],
+      },
+    ],
+    animationDuration: 700,
+    animationDurationUpdate: 900,
   }
+})
+
+const serviceData = computed(() => ({
+  labels: payload.value.hot_services.slice(0, 6).map((x) => x.name),
+  datasets: [{
+    label: '攻击次数',
+    data: payload.value.hot_services.slice(0, 6).map((x) => x.count),
+    backgroundColor: '#8b5cf6',
+    borderRadius: 6,
+  }],
+}))
+
+function formatThreatLevel(level?: string) {
+  if (!level) return '未分级'
+  const lower = level.toLowerCase()
+  if (level === '高危' || lower === 'high') return '高危'
+  if (level === '中危' || lower === 'medium') return '中危'
+  if (level === '低危' || lower === 'low') return '低危'
+  return level
 }
 
-function unwrap<T>(payload: any): T {
-  return (payload?.data ?? payload) as T
+function formatOnlineStatus(status?: string) {
+  if (!status) return '未知'
+  const lower = status.toLowerCase()
+  if (lower === 'online' || lower === 'up') return '在线'
+  if (lower === 'offline' || lower === 'down') return '离线'
+  return '未知'
 }
 
-async function load() {
-  loading.value = true
+async function loadScreen() {
+  if (!payload.value.recent_attacks.length) {
+    loading.value = true
+  }
   loadError.value = ''
-  partialError.value = []
-
-  const [m, cs, st] = await Promise.allSettled([
-    api.get<any>('/api/v1/overview/metrics'),
-    api.get<any>('/api/v1/overview/chain-status'),
-    api.get<any>('/api/v1/defense/hfish/stats'),
-  ])
-
-  if (m.status === 'fulfilled') {
-    const d = unwrap<any>(m.value)
-    metrics.value = {
-      hfish_total: d.hfish_total ?? d.total_attacks ?? 0,
-      hfish_high: d.hfish_high ?? 0,
-      nmap_online: d.nmap_online ?? 0,
-      vuln_open: d.vuln_open ?? 0,
-      ai_decisions: d.ai_decisions ?? 0,
-      blocked_ips: d.blocked_ips ?? 0,
-    }
-  } else {
-    metrics.value = { ...EMPTY_METRICS }
-    loadError.value = '核心指标加载失败，请稍后刷新重试'
+  try {
+    const res = await api.get<any>('/api/v1/overview/screen')
+    payload.value = (res?.data ?? res) as ScreenPayload
+  } catch (e: any) {
+    loadError.value = e?.message || '大屏数据加载失败'
+  } finally {
+    loading.value = false
   }
-
-  if (cs.status === 'fulfilled') {
-    chainStatus.value = unwrap<Record<string, boolean>>(cs.value)
-  } else {
-    chainStatus.value = {}
-    partialError.value.push('防御链路状态加载失败')
-  }
-
-  if (st.status === 'fulfilled') {
-    const sd = unwrap<any>(st.value)
-    const threat = sd.threat_stats ?? []
-    hfishStats.value = {
-      levels: threat.map((t: any) => t.level),
-      counts: threat.map((t: any) => t.count),
-      colors: threat.map((t: any) => THREAT_COLORS[t.level] ?? '#9E9E9E'),
-      services: Object.fromEntries((sd.service_stats ?? []).map((s: any) => [s.name, s.count]))
-    }
-    const ts = sd.time_stats ?? []
-    trends.value = {
-      labels: ts.map((t: any) => t.date),
-      counts: ts.map((t: any) => t.count)
-    }
-  } else {
-    trends.value = { labels: [], counts: [] }
-    hfishStats.value = { levels: [], counts: [], colors: [], services: {} }
-    partialError.value.push('攻击统计图表加载失败')
-  }
-
-  loading.value = false
 }
 
-let refreshTimer: ReturnType<typeof setInterval>
-onMounted(() => { load(); refreshTimer = setInterval(load, 30_000) })
-onUnmounted(() => clearInterval(refreshTimer))
+async function ensureWorldMap() {
+  if (mapReady.value) return
+  const res = await fetch('/countries-110m.json')
+  const topology = await res.json() as any
+  const worldGeoJson = feature(topology, topology.objects.countries)
+  registerMap('world', worldGeoJson as any)
+  mapReady.value = true
+}
+
+async function scrollAiToBottom() {
+  await nextTick()
+  aiEndRef.value?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+}
+
+async function sendAiMessage(prompt?: string) {
+  const text = (prompt ?? aiInput.value).trim()
+  if (!text || aiLoading.value) return
+
+  aiError.value = ''
+  aiMessages.value.push({ role: 'user', content: text })
+  aiMessages.value.push({ role: 'assistant', content: '' })
+  if (!prompt) aiInput.value = ''
+  aiLoading.value = true
+  await scrollAiToBottom()
+
+  try {
+    const token = localStorage.getItem('token') || ''
+    const resp = await fetch('/api/v1/ai/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify({
+        message: text,
+        session_id: aiSessionId.value ?? undefined,
+        context_type: 'dashboard',
+        context_id: String(activeView.value),
+      }),
+    })
+
+    if (!resp.ok || !resp.body) {
+      throw new Error('AI 服务暂不可用')
+    }
+
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() || ''
+
+      for (const event of events) {
+        const line = event.split('\n').find((x) => x.startsWith('data: '))
+        if (!line) continue
+
+        try {
+          const parsed = JSON.parse(line.slice(6))
+          if (parsed.session_id) {
+            aiSessionId.value = Number(parsed.session_id)
+          }
+          if (parsed.error) {
+            aiError.value = String(parsed.error)
+            continue
+          }
+          if (parsed.content) {
+            const lastIndex = aiMessages.value.length - 1
+            const last = aiMessages.value[lastIndex]
+            if (last && last.role === 'assistant') {
+              aiMessages.value[lastIndex] = { ...last, content: `${last.content}${String(parsed.content)}` }
+            }
+            await scrollAiToBottom()
+          }
+        } catch {
+          // 忽略无法解析的 SSE 帧
+        }
+      }
+    }
+  } catch (e: any) {
+    aiError.value = e?.message || 'AI 响应异常'
+    const lastIndex = aiMessages.value.length - 1
+    if (lastIndex >= 0 && aiMessages.value[lastIndex].role === 'assistant' && !aiMessages.value[lastIndex].content) {
+      aiMessages.value[lastIndex].content = '抱歉，当前 AI 服务不可用，请稍后重试。'
+    }
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+let timer: ReturnType<typeof setInterval>
+onMounted(() => {
+  ensureWorldMap().catch(() => {
+    loadError.value = '世界地图资源加载失败'
+  })
+  loadScreen()
+  timer = setInterval(loadScreen, 15_000)
+})
+onUnmounted(() => {
+  clearInterval(timer)
+})
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
-    <!-- Notifications -->
-    <div v-if="loadError || partialError.length" class="space-y-3">
-      <Alert v-if="loadError" variant="destructive" class="bg-red-500/10 border-red-500/20">
-        <AlertTriangle class="h-4 w-4" />
-        <AlertDescription>{{ loadError }}</AlertDescription>
-      </Alert>
-      <Alert v-if="partialError.length" variant="default" class="bg-amber-500/10 border-amber-500/20 text-amber-500">
-        <ShieldAlert class="h-4 w-4" />
-        <AlertDescription>{{ partialError.join('；') }}</AlertDescription>
-      </Alert>
-    </div>
+  <div class="h-full w-full overflow-hidden p-4 md:p-6">
+    <div class="grid h-full grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+      <!-- 左栏：态势摘要 -->
+      <aside class="min-h-0 overflow-hidden pr-1">
+        <ScrollArea class="h-full">
+        <div class="space-y-4 pr-2">
+        <Card>
+          <CardHeader class="pb-3">
+            <CardTitle class="text-sm flex items-center gap-2"><Activity class="h-4 w-4 text-primary" /> 态势摘要</CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-2">
+            <div class="grid grid-cols-2 gap-2">
+              <div v-for="item in metricCards" :key="item.key" class="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                <p class="text-[10px] tracking-wide text-muted-foreground">{{ item.label }}</p>
+                <p class="text-base font-semibold leading-5" :class="item.color">{{ item.value }}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-    <!-- Stat Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      <Card 
-        v-for="s in statCards" 
-        :key="s.key" 
-        class="bg-card/40 border relative overflow-hidden group hover:border-border transition-all"
-      >
-        <div class="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
-          <Bug v-if="s.icon === Bug" :size="48" :stroke-width="1.5" :class="s.color" />
-          <ShieldAlert v-else-if="s.icon === ShieldAlert" :size="48" :stroke-width="1.5" :class="s.color" />
-          <History v-else-if="s.icon === History" :size="48" :stroke-width="1.5" :class="s.color" />
-          <Server v-else-if="s.icon === Server" :size="48" :stroke-width="1.5" :class="s.color" />
-          <Bot v-else-if="s.icon === Bot" :size="48" :stroke-width="1.5" :class="s.color" />
-          <Ban v-else-if="s.icon === Ban" :size="48" :stroke-width="1.5" :class="s.color" />
-          <Activity v-else :size="48" :stroke-width="1.5" :class="s.color" />
+        <Card>
+          <CardHeader class="pb-2">
+            <CardTitle class="text-sm">实时攻击趋势与来源</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div class="h-44">
+              <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
+              <Skeleton v-else-if="loading" class="h-full w-full" />
+              <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader class="pb-2">
+            <CardTitle class="text-sm">热门攻击服务</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div class="h-44">
+              <Bar v-if="payload.hot_services.length" :data="serviceData" :options="{ responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#94a3b8' } }, y: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }" />
+              <Skeleton v-else-if="loading" class="h-full w-full" />
+              <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
+            </div>
+          </CardContent>
+        </Card>
         </div>
-        <CardContent class="p-5 relative z-10">
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{{ s.label }}</p>
-          <div class="flex items-center">
-            <h2 v-if="!loading" class="text-3xl font-bold tracking-tight" :class="s.color">
-              {{ (metrics as any)[s.key] }}
-            </h2>
-            <Skeleton v-else class="h-8 w-20 bg-muted" />
-          </div>
-          <div class="mt-2 h-1 w-12 rounded-full" :class="s.bg"></div>
-        </CardContent>
-      </Card>
-    </div>
+        </ScrollArea>
+      </aside>
 
-    <!-- Charts Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <!-- Line Chart -->
-      <Card class="lg:col-span-8 border border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <History class="h-4 w-4 text-primary" />
-            攻击趋势（近 7 天）
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="h-[240px] w-full">
-            <Line 
-              v-if="trends.labels.length" 
-              :data="{ 
-                labels: trends.labels, 
-                datasets: [{ 
-                  label: '攻击次数', 
-                  data: trends.counts, 
-                  borderColor: '#00E5FF', 
-                  backgroundColor: 'rgba(0,229,255,.08)', 
-                  fill: true, 
-                  tension: 0.4,
-                  pointRadius: 4,
-                  pointBackgroundColor: '#00E5FF',
-                  borderWidth: 2
-                }] 
-              }" 
-              :options="trendOptions" 
-            />
-            <Skeleton v-else-if="loading" class="h-full w-full rounded-lg" />
-            <div v-else class="h-full flex items-center justify-center text-muted-foreground text-sm italic">
-              {{ partialError.includes('攻击统计图表加载失败') ? '数据加载异常' : '暂无统计数据' }}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <!-- 中栏：主战场 -->
+      <main class="min-h-0 flex flex-col gap-4 overflow-hidden">
+        <Card class="shrink-0">
+          <CardContent class="p-3 flex items-center gap-2 overflow-x-auto">
+            <Button :variant="activeView === 'map' ? 'default' : 'outline'" size="sm" @click="activeView = 'map'"><Globe class="h-4 w-4 mr-1" /> 攻击地图</Button>
+            <Button :variant="activeView === 'topology' ? 'default' : 'outline'" size="sm" @click="activeView = 'topology'"><Network class="h-4 w-4 mr-1" /> 网络拓扑</Button>
+            <Button :variant="activeView === 'lan' ? 'default' : 'outline'" size="sm" @click="activeView = 'lan'"><ScanLine class="h-4 w-4 mr-1" /> 内网侦测</Button>
+            <Button :variant="activeView === 'switch' ? 'default' : 'outline'" size="sm" @click="activeView = 'switch'"><Router class="h-4 w-4 mr-1" /> 交换机策略</Button>
+          </CardContent>
+        </Card>
 
-      <!-- Doughnut Chart -->
-      <Card class="lg:col-span-4 border border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <ShieldAlert class="h-4 w-4 text-primary" />
-            威胁等级分布
-          </CardTitle>
-        </CardHeader>
-        <CardContent class="flex items-center justify-center pt-2">
-          <div class="h-[240px] w-full flex items-center justify-center">
-            <Doughnut
-              v-if="hfishStats.levels.length"
-              :data="{ 
-                labels: hfishStats.levels, 
-                datasets: [{ 
-                  data: hfishStats.counts, 
-                  backgroundColor: hfishStats.colors,
-                  borderWidth: 0,
-                  hoverOffset: 8
-                }] 
-              }"
-              :options="{ 
-                responsive: true, 
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'bottom',
-                    labels: { color: '#94a3b8', boxWidth: 10, padding: 20, font: { size: 10 } }
-                  }
-                }
-              }"
-            />
-            <Skeleton v-else-if="loading" class="h-48 w-48 rounded-full" />
-            <div v-else class="text-muted-foreground text-sm italic">
-              暂无等级统计
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <Card class="flex-1 min-h-0 overflow-hidden">
+          <CardHeader class="pb-2">
+            <CardTitle class="text-sm flex items-center gap-2">
+              <Radar class="h-4 w-4 text-primary" />
+              <span v-if="activeView === 'map'">攻击地图面板</span>
+              <span v-else-if="activeView === 'topology'">网络拓扑视图</span>
+              <span v-else-if="activeView === 'lan'">内网资产侦测</span>
+              <span v-else>交换机策略与状态</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="h-[calc(100%-48px)] overflow-hidden p-0">
+            <ScrollArea class="h-full px-6 pb-6">
+            <div v-if="loadError" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{{ loadError }}</div>
 
-    <!-- Defense Status & Popular Services -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card class="border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <Bot class="h-4 w-4 text-primary" />
-            防御链路状态
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div v-if="Object.keys(chainStatus).length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 py-2">
-            <div 
-              v-for="ci in chainItems" 
-              :key="ci.key" 
-              class="flex items-center gap-3 p-2.5 rounded-lg border border-transparent transition-all"
-              :class="[chainStatus[ci.key] ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' : 'bg-muted/10 text-slate-500 border-dashed border-border/50']"
-            >
-              <CheckCircle2 v-if="chainStatus[ci.key]" class="h-4 w-4 shrink-0" />
-              <Circle v-else class="h-4 w-4 shrink-0" />
-              <span class="text-sm font-medium">{{ ci.label }}</span>
-            </div>
-          </div>
-          <div v-else-if="loading" class="space-y-3 py-2">
-            <Skeleton v-for="i in 4" :key="i" class="h-10 w-full" />
-          </div>
-          <div v-else class="py-10 text-center text-muted-foreground text-sm italic">
-            链路数据暂时不可用
-          </div>
-        </CardContent>
-      </Card>
+            <template v-else-if="activeView === 'map'">
+              <div class="h-[30rem] xl:h-[34rem] rounded-xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_16%,rgba(34,211,238,0.2),transparent_45%),radial-gradient(circle_at_86%_4%,rgba(56,189,248,0.22),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(15,118,110,0.2),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.62),rgba(2,6,23,0.92))] p-1.5 shadow-[0_0_0_1px_rgba(34,211,238,0.1),0_20px_50px_rgba(2,132,199,0.22)]">
+                <VChart v-if="mapReady && payload.recent_attacks.length" :option="globalMapOption" autoresize class="h-full w-full" />
+                <Skeleton v-else-if="loading" class="h-full w-full" />
+                <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无攻击来源数据</div>
+              </div>
+              <div class="mt-4 space-y-2">
+                <div v-for="(item, idx) in payload.recent_attacks" :key="`${item.attack_ip}-${idx}`" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <p class="font-mono text-sm text-foreground">{{ item.attack_ip }}</p>
+                      <p class="text-xs text-muted-foreground">{{ item.ip_location || '未知地区' }} · {{ item.service_name || '未知服务' }}</p>
+                    </div>
+                    <Badge variant="outline">{{ formatThreatLevel(item.threat_level) }}</Badge>
+                  </div>
+                </div>
+              </div>
+            </template>
 
-      <Card class="border-border/50">
-        <CardHeader class="pb-2">
-          <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
-            <Flame class="h-4 w-4 text-primary" />
-            热门攻击服务
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="h-[160px] w-full overflow-hidden">
-            <Bar
-              v-if="Object.keys(hfishStats.services).length"
-              :data="{
-                labels: Object.keys(hfishStats.services).slice(0,6),
-                datasets: [{ 
-                  label: '攻击次数', 
-                  data: Object.values(hfishStats.services).slice(0,6), 
-                  backgroundColor: '#8B5CF6', 
-                  borderRadius: 6 
-                }]
-              }"
-              :options="{ 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                indexAxis: 'y', 
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-                  y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
-                }
-              }"
-            />
-            <Skeleton v-else-if="loading" class="h-full w-full rounded-lg" />
-            <div v-else class="h-full flex items-center justify-center text-muted-foreground text-sm italic">
-              暂无服务统计数据
+            <template v-else-if="activeView === 'topology'">
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div v-for="node in payload.topology.nodes" :key="node.id" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div class="flex items-center justify-between">
+                    <p class="font-medium">{{ node.label }}</p>
+                    <Badge :class="formatOnlineStatus(node.status) === '在线' ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ formatOnlineStatus(node.status) }}</Badge>
+                  </div>
+                  <p class="mt-1 text-xs text-muted-foreground">类型: {{ node.type }}</p>
+                </div>
+              </div>
+              <div class="mt-4 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                <p class="text-xs text-muted-foreground mb-2">链路关系</p>
+                <div class="space-y-1 text-sm">
+                  <div v-for="(link, idx) in payload.topology.links" :key="idx">{{ link.source }} -> {{ link.target }} ({{ link.type }})</div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activeView === 'lan'">
+              <div class="space-y-2">
+                <div v-for="host in payload.lan_hosts" :key="host.ip" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="font-mono text-sm">{{ host.ip }}</p>
+                      <p class="text-xs text-muted-foreground">{{ host.hostname }} · {{ host.os_type }}</p>
+                    </div>
+                    <Badge :class="formatOnlineStatus(host.state) === '在线' ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ formatOnlineStatus(host.state) }}</Badge>
+                  </div>
+                  <p class="mt-1 text-xs text-muted-foreground">开放端口: {{ host.open_ports.length ? host.open_ports.join(', ') : '-' }}</p>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="space-y-2">
+                <div v-for="sw in payload.switches" :key="sw.host" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div class="flex items-center justify-between">
+                    <p class="font-mono text-sm">{{ sw.host }}:{{ sw.port }}</p>
+                    <Badge :class="sw.enabled ? 'text-emerald-400 border-emerald-400/40' : 'text-slate-400 border-slate-400/40'" variant="outline">{{ sw.enabled ? '启用' : '停用' }}</Badge>
+                  </div>
+                  <p class="mt-1 text-xs text-muted-foreground">ACL: {{ sw.acl_number }}</p>
+                </div>
+              </div>
+            </template>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </main>
+
+      <!-- 右栏：AI 侧边栏 + 防御队列 -->
+      <aside class="min-h-0 overflow-hidden space-y-4 pl-1 flex flex-col">
+        <Card class="flex-1 min-h-0 overflow-hidden">
+          <CardHeader class="pb-2">
+            <CardTitle class="text-sm flex items-center gap-2"><Bot class="h-4 w-4 text-primary" /> AI 指挥侧边栏</CardTitle>
+          </CardHeader>
+          <CardContent class="h-[calc(100%-52px)] p-3 flex flex-col gap-3 min-h-0">
+            <ScrollArea class="w-full">
+              <div class="flex items-center gap-1.5 pb-1">
+              <Button
+                v-for="item in quickPrompts"
+                :key="item.label"
+                variant="outline"
+                size="sm"
+                :disabled="aiLoading"
+                @click="sendAiMessage(item.prompt)"
+                class="h-7 px-2.5 text-[11px] whitespace-nowrap rounded-full"
+              >
+                <Sparkles class="h-3 w-3 mr-1" /> {{ item.label }}
+              </Button>
+              </div>
+            </ScrollArea>
+
+            <ScrollArea class="flex-1 rounded-lg border border-border/60 bg-muted/20 p-3">
+              <div class="space-y-3">
+                <div v-if="!aiMessages.length" class="text-xs text-muted-foreground">输入问题，AI 会基于当前大屏状态给出防御建议。</div>
+                <div
+                  v-for="(msg, idx) in aiMessages"
+                  :key="idx"
+                  class="rounded-lg border px-2.5 py-2 text-xs leading-relaxed"
+                  :class="msg.role === 'assistant' ? 'bg-primary/5 border-primary/20 text-foreground' : 'bg-background border-border/60 text-muted-foreground'"
+                >
+                  <p class="mb-1 font-semibold opacity-80">{{ msg.role === 'assistant' ? 'AI' : '你' }}</p>
+                  <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                </div>
+                <div ref="aiEndRef" />
+              </div>
+            </ScrollArea>
+
+            <div class="space-y-2">
+              <p v-if="aiError" class="text-[11px] text-destructive">{{ aiError }}</p>
+              <Textarea v-model="aiInput" :disabled="aiLoading" rows="3" placeholder="例如：请给出当前最高风险攻击源及封禁优先级" />
+              <div class="flex items-center gap-2">
+                <Button class="flex-1" :disabled="aiLoading || !aiInput.trim()" @click="sendAiMessage()">
+                  <Loader2 v-if="aiLoading" class="h-4 w-4 mr-2 animate-spin" />
+                  <Send v-else class="h-4 w-4 mr-2" />
+                  {{ aiLoading ? '分析中...' : '发送' }}
+                </Button>
+                <Button variant="outline" :disabled="aiLoading" @click="router.push('/ai')">全屏</Button>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader class="pb-2">
+            <CardTitle class="text-sm">防御处置队列</CardTitle>
+          </CardHeader>
+          <CardContent class="p-0">
+            <ScrollArea class="h-56 px-6 py-3">
+            <div class="space-y-2">
+            <div v-for="item in payload.defense_events" :key="item.attack_ip" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+              <div class="flex items-center justify-between">
+                <p class="font-mono text-sm">{{ item.attack_ip }}</p>
+                <Badge variant="outline">{{ item.attack_count }} 次</Badge>
+              </div>
+              <p class="text-xs text-muted-foreground mt-1">{{ item.ip_location || '未知地区' }} · {{ item.latest_time || '-' }}</p>
+              <p class="text-xs mt-1" :class="item.ai_decision === 'true' ? 'text-red-400' : 'text-muted-foreground'">AI 决策: {{ item.ai_decision === 'true' ? '建议封禁' : '待分析' }}</p>
+            </div>
+            <div v-if="!payload.defense_events.length && !loading" class="text-sm text-muted-foreground">暂无待处置事件</div>
+            </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </aside>
     </div>
   </div>
 </template>
