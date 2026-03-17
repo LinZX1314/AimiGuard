@@ -24,7 +24,7 @@ watch(() => auth.isLoggedIn, (v) => {
       mode="out-in"
       appear
     >
-      <component :is="Component" :key="route.path" />
+      <component :is="Component" :key="route.meta.public ? 'public' : 'private'" />
     </transition>
   </router-view>
   <!-- Global Error Toast -->

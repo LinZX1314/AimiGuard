@@ -42,7 +42,7 @@ const page     = ref(1)
 const pageSize = ref(50)
 const total    = ref(0)
 
-const headers = ['漏洞名称', '主机 IP', '严重性', '状态 / 发现时间', '操作']
+const headers = ['漏洞名称', '主机 IP', '严重度', '状态 / 发现时间', '操作']
 
 const severities = ['严重', '高危', '中危', '低危', '信息']
 const statuses   = ['open', 'fixed', 'ignored', 'false_positive']
@@ -60,6 +60,14 @@ const STA_STYLES: Record<string, string> = {
   fixed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   ignored: 'bg-slate-800 text-slate-500 border-white/5',
   false_positive: 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+}
+
+// 后端状态值保持英文，前端统一显示中文
+const STATUS_TEXT: Record<string, string> = {
+  open: '待处理',
+  fixed: '已修复',
+  ignored: '已忽略',
+  false_positive: '误报'
 }
 
 const filteredVulns = computed(() => {
@@ -136,7 +144,7 @@ onMounted(load)
     </div>
 
     <!-- Main List Card -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader class="pb-4 border-b flex flex-row items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2 bg-orange-500/10 rounded-lg">
@@ -169,7 +177,7 @@ onMounted(load)
             <Filter :size="16" class="text-slate-500" />
             <Select v-model="sevFlt" @update:model-value="load">
               <SelectTrigger class="w-36 h-10 bg-black/20 border-border/40">
-                <SelectValue placeholder="严重性" />
+                <SelectValue placeholder="严重度" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">全部等级</SelectItem>
@@ -178,11 +186,11 @@ onMounted(load)
             </Select>
             <Select v-model="statusFlt" @update:model-value="load">
               <SelectTrigger class="w-36 h-10 bg-black/20 border-border/40">
-                <SelectValue placeholder="修复状态" />
+                <SelectValue placeholder="状态" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">全部状态</SelectItem>
-                <SelectItem v-for="s in statuses" :key="s" :value="s">{{ s }}</SelectItem>
+                <SelectItem v-for="s in statuses" :key="s" :value="s">{{ STATUS_TEXT[s] || s }}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -206,7 +214,7 @@ onMounted(load)
                 <tr v-for="v in filteredVulns" :key="v.id" class="hover:bg-white/5 transition-colors">
                   <td class="py-4 px-5">
                     <div class="flex flex-col gap-1 max-w-[280px]">
-                      <span class="font-bold text-slate-200 leading-tight">{{ v.vuln_name }}</span>
+                      <span class="font-bold text-foreground leading-tight">{{ v.vuln_name }}</span>
                       <span class="text-[10px] font-mono text-slate-500 overflow-hidden truncate">CVE-ID: {{ v.cve_id || 'UNKNOWN' }}</span>
                     </div>
                   </td>
@@ -226,7 +234,7 @@ onMounted(load)
                   <td class="py-4 px-5">
                     <div class="flex flex-col gap-1">
                       <Badge :class="STA_STYLES[v.status] || 'bg-slate-500/10'" class="w-fit text-[10px] px-2 h-5">
-                        {{ v.status.toUpperCase() }}
+                        {{ STATUS_TEXT[v.status] || v.status }}
                       </Badge>
                       <span class="text-[10px] text-slate-500">{{ v.created_at?.slice(0,16) }}</span>
                     </div>

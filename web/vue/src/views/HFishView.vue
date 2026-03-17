@@ -83,7 +83,7 @@ const trend = ref({
 const logs = ref<HFishLogItem[]>([])
 
 const statCards = computed(() => [
-  { key: 'total', title: '攻击总数量', value: detailStats.value.total_attacks, icon: Shield, color: 'text-primary' },
+  { key: 'total', title: '攻击总数', value: detailStats.value.total_attacks, icon: Shield, color: 'text-primary' },
   { key: 'nodes', title: '攻击节点数', value: detailStats.value.unique_nodes, icon: Server, color: 'text-emerald-400' },
   { key: 'ips', title: '来源 IP 数', value: detailStats.value.unique_ips, icon: Globe, color: 'text-amber-400' },
   { key: 'latest', title: '最新攻击时间', value: detailStats.value.latest_attack_time, icon: Clock3, color: 'text-violet-400' },
@@ -98,6 +98,13 @@ const serviceCards = computed(() => {
     (item.latest_client_id || '').toLowerCase().includes(kw),
   )
 })
+
+const serviceCount = computed(() => typeTabs.value.length)
+const avgAttacksPerService = computed(() => {
+  if (!serviceCount.value) return 0
+  return Math.round(totalAttacks.value / serviceCount.value)
+})
+const selectedServiceLabel = computed(() => expandedService.value || '全部服务')
 
 const filteredLogs = computed(() => {
   const kw = search.value.toLowerCase()
@@ -330,27 +337,52 @@ onMounted(async () => {
 
 <template>
   <div class="p-6 space-y-6">
-    <Card class="bg-card/40 border-border/50 border-l-[4px] border-l-primary">
-      <CardContent class="p-5 flex items-center justify-between gap-4">
-        <div>
-          <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">HFish 攻击总量</p>
-          <h2 class="text-4xl font-bold text-primary mt-1">{{ totalAttacks }}</h2>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          @click="manualSync"
-          :disabled="loadingDetail"
-          class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-        >
-          <RotateCw v-if="loadingDetail" class="h-4 w-4 mr-2 animate-spin" />
-          <RefreshCw v-else class="h-4 w-4 mr-2" />
-          手动同步
-        </Button>
-      </CardContent>
-    </Card>
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <Card class="border-l-[4px] border-l-primary xl:col-span-2">
+        <CardContent class="p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">HFish 攻击总量</p>
+              <h2 class="text-4xl font-bold text-primary mt-1">{{ totalAttacks }}</h2>
+              <p class="text-xs text-muted-foreground mt-1">展示最近同步到本地的攻击聚合统计</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              @click="manualSync"
+              :disabled="loadingDetail"
+              class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+            >
+              <RotateCw v-if="loadingDetail" class="h-4 w-4 mr-2 animate-spin" />
+              <RefreshCw v-else class="h-4 w-4 mr-2" />
+              手动同步
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-    <Card class="bg-card/40 border border-border/50">
+      <Card class="border-border/50">
+        <CardHeader class="pb-2">
+          <CardTitle class="text-sm">统计概览</CardTitle>
+        </CardHeader>
+        <CardContent class="pt-0 space-y-2">
+          <div class="flex items-center justify-between rounded-md border border-border/50 bg-black/20 px-3 py-2 text-xs">
+            <span class="text-muted-foreground">服务数</span>
+            <span class="font-semibold">{{ serviceCount }}</span>
+          </div>
+          <div class="flex items-center justify-between rounded-md border border-border/50 bg-black/20 px-3 py-2 text-xs">
+            <span class="text-muted-foreground">每服务均值</span>
+            <span class="font-semibold">{{ avgAttacksPerService }}</span>
+          </div>
+          <div class="flex items-center justify-between rounded-md border border-border/50 bg-black/20 px-3 py-2 text-xs">
+            <span class="text-muted-foreground">当前查看</span>
+            <span class="font-semibold truncate max-w-[180px] text-right">{{ selectedServiceLabel }}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <Card class="border-border/50">
       <CardHeader class="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <CardTitle class="text-base flex items-center gap-2">
           <Activity class="h-4 w-4 text-primary" />
@@ -407,7 +439,7 @@ onMounted(async () => {
 
             <div v-if="expandedService === item.name" class="border-t border-border/50 bg-muted/40 p-4 space-y-4">
               <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                <Card v-for="s in statCards" :key="s.key" class="bg-card/40 border-border/50">
+                <Card v-for="s in statCards" :key="s.key" class="">
                   <CardContent class="p-3">
                     <div class="flex items-center justify-between">
                       <div>
@@ -420,7 +452,7 @@ onMounted(async () => {
                 </Card>
               </div>
 
-              <Card class="bg-card/40 border-border/50">
+              <Card>
                 <CardHeader class="pb-2">
                   <CardTitle class="text-sm">当前蜜罐攻击趋势</CardTitle>
                 </CardHeader>
@@ -500,6 +532,7 @@ onMounted(async () => {
                 v-model:page="page"
                 v-model:page-size="pageSize"
                 :total="total"
+                :page-sizes="[20, 50, 100, 200, 500]"
                 @update:page="onPageChange"
                 @update:page-size="onPageSizeChange"
               />

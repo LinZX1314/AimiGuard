@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -193,7 +193,7 @@ async function startWaveform() {
       renderWaveformFrame()
     }
   } catch (error) {
-    console.error('启动麦克风波形失败:', error)
+    console.error('初始化麦克风波形失败:', error)
     voiceError.value = '无法访问麦克风，请确认浏览器权限已开启。'
     resetWaveform()
   }
@@ -230,7 +230,7 @@ if (SpeechRecognition) {
     listening.value = false
     stopWaveform()
     voiceError.value = event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
-      ? '麦克风权限被拒绝，请允许浏览器访问麦克风。'
+      ? '麦克风权限被拒绝，请在浏览器设置中允许访问。'
       : `语音识别不可用：${event?.error || '未知错误'}`
   }
 
@@ -242,7 +242,7 @@ if (SpeechRecognition) {
 
 function startSpeechRecognition() {
   if (!recognition) {
-    voiceError.value = '当前浏览器不支持语音识别。'
+    voiceError.value = '当前浏览器不支持语音识别'
     return
   }
 
@@ -254,7 +254,7 @@ function startSpeechRecognition() {
     listening.value = true
   } catch (error) {
     console.error('启动语音识别失败:', error)
-    voiceError.value = '语音识别启动失败，请稍后重试。'
+    voiceError.value = '启动语音识别失败，请稍后重试。'
     listening.value = false
   }
 }
@@ -320,7 +320,7 @@ function speak(text: string) {
 
 
 function toggleTts() {
-  // 切换 TTS 开关时，停止当前正在播放的语音
+  // 切换 TTS 状态时，停止当前正在播放的语音
   if (ttsEnabled.value && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
@@ -334,10 +334,10 @@ function stopGenerating() {
 // Markdown -------------------------------------------------------------------
 function renderMd(text: string): string {
   const rawHtml = marked.parse(text, { breaks: true, gfm: true }) as string
-  // 对 marked 输出进行消毒，防止 XSS 攻击
+  // 对 marked 渲染结果进行清洗，防止 XSS 注入
   const safeHtml = DOMPurify.sanitize(rawHtml, {
-    ADD_ATTR: ['target'],  // 允许 target 属性
-    ADD_TAGS: ['details', 'summary']  // 允许 details/summary 标签
+    ADD_ATTR: ['target'],
+    ADD_TAGS: ['details', 'summary']
   })
   return safeHtml.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
 }
@@ -387,7 +387,7 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
       while (cursor < source.length) {
         const next = source[cursor]
         if (next.role === 'tool') {
-          // 尝试匹配对应的 tool_call，如果后端没有返回 id，则按顺序绑定
+          // 优先按 tool_call_id 匹配，缺失时按顺序回退
           let matchedCall = current.tool_calls?.find(tc => tc.id === next.tool_call_id)
           if (!matchedCall && seqIndex < current.tool_calls.length) {
             matchedCall = current.tool_calls[seqIndex]
@@ -521,7 +521,7 @@ async function send(extraParams: any = {}) {
 
   sending.value = true
 
-  // 使用 reactive 包装，确保闭包内的修改也能触发 Vue 响应式更新
+  // 使用 reactive 包装，确保深层字段改动能触发响应式更新
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
   messages.value.push(assistantMsg as any)
   await nextTick(); scrollBottom()
@@ -560,9 +560,9 @@ async function send(extraParams: any = {}) {
 
     let isNewSession = !currentSession.value || currentSession.value === -1
     let sessionId = currentSession.value === -1 ? null : currentSession.value
-    let buffer = '' // 增量缓冲区
+    let buffer = '' // 分块缓冲区
     
-    // 用于打字机效果的队列
+    // 打字机效果队列
     let typeQueue = ''
     let typeInterval: any = null
 
@@ -570,7 +570,7 @@ async function send(extraParams: any = {}) {
       if (typeInterval) return
       typeInterval = setInterval(() => {
         if (typeQueue.length > 0) {
-          // 根据队列长度动态输出，防止积压导致过长延迟
+          // 根据队列长度动态提速，避免长文本明显滞后
           const popCount = Math.max(1, Math.ceil(typeQueue.length / 15))
           const hasTools = (assistantMsg as any).tool_calls?.length > 0 || (assistantMsg as any).tool_results?.length > 0
           if (hasTools) {
@@ -581,7 +581,7 @@ async function send(extraParams: any = {}) {
           typeQueue = typeQueue.slice(popCount)
           nextTick(() => scrollBottom())
         }
-      }, 30) // 30ms 刷新频率，兼顾流畅度与性能
+      }, 30) // 30ms 刷新频率，兼顾流畅与性能
     }
 
     while (true) {
@@ -591,7 +591,7 @@ async function send(extraParams: any = {}) {
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       
-      // 保留最后一段可能不完整的行
+      // 最后一行可能是不完整数据，留待下轮拼接
       buffer = lines.pop() || ''
 
       for (const line of lines) {
@@ -607,7 +607,7 @@ async function send(extraParams: any = {}) {
             typeQueue += parsed.content
             startTypewriter()
           }
-          // 工具调用：AI 正在调用工具
+          // 工具调用事件
           if (parsed.tool_call) {
             if (typeQueue) {
               const hasTools = (assistantMsg as any).tool_calls?.length > 0
@@ -626,14 +626,14 @@ async function send(extraParams: any = {}) {
             })
             nextTick(() => scrollBottom())
           }
-          // 工具结果：工具执行完毕
+          // 工具执行结果事件
           if (parsed.tool_result) {
             if (typeQueue) {
               assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
               typeQueue = ''
             }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
-            // 优先使用后端返回的 tool_call_id 匹配，否则 fallback 到最后一个 tool_call
+            // 优先用后端返回的 tool_call_id 匹配，否则回退到最后一个 tool_call
             const matchedToolCall = parsed.tool_call_id
               ? (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === parsed.tool_call_id)
               : (assistantMsg as any).tool_calls?.slice(-1)[0]
@@ -644,7 +644,7 @@ async function send(extraParams: any = {}) {
             })
             nextTick(() => scrollBottom())
           }
-          // 错误处理：后端返回的错误信息
+          // 后端返回错误事件
           if (parsed.error) {
             if (typeQueue) {
               const hasTools = (assistantMsg as any).tool_calls?.length > 0
@@ -655,10 +655,10 @@ async function send(extraParams: any = {}) {
               }
               typeQueue = ''
             }
-            // 在消息中显示错误
+            // 如果界面还没有任何内容，直接显示错误
             const errorContent = assistantMsg.content || assistantMsg.post_content
             if (!errorContent) {
-              assistantMsg.content = `⚠️ ${parsed.error}`
+              assistantMsg.content = `错误：${parsed.error}`
             }
             nextTick(() => scrollBottom())
           }
@@ -675,7 +675,7 @@ async function send(extraParams: any = {}) {
       }
     }
 
-    // 语音播报
+    // 触发语音播报
     speak(assistantMsg.content)
   } catch(e: unknown) {
     const isAbort = e instanceof DOMException
@@ -688,7 +688,7 @@ async function send(extraParams: any = {}) {
         assistantMsg.content = '已停止生成'
       }
     } else {
-      assistantMsg.content = `⚠️ ${e instanceof Error ? e.message : '请求失败'}`
+      assistantMsg.content = `错误：${e instanceof Error ? e.message : '请求失败'}`
     }
   } finally {
     if (activeChatController.value === controller) {
@@ -701,7 +701,7 @@ async function send(extraParams: any = {}) {
 function newChat() {
   messages.value = []
   currentSession.value = -1
-  // 移除旧的未发送消息的占位对话，避免堆积
+  // 移除旧的占位会话，避免重复
   sessions.value = sessions.value.filter(s => s.id !== -1)
   sessions.value.unshift({
     id: -1,
@@ -727,11 +727,11 @@ const route = useRoute()
 async function onPageLoad() {
   await loadSessions()
 
-  // 处理 URL 传参上下文
+  // 处理 URL 上下文参数
   const { context_type, context_id } = route.query
   if (context_type && context_id) {
-    // 自动发起一个分析请求
-    input.value = `请帮我深度分析一下这个目标：${context_id}`
+    // 自动注入上下文提问
+    input.value = `请帮我分析这个目标：${context_id}`
     await send({
       context_type: context_type as string,
       context_id: context_id as string
@@ -804,7 +804,7 @@ onBeforeUnmount(() => {
               <Bot :size="40" class="text-primary/80" />
             </div>
             <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">AimiGuard AI 助手</h3>
-            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入指令开始对话，支持自然语言触发扫描与分析。</p>
+            <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入你的问题开始对话，支持自然语言安全分析与排查。</p>
           </div>
 
           <!-- Message List -->
@@ -876,7 +876,7 @@ onBeforeUnmount(() => {
                               <div v-else class="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full"></div>
                             </div>
                             
-                            <div class="text-[11px] text-slate-400 mb-1 ml-0.5 uppercase tracking-wider">输入参数</div>
+                            <div class="text-[11px] text-slate-400 mb-1 ml-0.5 uppercase tracking-wider">参数输入</div>
                             <pre class="m-0 p-3 bg-black/40 rounded-md text-xs overflow-x-auto text-slate-50 border-l-2 border-primary font-mono">{{ formatJson(toolCall.arguments || toolCall.function?.arguments) }}</pre>
 
                             <template v-if="msg.tool_results?.find(r => (r.tool_call_id && r.tool_call_id === toolCall.id) || r.name === (toolCall.name || toolCall.function?.name))">
@@ -939,7 +939,7 @@ onBeforeUnmount(() => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {{ recognition ? (listening ? '停止录音' : '语音输入') : '浏览器不支持语音识别' }}
+                  {{ recognition ? (listening ? '停止录音' : '开始语音输入') : '当前浏览器不支持语音识别' }}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -999,7 +999,7 @@ onBeforeUnmount(() => {
               </TooltipProvider>
             </div>
           </div>
-          <div class="text-center text-[11px] text-muted-foreground/60 mt-3 pointer-events-auto">AI 生成的内容仅供参考，请谨慎验证。</div>
+          <div class="text-center text-[11px] text-muted-foreground/60 mt-3 pointer-events-auto">AI 生成内容仅供参考，请结合实际进行核验。</div>
         </div>
       </div>
     </main>

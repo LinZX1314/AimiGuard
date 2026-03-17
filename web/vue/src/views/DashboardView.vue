@@ -100,7 +100,7 @@ async function load() {
     }
   } else {
     metrics.value = { ...EMPTY_METRICS }
-    loadError.value = '核心指标加载失败，请稍后刷新重试。'
+    loadError.value = '核心指标加载失败，请稍后刷新重试'
   }
 
   if (cs.status === 'fulfilled') {
@@ -148,7 +148,7 @@ onUnmounted(() => clearInterval(refreshTimer))
       </Alert>
       <Alert v-if="partialError.length" variant="default" class="bg-amber-500/10 border-amber-500/20 text-amber-500">
         <ShieldAlert class="h-4 w-4" />
-        <AlertDescription>{{ partialError.join('；') }}。</AlertDescription>
+        <AlertDescription>{{ partialError.join('；') }}</AlertDescription>
       </Alert>
     </div>
 
@@ -262,7 +262,7 @@ onUnmounted(() => clearInterval(refreshTimer))
 
     <!-- Defense Status & Popular Services -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card class="bg-card/40 border border-border/50">
+      <Card class="border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
             <Bot class="h-4 w-4 text-primary" />
@@ -291,7 +291,7 @@ onUnmounted(() => clearInterval(refreshTimer))
         </CardContent>
       </Card>
 
-      <Card class="bg-card/40 border border-border/50">
+      <Card class="border-border/50">
         <CardHeader class="pb-2">
           <CardTitle class="text-[15px] font-semibold flex items-center gap-2">
             <Flame class="h-4 w-4 text-primary" />

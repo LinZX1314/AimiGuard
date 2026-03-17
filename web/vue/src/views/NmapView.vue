@@ -17,7 +17,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
@@ -29,7 +28,6 @@ import {
   Search,
   Info,
   Bot,
-  ShieldCheck,
   CheckCircle2,
   Monitor,
   Cpu,
@@ -37,7 +35,6 @@ import {
   Activity,
   History,
   Server,
-  XCircle,
   PackageSearch
 } from 'lucide-vue-next'
 
@@ -63,7 +60,7 @@ const detailHost= ref<any>(null)
 const headers = ['IP 地址', 'MAC / 状态', '主机名', '厂商 / 系统', '开放端口', '操作']
 
 const scanItems = computed(() =>
-  scans.value.map(s => ({ id: String(s.id), label: `#${s.id} – ${s.scan_time?.slice(0,16) ?? ''}` }))
+  scans.value.map(s => ({ id: String(s.id), label: `#${s.id} 扫描 ${s.scan_time?.slice(0,16) ?? ''}` }))
 )
 
 const vendorOptions = computed(() =>
@@ -175,7 +172,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
 <template>
   <div class="p-6 space-y-6">
     <!-- Controls Card -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardContent class="p-5 flex flex-col gap-4">
         <div class="flex flex-wrap items-center gap-4">
           <div class="flex items-center gap-2">
@@ -211,7 +208,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
               <span class="text-muted-foreground font-medium flex items-center gap-2">
                 <Activity :size="14" class="animate-spin" v-if="scanning" />
                 <CheckCircle2 :size="14" class="text-emerald-500" v-else />
-                {{ scanStatus === 'done' ? '全网段扫描完成' : '正在探测活跃主机中...' }}
+                {{ scanStatus === 'done' ? '全网段扫描完成' : '正在探测活跃主机...' }}
               </span>
               <span class="font-mono">{{ scanProgress }}%</span>
             </div>
@@ -222,7 +219,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
     </Card>
 
     <!-- Results Table Card -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader class="pb-4 flex flex-row items-center justify-between border-b border-border/20">
         <div class="flex items-center gap-3">
           <div class="bg-primary/10 p-2 rounded-lg">
@@ -270,14 +267,20 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                   <td class="py-3 px-4">
                     <div class="flex items-center gap-2">
                       <div class="h-2 w-2 rounded-full" :class="h.state === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-600'"></div>
-                      <span class="font-bold text-slate-200">{{ h.ip }}</span>
+                      <span class="font-bold text-foreground">{{ h.ip }}</span>
                     </div>
                   </td>
                   <td class="py-3 px-4">
                     <div class="flex flex-col gap-0.5">
                       <span class="text-xs font-mono text-slate-400">{{ h.mac_address || '未知 MAC' }}</span>
-                      <Badge variant="outline" class="w-fit text-[10px] h-4 px-1 py-0 bg-black/20">
-                        {{ h.state === 'up' ? 'ONLINE' : 'OFFLINE' }}
+                      <Badge
+                        variant="outline"
+                        class="w-fit text-[10px] h-4 px-1 py-0"
+                        :class="h.state === 'up'
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-slate-500/15 text-slate-300 border-slate-500/30'"
+                      >
+                        {{ h.state === 'up' ? '在线' : '离线' }}
                       </Badge>
                     </div>
                   </td>

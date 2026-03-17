@@ -137,7 +137,7 @@ onUnmounted(() => {
 // ─── Auth ──────────────────────────────────────────────────────────────────
 async function handleLogin() {
   if (!username.value || !password.value) { 
-    error.value = '请输入用户名和密码'
+    error.value = '请输入用户名和密�?
     triggerShake()
     return 
   }
@@ -149,7 +149,7 @@ async function handleLogin() {
     // wait for success animation before navigating
     setTimeout(() => router.replace('/'), 600)
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : '登录失败，请检查账号密码'
+    error.value = e instanceof Error ? e.message : '登录失败，请检查账号密�?
     triggerShake()
   } finally { 
     loading.value = false 
@@ -172,7 +172,7 @@ function triggerShake() {
     >
       <Sun v-if="isDark" class="h-4 w-4 mr-1.5" />
       <Moon v-else class="h-4 w-4 mr-1.5" />
-      {{ isDark ? '切换为亮色' : '切换为暗色' }}
+      {{ isDark ? '切换为亮�? : '切换为暗�? }}
     </Button>
 
     <!-- Ambient glow orbs -->
@@ -219,7 +219,7 @@ function triggerShake() {
           :class="mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'"
         >
           <span class="bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(0,229,255,0.3)]">
-            玄枢·AI攻防指挥官
+            玄枢·AI攻防指挥�?
           </span>
         </h1>
 
@@ -288,7 +288,7 @@ function triggerShake() {
                 <User class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200" :class="focusField === 'user' ? 'text-cyan-400' : 'text-slate-500'" />
                 <Input 
                   v-model="username" 
-                  placeholder="用户名"
+                  placeholder="用户�?
                   autocomplete="username"
                   class="pl-10 h-11 rounded-lg border-border bg-background/70 text-foreground placeholder:text-muted-foreground focus:border-cyan-400/30 focus:bg-background transition-all duration-300"
                   @focus="focusField = 'user'"
@@ -340,7 +340,7 @@ function triggerShake() {
               
               <template v-if="loading">
                 <Scan class="mr-2 h-4 w-4 animate-spin" />
-                验证中...
+                验证�?..
               </template>
               <template v-else>
                 <LogIn class="mr-2 h-4 w-4" />
@@ -363,7 +363,7 @@ function triggerShake() {
         class="text-center mt-8 transition-all duration-700 delay-700"
         :class="mounted ? 'opacity-100' : 'opacity-0'"
       >
-        <p class="text-slate-600/80 text-[10px] tracking-wider font-mono">&copy; 2026 玄枢安全实验室</p>
+        <p class="text-slate-600/80 text-[10px] tracking-wider font-mono">&copy; 2026 玄枢安全实验�?/p>
       </div>
     </div>
   </div>

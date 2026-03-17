@@ -1,7 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api, apiCall } from '@/api/index'
-import { useUiStore } from '@/stores/ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,7 +23,6 @@ import {
 } from '@/components/ui/accordion'
 import {
   Save,
-  Info,
   CheckCircle2,
   Circle,
   RotateCw,
@@ -37,19 +35,16 @@ import {
   Activity,
   Bug,
   Flame,
-  Key,
-  Settings,
   XCircle,
   Eye,
   EyeOff
 } from 'lucide-vue-next'
 
-const uiStore = useUiStore()
 const saving  = ref(false)
 const status  = ref({ hfish_sync: false, nmap_scan: false, ai_analysis: false, acl_auto_ban: false })
 let statusTimer: ReturnType<typeof setInterval>
 
-const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60,     sync_enabled: false })
+const hfish   = ref({ host_port: '', api_key: '', sync_interval: 60, sync_enabled: false })
 const nmap    = ref({ ip_ranges: '', arguments: '-sS -O -T5', scan_interval: 604800, scan_enabled: false, vuln_scripts_text: '{}' })
 const aiCfg   = ref({ enabled: false, model: '', api_key: '', base_url: '', auto_ban: false })
 
@@ -80,6 +75,7 @@ function addVulnRule() {
   newRuleTag.value = ''
   newRuleScripts.value = ''
 }
+
 function removeVulnRule(tag: string) {
   const rules = parsedVulnRules.value
   delete rules[tag]
@@ -99,10 +95,10 @@ async function loadSettings() {
     const sd = d.data ?? d
     if (sd.hfish) { Object.assign(hfish.value, sd.hfish); hfish.value.api_key = '' }
     if (sd.nmap)  {
-      nmap.value.ip_ranges        = Array.isArray(sd.nmap.ip_ranges) ? sd.nmap.ip_ranges.join(', ') : (sd.nmap.ip_ranges ?? '')
-      nmap.value.arguments        = sd.nmap.arguments   ?? '-sS -O -T5'
-      nmap.value.scan_interval    = sd.nmap.scan_interval ?? 604800
-      nmap.value.scan_enabled     = sd.nmap.scan_enabled  ?? false
+      nmap.value.ip_ranges = Array.isArray(sd.nmap.ip_ranges) ? sd.nmap.ip_ranges.join(', ') : (sd.nmap.ip_ranges ?? '')
+      nmap.value.arguments = sd.nmap.arguments ?? '-sS -O -T5'
+      nmap.value.scan_interval = sd.nmap.scan_interval ?? 604800
+      nmap.value.scan_enabled = sd.nmap.scan_enabled ?? false
       nmap.value.vuln_scripts_text = JSON.stringify(sd.nmap.vuln_scripts_by_tag ?? {}, null, 2)
     }
   }
@@ -129,11 +125,12 @@ async function saveSettings() {
     if (aiCfg.value.api_key) {
       await api.post('/api/v1/system/ai-config', aiCfg.value)
     } else {
-      const a = { ...aiCfg.value }; delete (a as any).api_key
+      const a = { ...aiCfg.value }
+      delete (a as any).api_key
       await api.post('/api/v1/system/ai-config', a)
     }
     showFeedback('系统设置已成功更新', 'success')
-  } catch(e) {
+  } catch (e) {
     showFeedback(`更新失败: ${e instanceof Error ? e.message : '未知错误'}`, 'error')
   }
   saving.value = false
@@ -156,16 +153,15 @@ onMounted(() => {
 onUnmounted(() => clearInterval(statusTimer))
 
 const chainItems = [
-  { label: 'HFish 同步',  key: 'hfish_sync'   },
-  { label: 'Nmap 扫描',   key: 'nmap_scan'    },
-  { label: 'AI 分析',     key: 'ai_analysis'  },
-  { label: 'ACL 封禁',    key: 'acl_auto_ban' },
+  { label: 'HFish 同步', key: 'hfish_sync' },
+  { label: 'Nmap 扫描', key: 'nmap_scan' },
+  { label: 'AI 分析', key: 'ai_analysis' },
+  { label: 'ACL 封禁', key: 'acl_auto_ban' },
 ]
 </script>
 
 <template>
   <div class="p-6 max-w-4xl mx-auto space-y-6">
-    <!-- Theme selection -->
     <Card class="bg-card/40 border overflow-hidden">
       <CardHeader class="pb-4">
         <CardTitle class="text-[15px] font-bold flex items-center gap-2">
@@ -176,9 +172,12 @@ const chainItems = [
       </CardHeader>
       <CardContent>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div v-for="ci in chainItems" :key="ci.key" 
-               class="flex items-center gap-2 p-3 rounded-lg border bg-muted/5 transition-all"
-               :class="(status as any)[ci.key] ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-slate-500/20'">
+          <div
+            v-for="ci in chainItems"
+            :key="ci.key"
+            class="flex items-center gap-2 p-3 rounded-lg border bg-muted/5 transition-all"
+            :class="(status as any)[ci.key] ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-slate-500/20'"
+          >
             <CheckCircle2 v-if="(status as any)[ci.key]" :size="16" class="text-emerald-500 shrink-0" />
             <Circle v-else :size="16" class="text-slate-600 shrink-0" />
             <span class="text-xs font-medium" :class="(status as any)[ci.key] ? 'text-emerald-400' : 'text-slate-500'">{{ ci.label }}</span>
@@ -187,14 +186,13 @@ const chainItems = [
       </CardContent>
     </Card>
 
-    <!-- HFish Config -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader>
         <CardTitle class="text-base font-bold flex items-center gap-2">
           <Flame :size="16" class="text-orange-500" />
           HFish 蜜罐集成
         </CardTitle>
-        <CardDescription class="text-xs">配置 AimiGuard 与控制台集群的同步链路</CardDescription>
+        <CardDescription class="text-xs">配置 AimiGuard 与控制台集群的同步链接</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -223,8 +221,7 @@ const chainItems = [
       </CardContent>
     </Card>
 
-    <!-- Nmap Config -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader>
         <CardTitle class="text-base font-bold flex items-center gap-2">
           <Network :size="16" class="text-emerald-500" />
@@ -252,13 +249,12 @@ const chainItems = [
           </div>
         </div>
 
-        <!-- Vuln scripts -->
         <div class="space-y-4 pt-2">
           <div class="flex items-center gap-2">
             <Bug class="h-4 w-4 text-amber-500" />
             <span class="text-sm font-bold">按资产标签分配漏洞扫描脚本</span>
           </div>
-          
+
           <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div class="md:col-span-3">
               <Select v-model="newRuleTag">
@@ -281,8 +277,11 @@ const chainItems = [
           </div>
 
           <div class="space-y-2">
-            <div v-for="(scripts, tag) in parsedVulnRules" :key="tag" 
-                 class="flex items-center justify-between p-2 pl-3 bg-white/5 rounded-lg border border-white/5">
+            <div
+              v-for="(scripts, tag) in parsedVulnRules"
+              :key="tag"
+              class="flex items-center justify-between p-2 pl-3 bg-white/5 rounded-lg border border-white/5"
+            >
               <div class="flex items-center gap-3 overflow-hidden">
                 <Badge variant="secondary" class="bg-primary/20 text-primary border-primary/10">{{ tag }}</Badge>
                 <span class="text-[11px] text-slate-400 truncate">{{ scripts.join(', ') }}</span>
@@ -307,8 +306,7 @@ const chainItems = [
       </CardContent>
     </Card>
 
-    <!-- AI Config -->
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader>
         <CardTitle class="text-base font-bold flex items-center gap-2">
           <Bot class="h-4 w-4 text-primary" />
@@ -320,7 +318,7 @@ const chainItems = [
         <div class="flex flex-wrap gap-4 p-4 bg-muted/10 rounded-xl border border-white/5">
           <div class="flex items-center gap-3">
             <Switch v-model="aiCfg.enabled" id="ai-enabled" />
-            <Label for="ai-enabled" class="text-xs font-bold font-mono">ENABELD</Label>
+            <Label for="ai-enabled" class="text-xs font-bold font-mono">ENABLED</Label>
           </div>
           <div class="w-px h-6 bg-white/10 mx-2 hidden sm:block"></div>
           <div class="flex items-center gap-3">
@@ -363,22 +361,26 @@ const chainItems = [
       </CardContent>
     </Card>
 
-    <!-- Global Save Action -->
     <div class="sticky bottom-6 flex justify-center py-2 z-50 pointer-events-none">
       <div class="pointer-events-auto flex items-center gap-4 animate-in slide-in-from-bottom-2 duration-500">
-        <Button size="lg" @click="saveSettings" :disabled="saving" 
-                class="px-10 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-[0_10px_30px_rgba(0,229,255,0.3)] group">
+        <Button
+          size="lg"
+          @click="saveSettings"
+          :disabled="saving"
+          class="px-10 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-[0_10px_30px_rgba(0,229,255,0.3)] group"
+        >
           <Save v-if="!saving" class="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" />
           <RotateCw v-else class="mr-2 h-5 w-5 animate-spin" />
-          保 存 全 局 设 置
+          保存全局配置
         </Button>
       </div>
     </div>
 
-    <!-- Custom Feedback Banner -->
-    <div v-if="feedback.show" 
-         class="fixed top-20 right-6 z-[100] p-4 rounded-xl border-l-[6px] shadow-2xl animate-in slide-in-from-right-4 duration-300 transform"
-         :class="feedback.type === 'success' ? 'bg-emerald-500/10 border-l-emerald-500 text-emerald-300 border border-white/5' : 'bg-red-500/10 border-l-red-500 text-red-300 border border-white/5'">
+    <div
+      v-if="feedback.show"
+      class="fixed top-20 right-6 z-[100] p-4 rounded-xl border-l-[6px] shadow-2xl animate-in slide-in-from-right-4 duration-300 transform"
+      :class="feedback.type === 'success' ? 'bg-emerald-500/10 border-l-emerald-500 text-emerald-300 border border-white/5' : 'bg-red-500/10 border-l-red-500 text-red-300 border border-white/5'"
+    >
       <div class="flex items-center gap-3">
         <CheckCircle2 v-if="feedback.type === 'success'" class="h-5 w-5" />
         <XCircle v-else class="h-5 w-5" />
@@ -387,3 +389,5 @@ const chainItems = [
     </div>
   </div>
 </template>
+
+

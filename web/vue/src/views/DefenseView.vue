@@ -38,6 +38,14 @@ const STA_STYLES: Record<string, string>  = {
   false_positive: 'bg-sky-500/10 text-sky-400 border-sky-500/20' 
 }
 
+// 后端状态值保持不变，前端展示中文
+const STATUS_TEXT: Record<string, string> = {
+  pending: '待处理',
+  approved: '已通过',
+  rejected: '已拒绝',
+  false_positive: '误报'
+}
+
 function unwrap<T>(payload: any): T {
   return (payload?.data ?? payload) as T
 }
@@ -83,7 +91,7 @@ onMounted(load)
 
 <template>
   <div class="p-6 space-y-6">
-    <Card class="bg-card/40 border border-border/50">
+    <Card class="border-border/50">
       <CardHeader class="pb-6 border-b flex flex-row items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2 bg-red-500/10 rounded-lg">
@@ -168,10 +176,10 @@ onMounted(load)
                     </div>
                   </td>
 
-                  <!-- 状态标识 -->
+                  <!-- 状态标签 -->
                   <td class="py-5 px-5 align-top">
                     <Badge :class="STA_STYLES[ev.status] || 'bg-slate-500/10'" class="uppercase text-[9px] tracking-widest px-2 h-5 flex items-center justify-center font-black">
-                      {{ ev.status }}
+                      {{ STATUS_TEXT[ev.status] || ev.status }}
                     </Badge>
                   </td>
 
