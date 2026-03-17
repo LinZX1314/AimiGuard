@@ -3,13 +3,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api/index'
 import { Line, Bar } from 'vue-chartjs'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { MapChart, LinesChart, EffectScatterChart } from 'echarts/charts'
-import { GeoComponent, TooltipComponent as ETooltipComponent } from 'echarts/components'
-import { registerMap } from 'echarts/core'
-import VChart from 'vue-echarts'
-import { feature } from 'topojson-client'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -41,6 +34,10 @@ import {
   Globe,
   ScanLine,
   Router,
+  ShieldAlert,
+  Bug,
+  ServerCog,
+  Shield,
   Send,
   Loader2,
 } from 'lucide-vue-next'
@@ -57,8 +54,6 @@ ChartJS.register(
   Legend,
   Filler,
 )
-
-use([CanvasRenderer, MapChart, LinesChart, EffectScatterChart, GeoComponent, ETooltipComponent])
 
 type MainView = 'map' | 'topology' | 'lan' | 'switch'
 
@@ -88,7 +83,6 @@ const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
 const activeView = ref<MainView>('map')
-const mapReady = ref(false)
 
 const aiMessages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
 const aiInput = ref('')
@@ -132,52 +126,90 @@ const chainItems = [
   { key: 'acl_auto_ban', label: 'ACL 封禁' },
 ]
 
-const chinaTarget = [116.4074, 39.9042] as [number, number]
-
-const chinaFallbackCities = [
-  [116.4074, 39.9042], // 北京
-  [121.4737, 31.2304], // 上海
-  [113.2644, 23.1291], // 广州
-  [114.0579, 22.5431], // 深圳
-  [104.0665, 30.5728], // 成都
-  [108.9398, 34.3416], // 西安
-  [118.7969, 32.0603], // 南京
-  [120.1551, 30.2741], // 杭州
-]
-
-const globalAttackSeeds = [
-  [-74.006, 40.7128],
-  [-0.1276, 51.5072],
-  [2.3522, 48.8566],
-  [13.405, 52.52],
-  [151.2093, -33.8688],
-  [139.6917, 35.6895],
-  [77.209, 28.6139],
-  [37.6173, 55.7558],
-  [-46.6333, -23.5505],
-  [31.2357, 30.0444],
-  [103.8198, 1.3521],
-  [18.4241, -33.9249],
-]
-
-function hashSeed(source: string) {
-  let h = 0
-  for (let i = 0; i < source.length; i += 1) {
-    h = (h << 5) - h + source.charCodeAt(i)
-    h |= 0
-  }
-  return Math.abs(h)
+type BattlefieldNode = {
+  id: string
+  label: string
+  type: 'edge' | 'firewall' | 'switch' | 'honeypot' | 'core' | 'soc'
+  status: 'online' | 'warn' | 'danger'
+  x: number
+  y: number
+  detail: string
 }
 
-function resolveSourceCoord(ip?: string, location?: string) {
-  const seed = hashSeed(`${ip ?? 'unknown'}-${location ?? 'unknown'}`)
-  const rawLoc = (location ?? '').trim()
-  const loc = rawLoc.toLowerCase()
-  const maybeChina = /中国|china|beijing|shanghai|guangzhou|shenzhen|chengdu|xian|hangzhou|nanjing/.test(loc)
-  if (!rawLoc || maybeChina) {
-    return chinaFallbackCities[seed % chinaFallbackCities.length] as [number, number]
-  }
-  return globalAttackSeeds[seed % globalAttackSeeds.length] as [number, number]
+const battlefieldNodes = computed<BattlefieldNode[]>(() => {
+  const online = payload.value.top_metrics.nmap_online
+  const high = payload.value.top_metrics.hfish_high
+  const total = payload.value.top_metrics.hfish_total
+
+  return [
+    { id: 'internet', label: '互联网边界', type: 'edge', status: 'warn', x: 90, y: 280, detail: `外部威胁流量 ${total}` },
+    { id: 'fw', label: '主防火墙', type: 'firewall', status: high > 20 ? 'danger' : 'online', x: 265, y: 280, detail: `高危事件 ${high}` },
+    { id: 'sw-core', label: '核心交换机 SW-Core', type: 'switch', status: 'online', x: 470, y: 190, detail: 'VLAN 聚合 / ACL 联动' },
+    { id: 'sw-access', label: '接入交换机 SW-Access', type: 'switch', status: 'online', x: 470, y: 375, detail: '办公网接入与隔离' },
+    { id: 'honeypot-a', label: '蜜罐节点 HP-Web', type: 'honeypot', status: high > 10 ? 'warn' : 'online', x: 690, y: 132, detail: 'HTTP/SSH 诱捕策略' },
+    { id: 'honeypot-b', label: '蜜罐节点 HP-SSH', type: 'honeypot', status: high > 14 ? 'warn' : 'online', x: 690, y: 280, detail: '口令爆破诱捕' },
+    { id: 'soc', label: 'AI/SOC 分析中心', type: 'soc', status: 'online', x: 690, y: 428, detail: `AI 决策 ${payload.value.top_metrics.ai_decisions}` },
+    { id: 'core-assets', label: '核心资产区', type: 'core', status: online > 0 ? 'online' : 'warn', x: 900, y: 280, detail: `在线资产 ${online}` },
+  ]
+})
+
+const battlefieldLinks = [
+  ['internet', 'fw'],
+  ['fw', 'sw-core'],
+  ['fw', 'sw-access'],
+  ['sw-core', 'honeypot-a'],
+  ['sw-core', 'honeypot-b'],
+  ['sw-access', 'soc'],
+  ['honeypot-a', 'core-assets'],
+  ['honeypot-b', 'core-assets'],
+  ['soc', 'core-assets'],
+]
+
+const nodeMap = computed(() => {
+  const map = new Map<string, BattlefieldNode>()
+  battlefieldNodes.value.forEach((node) => map.set(node.id, node))
+  return map
+})
+
+const battlefieldSvgLines = computed(() => {
+  return battlefieldLinks
+    .map(([fromId, toId]) => {
+      const from = nodeMap.value.get(fromId)
+      const to = nodeMap.value.get(toId)
+      if (!from || !to) return null
+      return {
+        key: `${fromId}-${toId}`,
+        x1: from.x,
+        y1: from.y,
+        x2: to.x,
+        y2: to.y,
+      }
+    })
+    .filter((line): line is { key: string; x1: number; y1: number; x2: number; y2: number } => Boolean(line))
+})
+
+function resolveNodeIcon(type: BattlefieldNode['type']) {
+  if (type === 'edge') return Globe
+  if (type === 'firewall') return ShieldAlert
+  if (type === 'switch') return Router
+  if (type === 'honeypot') return Bug
+  if (type === 'soc') return ServerCog
+  return Shield
+}
+
+function nodeTheme(type: BattlefieldNode['type']) {
+  if (type === 'edge') return 'from-sky-500/30 to-cyan-400/10 border-cyan-300/30 text-cyan-100'
+  if (type === 'firewall') return 'from-rose-500/35 to-red-500/10 border-red-300/30 text-rose-100'
+  if (type === 'switch') return 'from-violet-500/35 to-indigo-500/10 border-violet-300/30 text-violet-100'
+  if (type === 'honeypot') return 'from-amber-500/35 to-orange-500/10 border-amber-300/30 text-amber-100'
+  if (type === 'soc') return 'from-emerald-500/35 to-teal-500/10 border-emerald-300/30 text-emerald-100'
+  return 'from-slate-500/35 to-slate-500/10 border-slate-300/30 text-slate-100'
+}
+
+function statusTheme(status: BattlefieldNode['status']) {
+  if (status === 'online') return 'bg-emerald-400'
+  if (status === 'warn') return 'bg-amber-400'
+  return 'bg-red-400'
 }
 
 const trendData = computed(() => ({
@@ -203,156 +235,6 @@ const trendOptions = {
     y: { grid: { color: 'rgba(148,163,184,.12)' }, ticks: { color: '#94a3b8' } },
   },
 }
-
-const globalMapOption = computed(() => {
-  const points = payload.value.recent_attacks.slice(0, 20).map((item, idx) => {
-    const coord = resolveSourceCoord(item.attack_ip, item.ip_location)
-    const level = formatThreatLevel(item.threat_level)
-    const intensity = level === '高危' ? 3 : level === '中危' ? 2 : 1
-    return {
-      id: `${item.attack_ip}-${idx}`,
-      attack_ip: item.attack_ip,
-      ip_location: item.ip_location || '未知地区',
-      service_name: item.service_name || '未知服务',
-      threat_level: level,
-      create_time_str: item.create_time_str || '-',
-      sourceCoord: coord,
-      value: intensity,
-    }
-  })
-
-  return {
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: 'rgba(2, 6, 23, 0.92)',
-      borderColor: 'rgba(56, 189, 248, 0.6)',
-      borderWidth: 1,
-      textStyle: {
-        color: '#e2e8f0',
-        fontSize: 12,
-      },
-      extraCssText: 'box-shadow: 0 12px 28px rgba(14, 116, 144, 0.35); border-radius: 10px; padding: 10px 12px;',
-      formatter: (params: any) => {
-        const data = params?.data
-        if (!data) return ''
-        if (data.isTarget) {
-          return [
-            '<div style="font-weight:700;color:#67e8f9;margin-bottom:6px;">防护中心节点</div>',
-            '<div>中心位置：<span style="color:#bae6fd">中国 · 北京</span></div>',
-            `<div>实时攻击总量：<span style="color:#fef08a">${payload.value.top_metrics.hfish_total}</span></div>`,
-            `<div>高危攻击数：<span style="color:#fca5a5">${payload.value.top_metrics.hfish_high}</span></div>`,
-          ].join('')
-        }
-        return [
-          '<div style="font-weight:700;color:#67e8f9;margin-bottom:6px;">攻击来源详情</div>',
-          `<div>来源 IP：<span style="color:#e2e8f0">${data.attack_ip}</span></div>`,
-          `<div>来源位置：<span style="color:#bae6fd">${data.ip_location}</span></div>`,
-          `<div>攻击服务：<span style="color:#ddd6fe">${data.service_name}</span></div>`,
-          `<div>威胁等级：<span style="color:#fca5a5">${data.threat_level}</span></div>`,
-          `<div>发生时间：<span style="color:#cbd5e1">${data.create_time_str || '-'}</span></div>`,
-          '<div style="margin-top:4px;color:#7dd3fc;">目标中心：中国 · 北京</div>',
-        ].join('')
-      },
-    },
-    geo: {
-      map: 'world',
-      roam: true,
-      zoom: 1.28,
-      center: [104, 34],
-      itemStyle: {
-        areaColor: 'rgba(15, 23, 42, 0.78)',
-        borderColor: 'rgba(56, 189, 248, 0.28)',
-        borderWidth: 0.9,
-      },
-      emphasis: {
-        itemStyle: {
-          areaColor: 'rgba(34, 211, 238, 0.32)',
-          borderColor: 'rgba(125, 211, 252, 0.82)',
-        },
-      },
-    },
-    series: [
-      {
-        name: '攻击飞线',
-        type: 'lines',
-        coordinateSystem: 'geo',
-        zlevel: 3,
-        effect: {
-          show: true,
-          period: 2.4,
-          trailLength: 0.34,
-          symbol: 'arrow',
-          symbolSize: 8,
-          color: '#22d3ee',
-        },
-        lineStyle: {
-          color: 'rgba(56, 189, 248, 0.72)',
-          width: 1.25,
-          curveness: 0.28,
-          opacity: 0.78,
-        },
-        data: points.map((p) => ({
-          coords: [p.sourceCoord, chinaTarget],
-          value: p.value,
-          attack_ip: p.attack_ip,
-          ip_location: p.ip_location,
-          service_name: p.service_name,
-          threat_level: p.threat_level,
-          create_time_str: p.create_time_str,
-        })),
-      },
-      {
-        name: '来源节点',
-        type: 'effectScatter',
-        coordinateSystem: 'geo',
-        zlevel: 4,
-        rippleEffect: {
-          brushType: 'stroke',
-          scale: 2.8,
-        },
-        symbolSize: (val: any) => 6 + Number(val?.[2] ?? 1) * 2,
-        itemStyle: {
-          color: '#f59e0b',
-          shadowBlur: 12,
-          shadowColor: 'rgba(245, 158, 11, 0.5)',
-        },
-        data: points.map((p) => ({
-          name: p.attack_ip,
-          value: [...p.sourceCoord, p.value],
-          attack_ip: p.attack_ip,
-          ip_location: p.ip_location,
-          service_name: p.service_name,
-          threat_level: p.threat_level,
-          create_time_str: p.create_time_str,
-        })),
-      },
-      {
-        name: '防护中心',
-        type: 'effectScatter',
-        coordinateSystem: 'geo',
-        zlevel: 5,
-        rippleEffect: {
-          brushType: 'fill',
-          scale: 4,
-        },
-        symbolSize: 14,
-        itemStyle: {
-          color: '#22c55e',
-          shadowBlur: 16,
-          shadowColor: 'rgba(34, 197, 94, 0.55)',
-        },
-        data: [{
-          name: '中国·北京',
-          value: [...chinaTarget, 5],
-          isTarget: true,
-        }],
-      },
-    ],
-    animationDuration: 700,
-    animationDurationUpdate: 900,
-  }
-})
 
 const serviceData = computed(() => ({
   labels: payload.value.hot_services.slice(0, 6).map((x) => x.name),
@@ -394,15 +276,6 @@ async function loadScreen() {
   } finally {
     loading.value = false
   }
-}
-
-async function ensureWorldMap() {
-  if (mapReady.value) return
-  const res = await fetch('/countries-110m.json')
-  const topology = await res.json() as any
-  const worldGeoJson = feature(topology, topology.objects.countries)
-  registerMap('world', worldGeoJson as any)
-  mapReady.value = true
 }
 
 async function scrollAiToBottom() {
@@ -492,9 +365,6 @@ async function sendAiMessage(prompt?: string) {
 
 let timer: ReturnType<typeof setInterval>
 onMounted(() => {
-  ensureWorldMap().catch(() => {
-    loadError.value = '世界地图资源加载失败'
-  })
   loadScreen()
   timer = setInterval(loadScreen, 15_000)
 })
@@ -579,10 +449,51 @@ onUnmounted(() => {
             <div v-if="loadError" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{{ loadError }}</div>
 
             <template v-else-if="activeView === 'map'">
-              <div class="h-[30rem] xl:h-[34rem] rounded-xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_16%,rgba(34,211,238,0.2),transparent_45%),radial-gradient(circle_at_86%_4%,rgba(56,189,248,0.22),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(15,118,110,0.2),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.62),rgba(2,6,23,0.92))] p-1.5 shadow-[0_0_0_1px_rgba(34,211,238,0.1),0_20px_50px_rgba(2,132,199,0.22)]">
-                <VChart v-if="mapReady && payload.recent_attacks.length" :option="globalMapOption" autoresize class="h-full w-full" />
-                <Skeleton v-else-if="loading" class="h-full w-full" />
-                <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无攻击来源数据</div>
+              <div class="h-[30rem] xl:h-[34rem] rounded-xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_16%,rgba(34,211,238,0.2),transparent_45%),radial-gradient(circle_at_86%_4%,rgba(56,189,248,0.22),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(15,118,110,0.2),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.62),rgba(2,6,23,0.92))] p-2 shadow-[0_0_0_1px_rgba(34,211,238,0.1),0_20px_50px_rgba(2,132,199,0.22)]">
+                <div class="relative h-full w-full overflow-hidden rounded-lg border border-cyan-500/20 bg-slate-950/45">
+                  <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="topoLine" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="rgba(34,211,238,0.15)" />
+                        <stop offset="50%" stop-color="rgba(34,211,238,0.9)" />
+                        <stop offset="100%" stop-color="rgba(59,130,246,0.2)" />
+                      </linearGradient>
+                    </defs>
+                    <g>
+                      <line
+                        v-for="line in battlefieldSvgLines"
+                        :key="line.key"
+                        :x1="line.x1"
+                        :y1="line.y1"
+                        :x2="line.x2"
+                        :y2="line.y2"
+                        stroke="url(#topoLine)"
+                        stroke-width="2"
+                        stroke-dasharray="7 6"
+                        opacity="0.85"
+                      />
+                    </g>
+                  </svg>
+
+                  <div
+                    v-for="node in battlefieldNodes"
+                    :key="node.id"
+                    class="group absolute w-[184px] -translate-x-1/2 -translate-y-1/2"
+                    :style="{ left: `${node.x / 10}%`, top: `${node.y / 5.6}%` }"
+                  >
+                    <div class="rounded-xl border bg-gradient-to-b p-3 backdrop-blur-sm transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_16px_26px_rgba(8,145,178,0.35)]" :class="nodeTheme(node.type)">
+                      <div class="mb-1 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5 text-xs font-semibold">
+                          <component :is="resolveNodeIcon(node.type)" class="h-3.5 w-3.5" />
+                          <span>{{ node.label }}</span>
+                        </div>
+                        <span class="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.55)]" :class="statusTheme(node.status)" />
+                      </div>
+                      <p class="text-[11px] text-slate-200/90">{{ node.detail }}</p>
+                    </div>
+                    <div class="mx-auto h-2 w-[78%] rounded-b-xl bg-black/35 blur-[1px]" />
+                  </div>
+                </div>
               </div>
               <div class="mt-4 space-y-2">
                 <div v-for="(item, idx) in payload.recent_attacks" :key="`${item.attack_ip}-${idx}`" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
