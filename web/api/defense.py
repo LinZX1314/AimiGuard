@@ -321,9 +321,10 @@ def defense_hfish_test():
     cfg = _load_cfg()
     hcfg = cfg.get('hfish', {})
     host_port = (body.get('host_port') or hcfg.get('host_port') or '').strip()
+    api_base_url = (body.get('api_base_url') or hcfg.get('api_base_url') or '').strip().rstrip('/')
     api_key = (body.get('api_key') or hcfg.get('api_key') or '').strip()
 
-    if not host_port or not api_key:
+    if (not host_port and not api_base_url) or not api_key:
         return err('请先填写 HFish 地址和 API Key', 400)
 
     try:
@@ -331,7 +332,28 @@ def defense_hfish_test():
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-        url = f"https://{host_port}/api/v1/attack/detail?api_key={api_key}"
+        def build_test_urls() -> list[str]:
+            urls: list[str] = []
+
+            if api_base_url:
+                urls.append(f"{api_base_url}/api/v1/attack/detail?api_key={api_key}")
+
+            if host_port:
+                hp = host_port.rstrip('/')
+                if hp.startswith('http://') or hp.startswith('https://'):
+                    urls.append(f"{hp}/api/v1/attack/detail?api_key={api_key}")
+                else:
+                    # 优先 HTTPS，再自动回退 HTTP，兼容历史部署
+                    urls.append(f"https://{hp}/api/v1/attack/detail?api_key={api_key}")
+                    urls.append(f"http://{hp}/api/v1/attack/detail?api_key={api_key}")
+
+            # 去重，保留顺序
+            return list(dict.fromkeys(urls))
+
+        urls = build_test_urls()
+        if not urls:
+            return err('HFish 地址配置无效', 400)
+
         payload = {
             'start_time': int(time.time()) - 60,
             'end_time': 0,
@@ -343,12 +365,233 @@ def defense_hfish_test():
             'service_name': [],
             'info_confirm': '0',
         }
-        resp = requests.post(url, json=payload, verify=False, timeout=15)
-        resp.raise_for_status()
-        _ = resp.json()
-        return ok({'reachable': True, 'host_port': host_port})
+
+        last_error: Exception | None = None
+        for url in urls:
+            try:
+                resp = requests.post(url, json=payload, verify=False, timeout=15)
+                resp.raise_for_status()
+                _ = resp.json()
+                return ok({'reachable': True, 'host_port': host_port, 'url': url})
+            except Exception as e:
+                last_error = e
+
+        return err(f'HFish 连接失败: {last_error}', 502)
     except Exception as e:
         return err(f'HFish 连接失败: {e}', 502)
+
+
+@defense_bp.route('/switch/test', methods=['POST'])
+@require_auth
+def defense_switch_test():
+    """Test switch connectivity"""
+    body = _body()
+    host = body.get('host', '').strip()
+    port = body.get('port', 23)
+    password = body.get('password', '').strip()
+
+    if not host:
+        return err('请提供交换机IP地址', 400)
+
+    try:
+        import socket
+        import telnetlib3 as telnetlib
+        import asyncio
+
+        # 测试端口连通性
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((host, int(port)))
+        sock.close()
+
+        if result != 0:
+            return err(f'无法连接到 {host}:{port}，端口不可达', 502)
+
+        # 尝试Telnet登录 (telnetlib3 是异步的)
+        try:
+            async def test_telnet():
+                try:
+                    # telnetlib3 使用异步连接
+                    reader, writer = await asyncio.wait_for(
+                        telnetlib.open_connection(host, int(port)),
+                        timeout=5.0
+                    )
+                    
+                    # 等待登录提示
+                    data = await asyncio.wait_for(reader.read(1024), timeout=3.0)
+                    
+                    # 发送密码
+                    if b'Password' in data or b'password' in data:
+                        writer.write(password.encode('ascii') + b'\r\n')
+                        await writer.drain()
+                        await asyncio.sleep(1)
+                        
+                        # 读取响应
+                        response = await asyncio.wait_for(reader.read(1024), timeout=3.0)
+                        response_text = response.decode('ascii', errors='ignore')
+                        
+                        writer.close()
+                        await writer.wait_closed()
+                        
+                        if '>' in response_text or '#' in response_text:
+                            return {'success': True, 'response': response_text}
+                        else:
+                            return {'success': True, 'warning': '已连接但可能需要验证密码'}
+                    else:
+                        writer.close()
+                        await writer.wait_closed()
+                        return {'success': True, 'warning': '已连接但未收到密码提示'}
+                        
+                except asyncio.TimeoutError:
+                    return {'success': False, 'error': '连接超时'}
+                except Exception as e:
+                    return {'success': False, 'error': str(e)}
+            
+            # 运行异步测试
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(test_telnet())
+            loop.close()
+            
+            if result.get('success'):
+                return ok({
+                    'reachable': True, 
+                    'host': host, 
+                    'port': port,
+                    'warning': result.get('warning')
+                })
+            else:
+                return ok({
+                    'reachable': True, 
+                    'host': host, 
+                    'port': port, 
+                    'warning': f'端口可达但Telnet连接失败: {result.get("error")}'
+                })
+                
+        except Exception as e:
+            return ok({'reachable': True, 'host': host, 'port': port, 'warning': f'端口可达但Telnet连接失败: {str(e)}'})
+
+    except socket.timeout:
+        return err(f'连接 {host}:{port} 超时', 504)
+    except Exception as e:
+        return err(f'测试失败: {str(e)}', 500)
+
+
+@defense_bp.route('/switch/statuses', methods=['GET'])
+@require_auth
+def defense_switch_statuses():
+    """Get switch online statuses (TCP reachability)."""
+    cfg = _load_cfg()
+    strict_mode = _as_bool(request.args.get('strict', '0'))
+    raw_switches = cfg.get('switches', [])
+
+    items = []
+    total = 0
+    enabled = 0
+    online = 0
+
+    try:
+        import socket
+
+        async def _telnet_probe(host: str, port: int, password: str) -> tuple[bool, str]:
+            try:
+                import asyncio
+                import telnetlib3 as telnetlib
+
+                reader, writer = await asyncio.wait_for(
+                    telnetlib.open_connection(host, int(port)),
+                    timeout=4.0
+                )
+
+                banner = await asyncio.wait_for(reader.read(1024), timeout=2.5)
+                banner_text = (banner or '').lower()
+
+                # 严格模式：要求至少出现密码提示并返回命令提示符
+                if 'password' in banner_text:
+                    writer.write((password or '') + '\r\n')
+                    await writer.drain()
+                    await asyncio.sleep(0.8)
+                    response = await asyncio.wait_for(reader.read(1024), timeout=2.5)
+                    response_text = response or ''
+                    ok = ('>' in response_text) or ('#' in response_text)
+                else:
+                    response_text = banner or ''
+                    ok = ('>' in response_text) or ('#' in response_text)
+
+                writer.close()
+                await writer.wait_closed()
+                return (ok, '' if ok else 'Telnet握手成功但未进入命令模式')
+            except Exception as e:
+                return (False, str(e))
+
+        for sw in raw_switches:
+            if not isinstance(sw, dict):
+                continue
+
+            host = str(sw.get('host', '')).strip()
+            if not host:
+                continue
+
+            port = int(sw.get('port', 23))
+            acl_number = int(sw.get('acl_number', 30))
+            is_enabled = _as_bool(sw.get('enabled', True))
+
+            total += 1
+            if is_enabled:
+                enabled += 1
+
+            is_online = False
+            error = ''
+            if is_enabled:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    result = sock.connect_ex((host, port))
+                    sock.close()
+                    if result != 0:
+                        error = f'端口不可达({result})'
+                    else:
+                        if strict_mode:
+                            try:
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                telnet_ok, telnet_error = loop.run_until_complete(_telnet_probe(host, port, str(sw.get('password', '')).strip()))
+                                loop.close()
+                                is_online = telnet_ok
+                                if not telnet_ok:
+                                    error = telnet_error or 'Telnet 登录验证失败'
+                            except Exception as e:
+                                is_online = False
+                                error = f'严格模式检测失败: {e}'
+                        else:
+                            is_online = True
+
+                        if is_online:
+                            online += 1
+                except Exception as e:
+                    error = str(e)
+
+            items.append({
+                'host': host,
+                'port': port,
+                'acl_number': acl_number,
+                'enabled': is_enabled,
+                'online': is_online,
+                'error': error,
+            })
+
+        return ok({
+            'items': items,
+            'total': total,
+            'enabled': enabled,
+            'online': online,
+            'strict': strict_mode,
+        })
+    except Exception as e:
+        return err(f'获取交换机状态失败: {e}', 500)
+
+
 
 
 @defense_bp.route('/events', methods=['GET'])

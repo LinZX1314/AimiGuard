@@ -36,9 +36,14 @@ def overview_metrics():
 def overview_chain_status():
     """Module status"""
     cfg = _load_cfg()
+    ai_enabled = cfg.get('ai', {}).get('enabled', False)
+    auto_ban = cfg.get('ai', {}).get('auto_ban', False)
+    switches = cfg.get('switches', [])
+    active_switches = [sw for sw in switches if isinstance(sw, dict) and sw.get('host') and sw.get('enabled', True)]
+
     return ok({
         'hfish_sync': cfg.get('hfish', {}).get('sync_enabled', False),
         'nmap_scan': cfg.get('nmap', {}).get('scan_enabled', False),
-        'ai_analysis': cfg.get('ai', {}).get('enabled', False),
-        'acl_auto_ban': cfg.get('ai', {}).get('auto_ban', False),
+        'ai_analysis': ai_enabled,
+        'acl_auto_ban': bool(ai_enabled and auto_ban and active_switches),
     })

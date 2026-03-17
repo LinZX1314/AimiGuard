@@ -135,6 +135,7 @@ def print_startup_banner(config: dict):
     ai_enabled = ai_cfg.get("enabled", False)
     auto_ban = ai_cfg.get("auto_ban", False)
     switches = config.get("switches", [])
+    active_switches = [sw for sw in switches if isinstance(sw, dict) and sw.get('host') and sw.get('enabled', True)]
 
     unified_log("WebApp", "=" * 58)
     unified_log("WebApp", "玄枢·AI攻防指挥官 已启动")
@@ -146,6 +147,6 @@ def print_startup_banner(config: dict):
     ))
     unified_log("WebApp", (
         f"AI 分析: {'已启用' if ai_enabled else '已禁用'}  |  "
-        f"ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and switches) else '已禁用'}"
+        f"ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and active_switches) else '已禁用'}"
     ))
     unified_log("WebApp", "=" * 58)

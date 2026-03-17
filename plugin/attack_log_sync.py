@@ -61,7 +61,7 @@ def _format_error(host_port, err_msg):
     return f""" [{ts}] HFish 蜜罐连接异常，地址: {host_port} """
 
 
-def get_attack_logs(start_time, end_time, host_port, api_key):
+def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
     """
     获取攻击详情列表
 
@@ -74,7 +74,25 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
     返回:
         处理后的攻击详情列表
     """
-    url = f"https://{host_port}/api/v1/attack/detail?api_key={api_key}"
+    urls = []
+    base_url = (api_base_url or '').strip().rstrip('/')
+    if base_url:
+        urls.append(f"{base_url}/api/v1/attack/detail?api_key={api_key}")
+
+    hp = (host_port or '').strip().rstrip('/')
+    if hp:
+        if hp.startswith('http://') or hp.startswith('https://'):
+            urls.append(f"{hp}/api/v1/attack/detail?api_key={api_key}")
+        else:
+            # 优先 HTTPS，失败后回退 HTTP，兼容不同部署方式
+            urls.append(f"https://{hp}/api/v1/attack/detail?api_key={api_key}")
+            urls.append(f"http://{hp}/api/v1/attack/detail?api_key={api_key}")
+
+    # 去重保持顺序
+    urls = list(dict.fromkeys(urls))
+    if not urls:
+        log("HFish", _format_error(host_port, "地址配置无效"), "ERROR")
+        return None
 
     all_logs = []
     page_no = 1
@@ -96,77 +114,94 @@ def get_attack_logs(start_time, end_time, host_port, api_key):
         headers = {'Content-Type': 'application/json'}
 
         max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
-                response.raise_for_status()
-                data = response.json()
+        data = None
+        detail_list = []
 
-                # 列表处理
-                if "data" in data and "detail_list" in data.get("data", {}):
-                    detail_list = data["data"]["detail_list"]
+        for url in urls:
+            request_ok = False
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
+                    response.raise_for_status()
+                    data = response.json()
 
-                    if not detail_list:
-                        # 没有更多数据了
-                        break
+                    # 列表处理
+                    if "data" in data and "detail_list" in data.get("data", {}):
+                        detail_list = data["data"]["detail_list"]
 
-                    for item in detail_list:
-                        # 1. 时间戳转换
-                        if "create_time" in item:
-                            item["create_time_str"] = timestamp_to_time(item["create_time"])
-                            del item["create_time"]
+                        if not detail_list:
+                            # 没有更多数据了
+                            request_ok = True
+                            break
 
-                        # 2. 删除多余字段
-                        for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
-                            item.pop(key, None)
+                        for item in detail_list:
+                            # 1. 时间戳转换
+                            if "create_time" in item:
+                                item["create_time_str"] = timestamp_to_time(item["create_time"])
+                                del item["create_time"]
 
-                    all_logs.extend(detail_list)
+                            # 2. 删除多余字段
+                            for key in ["attack_info", "threat_name", "threat_label", "threat_level"]:
+                                item.pop(key, None)
 
-                    # 检查是否还有更多数据
-                    total = data.get("data", {}).get("total", 0)
-                    if page_no * page_size >= total:
-                        break
+                        all_logs.extend(detail_list)
 
-                    page_no += 1
-                else:
+                        # 检查是否还有更多数据
+                        total = data.get("data", {}).get("total", 0)
+                        if page_no * page_size >= total:
+                            request_ok = True
+                            break
+
+                        request_ok = True
+                    else:
+                        request_ok = True
+
+                    break  # 当前URL请求成功
+
+                except requests.exceptions.ConnectionError as e:
+                    raw = str(e)
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
+                        err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
+                    elif "Name or service not known" in raw or "nodename nor servname" in raw:
+                        err_msg = "无法解析主机名，请检查地址配置"
+                    else:
+                        err_msg = raw[:80] + "..." if len(raw) > 80 else raw
+                    # 继续尝试下一个URL
+                    log("HFish", _format_error(host_port, err_msg), "WARN")
                     break
 
-                break  # 成功获取数据，跳出重试循环
+                except requests.exceptions.Timeout:
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "WARN")
+                    break
 
-            except requests.exceptions.ConnectionError as e:
-                raw = str(e)
-                if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
-                    err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
-                elif "Name or service not known" in raw or "nodename nor servname" in raw:
-                    err_msg = "无法解析主机名，请检查地址配置"
-                else:
-                    err_msg = raw[:80] + "..." if len(raw) > 80 else raw
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    continue
-                log("HFish", _format_error(host_port, err_msg), "ERROR")
-                return None
+                except requests.exceptions.HTTPError as e:
+                    log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "WARN")
+                    break
 
-            except requests.exceptions.Timeout:
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    continue
-                log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "ERROR")
-                return None
+                except Exception as e:
+                    log("HFish", _format_error(host_port, str(e)), "WARN")
+                    break
 
-            except requests.exceptions.HTTPError as e:
-                log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "ERROR")
-                return None
+            if request_ok:
+                break
 
-            except Exception as e:
-                log("HFish", _format_error(host_port, str(e)), "ERROR")
-                return None
+        if not data:
+            log("HFish", _format_error(host_port, "所有协议尝试均失败"), "ERROR")
+            return None
+
+        if "data" not in data or "detail_list" not in data.get("data", {}):
+            break
 
         # 检查是否需要继续获取下一页
         total = data.get("data", {}).get("total", 0)
         if page_no * page_size >= total or not detail_list:
             break
-
         page_no += 1
 
     return all_logs
@@ -203,6 +238,7 @@ def main():
         hfish_config["sync_interval"] = args.interval
 
     host_port = hfish_config.get("host_port", "127.0.0.1:4433")
+    api_base_url = hfish_config.get("api_base_url", "")
     api_key = hfish_config.get("api_key", "")
     interval = hfish_config.get("sync_interval", 60)
 
@@ -227,7 +263,7 @@ def main():
 
             log("HFish", f"开始同步，从时间戳 {start_time} 开始")
 
-            logs = get_attack_logs(start_time, 0, host_port, api_key)
+            logs = get_attack_logs(start_time, 0, host_port, api_key, api_base_url)
 
             if logs is None:
                 log("HFish", "同步失败，跳过本次同步")

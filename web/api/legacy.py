@@ -20,11 +20,12 @@ def _legacy_module_status(cfg: dict) -> dict:
     ai_enabled = ai_cfg.get('enabled', False)
     auto_ban = ai_cfg.get('auto_ban', False)
     switches = cfg.get('switches', [])
+    active_switches = [sw for sw in switches if isinstance(sw, dict) and sw.get('host') and sw.get('enabled', True)]
     return {
         'hfish_sync': cfg.get('hfish', {}).get('sync_enabled', False),
         'nmap_scan': cfg.get('nmap', {}).get('scan_enabled', False),
         'ai_analysis': ai_enabled,
-        'acl_auto_ban': bool(ai_enabled and auto_ban and switches),
+        'acl_auto_ban': bool(ai_enabled and auto_ban and active_switches),
     }
 
 
@@ -52,10 +53,17 @@ def legacy_settings_get():
     cfg = _load_cfg()
     hfish_config = cfg.get('hfish', {}).copy()
     hfish_config.pop('api_key', None)
+    switches = cfg.get('switches', [])
+    # 兼容旧前端：确保每个交换机都带 enabled 字段
+    for sw in switches:
+        if isinstance(sw, dict):
+            sw.setdefault('enabled', True)
+
     return jsonify({
         'hfish': hfish_config,
         'nmap': cfg.get('nmap', {}),
         'ai': _legacy_safe_ai(cfg),
+        'switches': switches,
         'logging': cfg.get('logging', {}),
         'status': _legacy_module_status(cfg),
     })

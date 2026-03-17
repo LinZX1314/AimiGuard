@@ -54,6 +54,26 @@ class ToolRegistry:
 tool_registry = ToolRegistry()
 
 
+def _get_active_switches(cfg: dict | None) -> list[dict]:
+    """返回已启用且配置有效的交换机列表。"""
+    if not isinstance(cfg, dict):
+        return []
+    switches = cfg.get('switches', [])
+    if not isinstance(switches, list):
+        return []
+
+    active: list[dict] = []
+    for sw in switches:
+        if not isinstance(sw, dict):
+            continue
+        if not sw.get('host'):
+            continue
+        if sw.get('enabled', True) is False:
+            continue
+        active.append(sw)
+    return active
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 工具定义（使用装饰器）
 # ──────────────────────────────────────────────────────────────────────────────
@@ -78,9 +98,9 @@ def _dhcp_query(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': '缺少配置信息'}
 
     # 从配置获取交换机信息
-    switches = cfg.get('switches', [])
+    switches = _get_active_switches(cfg)
     if not switches:
-        return {'ok': False, 'error': '配置文件中未找到交换机信息'}
+        return {'ok': False, 'error': '未找到已启用的交换机配置'}
 
     switch = switches[0]
     host = switch.get('host', '192.168.0.1')
@@ -268,9 +288,9 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': '缺少配置信息'}
 
     # 从配置获取交换机信息
-    switches = cfg.get('switches', [])
+    switches = _get_active_switches(cfg)
     if not switches:
-        return {'ok': False, 'error': '配置文件中未找到交换机信息'}
+        return {'ok': False, 'error': '未找到已启用的交换机配置'}
 
     switch = switches[0]
     host = switch.get('host', '')

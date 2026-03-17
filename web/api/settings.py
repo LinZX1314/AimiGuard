@@ -14,6 +14,13 @@ settings_bp = Blueprint('settings', __name__, url_prefix='')
 def settings_get():
     """Get settings"""
     cfg = _load_cfg()
+    
+    # 确保每个交换机都有enabled字段
+    switches = cfg.get('switches', [])
+    for sw in switches:
+        if isinstance(sw, dict):
+            sw.setdefault('enabled', True)
+    
     return ok({
         'hfish': {
             'host_port': cfg.get('hfish', {}).get('host_port', ''),
@@ -27,6 +34,10 @@ def settings_get():
             'scan_interval': cfg.get('nmap', {}).get('scan_interval', 604800),
             'scan_enabled': cfg.get('nmap', {}).get('scan_enabled', False),
             'vuln_scripts_by_tag': cfg.get('nmap', {}).get('vuln_scripts_by_tag', {}),
+        },
+        'switches': switches,
+        'switch_status': {
+            'strict_mode': cfg.get('switch_status', {}).get('strict_mode', False),
         },
         'logging': cfg.get('logging', {}),
     })
@@ -63,6 +74,28 @@ def settings_save():
             'scan_interval': int(n.get('scan_interval', 604800)),
             'scan_enabled': _as_bool(n.get('scan_enabled', False)),
             'vuln_scripts_by_tag': n.get('vuln_scripts_by_tag', {}),
+        })
+
+    if 'switches' in body:
+        switches = body['switches']
+        if isinstance(switches, list):
+            # 验证并清理交换机配置
+            cleaned = []
+            for sw in switches:
+                if isinstance(sw, dict) and sw.get('host'):
+                    cleaned.append({
+                        'host': str(sw.get('host', '')).strip(),
+                        'port': int(sw.get('port', 23)),
+                        'password': str(sw.get('password', '')).strip(),
+                        'acl_number': int(sw.get('acl_number', 30)),
+                        'enabled': _as_bool(sw.get('enabled', True)),
+                    })
+            cfg['switches'] = cleaned
+
+    if 'switch_status' in body:
+        ss = body['switch_status'] or {}
+        cfg.setdefault('switch_status', {}).update({
+            'strict_mode': _as_bool(ss.get('strict_mode', cfg.get('switch_status', {}).get('strict_mode', False))),
         })
 
     if 'logging' in body:
