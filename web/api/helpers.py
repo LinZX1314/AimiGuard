@@ -66,7 +66,7 @@ _JWT_TTL = 86400 * 7  # 7 days
 _DEFAULT_USERS = [
     {
         'username': 'admin', 
-        'password_hash': '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4wq.4fG5t5X9YzDa',
+        'password_hash': '$2b$12$J7VsHv.cA1mzDvq5ajPqBeAlQ8WjA6AApCOIidAVOBGF48N3lHlHa',
         'role': 'admin'
     }
 ]
