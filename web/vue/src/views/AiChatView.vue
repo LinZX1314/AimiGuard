@@ -83,11 +83,11 @@ const activeChatController = ref<AbortController | null>(null)
 
 // STT ------------------------------------------------------------------------
 const listening = ref(false)
-const voiceDialog = ref(false)
+const voiceCardVisible = ref(false)
 const voiceError = ref('')
 const voiceDraft = ref('')
 const voiceInterim = ref('')
-const waveformBars = ref<number[]>(Array.from({ length: 28 }, (_, index) => 0.12 + (index % 5) * 0.018))
+const waveformBars = ref<number[]>(Array.from({ length: 20 }, (_, index) => 0.15 + (index % 4) * 0.02))
 
 let recognition: any = null
 let mediaStream: MediaStream | null = null
@@ -103,7 +103,7 @@ const voiceTranscript = computed(() => [voiceDraft.value, voiceInterim.value].fi
 const canApplyVoice = computed(() => Boolean(voiceTranscript.value))
 
 function resetWaveform() {
-  waveformBars.value = Array.from({ length: 28 }, (_, index) => 0.12 + (index % 5) * 0.018)
+  waveformBars.value = Array.from({ length: 20 }, (_, index) => 0.15 + (index % 4) * 0.02)
 }
 
 function stopWaveform() {
@@ -259,52 +259,33 @@ function startSpeechRecognition() {
   }
 }
 
-async function openVoiceDialog() {
+async function toggleVoiceCard() {
   if (!voiceSupported.value) return
-  voiceDialog.value = true
-  voiceError.value = ''
-  voiceDraft.value = ''
-  voiceInterim.value = ''
-  resetWaveform()
-  await startWaveform()
-  startSpeechRecognition()
-}
 
-async function restartVoiceInput() {
-  voiceError.value = ''
-  voiceDraft.value = ''
-  voiceInterim.value = ''
-  stopSpeechRecognition()
-  await startWaveform()
-  startSpeechRecognition()
-}
-
-function closeVoiceDialog() {
-  voiceDialog.value = false
-}
-
-function stopVoiceInput() {
-  cleanupVoiceCapture()
+  if (voiceCardVisible.value) {
+    voiceCardVisible.value = false
+    cleanupVoiceCapture()
+  } else {
+    voiceCardVisible.value = true
+    voiceError.value = ''
+    voiceDraft.value = ''
+    voiceInterim.value = ''
+    resetWaveform()
+    await startWaveform()
+    startSpeechRecognition()
+  }
 }
 
 function applyVoiceTranscript() {
   if (!voiceTranscript.value) return
   input.value = [input.value, voiceTranscript.value].filter(Boolean).join(' ').trim()
-  voiceDialog.value = false
+  voiceCardVisible.value = false
+  cleanupVoiceCapture()
 }
 
-watch(voiceDialog, (open) => {
-  if (!open) cleanupVoiceCapture()
+watch(voiceCardVisible, (visible) => {
+  if (!visible) cleanupVoiceCapture()
 })
-
-function toggleListen() {
-  if (!recognition) return
-  if (listening.value) {
-    stopVoiceInput()
-  } else {
-    startSpeechRecognition()
-  }
-}
 
 
 // TTS ------------------------------------------------------------------------
@@ -931,27 +912,88 @@ onBeforeUnmount(() => {
       <div class="absolute bottom-0 left-0 right-0 pb-3 bg-gradient-to-t from-background/95 from-75% to-transparent pointer-events-none flex justify-center z-10 w-full">
         <div class="max-w-4xl w-full px-4 pt-6">
           <div class="pointer-events-auto backdrop-blur-xl border rounded-[24px] p-2 flex items-end gap-3 shadow-2xl transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative cursor-pointer"
-                    :class="[listening ? 'text-destructive hover:text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/10']"
-                    :disabled="!recognition"
-                    @click="toggleListen"
-                  >
-                    <Mic v-if="listening" :size="20" class="z-10" />
-                    <MicOff v-else :size="20" />
-                    <div v-if="listening" class="absolute inset-0 rounded-full border-2 border-destructive animate-ping"></div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {{ recognition ? (listening ? '停止录音' : '开始语音输入') : '当前浏览器不支持语音识别' }}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div class="relative">
+              <!-- Voice Card Popup -->
+              <Transition
+                enter-active-class="transition duration-200 ease-out"
+                enter-from-class="opacity-0 translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition duration-150 ease-in"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 translate-y-2"
+              >
+                <div
+                  v-if="voiceCardVisible"
+                  class="absolute bottom-full left-0 mb-3 w-80 bg-background/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden"
+                >
+                  <!-- Waveform -->
+                  <div class="px-5 pt-5 pb-3">
+                    <div class="flex items-end justify-center gap-1 h-16">
+                      <div
+                        v-for="(height, i) in waveformBars"
+                        :key="i"
+                        class="w-1 bg-gradient-to-t from-primary to-primary/40 rounded-full transition-all duration-100"
+                        :style="{ height: `${height * 100}%` }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Transcript -->
+                  <div class="px-5 pb-4">
+                    <div v-if="voiceError" class="text-xs text-destructive mb-2">
+                      {{ voiceError }}
+                    </div>
+                    <div
+                      class="min-h-[60px] max-h-32 overflow-y-auto text-sm text-foreground/90 bg-muted/30 rounded-lg px-3 py-2.5 border border-border/50"
+                    >
+                      <span v-if="voiceTranscript" class="whitespace-pre-wrap">{{ voiceTranscript }}</span>
+                      <span v-else class="text-muted-foreground text-xs">{{ listening ? '正在聆听...' : '点击麦克风开始' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="flex gap-2 px-5 pb-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      class="flex-1"
+                      @click="voiceCardVisible = false"
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      size="sm"
+                      class="flex-1"
+                      :disabled="!canApplyVoice"
+                      @click="applyVoiceTranscript"
+                    >
+                      应用
+                    </Button>
+                  </div>
+                </div>
+              </Transition>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-[38px] w-[38px] rounded-full shrink-0 mb-1.5 ml-1.5 relative cursor-pointer"
+                      :class="[voiceCardVisible ? 'text-primary hover:text-primary hover:bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/10']"
+                      :disabled="!voiceSupported"
+                      @click="toggleVoiceCard"
+                    >
+                      <Mic :size="20" class="z-10" />
+                      <div v-if="listening" class="absolute inset-0 rounded-full border-2 border-primary animate-ping"></div>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {{ voiceSupported ? '语音输入' : '当前浏览器不支持语音识别' }}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
 
             <Textarea
               v-model="input"
