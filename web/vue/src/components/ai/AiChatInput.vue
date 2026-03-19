@@ -343,7 +343,10 @@ defineExpose({
 
           <Button
             size="icon"
-            class="h-9 w-9 rounded-full bg-primary/95 text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95 disabled:bg-muted disabled:shadow-none"
+            class="h-9 w-9 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95"
+            :class="input.trim() || sending
+              ? 'bg-primary/95 text-primary-foreground shadow-primary/20 disabled:shadow-none'
+              : 'bg-muted/80 text-muted-foreground shadow-none'"
             :disabled="!input.trim() && !sending"
             @click="sending ? emit('stop') : handleSend()"
           >

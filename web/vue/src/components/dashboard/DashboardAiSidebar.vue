@@ -12,6 +12,7 @@ import {
   Sparkles,
   Send,
   Loader2,
+  Clock,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -172,7 +173,9 @@ async function sendAiMessage(prompt?: string) {
             <Send v-else class="h-4 w-4 mr-2" />
             {{ aiLoading ? '分析中...' : '发送' }}
           </Button>
-          <Button variant="outline" :disabled="aiLoading" @click="router.push('/ai')">全屏</Button>
+          <Button variant="outline" :disabled="aiLoading" @click="router.push('/ai')">
+            <Clock class="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </CardContent>

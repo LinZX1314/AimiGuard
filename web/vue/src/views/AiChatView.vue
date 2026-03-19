@@ -268,7 +268,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-64px)] bg-background text-foreground overflow-hidden">
+  <div class="flex h-[calc(100vh-64px)] bg-background/60 backdrop-blur-sm text-foreground overflow-hidden">
     <AiSessionSidebar
       :sessions="sessions"
       :current-session="currentSession"
@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
       @load-messages="loadMessages"
       @delete-session="deleteSession"
     />
-    <main class="flex-1 bg-background/80 flex flex-col relative w-full overflow-hidden">
+    <main class="flex-1 bg-transparent flex flex-col relative w-full overflow-hidden">
       <AiMessageList :messages="messages" :loading="loading" />
       <AiChatInput
         :sending="sending"
