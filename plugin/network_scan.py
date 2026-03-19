@@ -100,8 +100,9 @@ def scan_hosts(ip_range, arguments='-sS -O -T5'):
     try:
         nm.scan(hosts=ip_range, arguments=arguments)
         return nm
-    except Exception as e:
-        log("Nmap", f"Nmap Scan Error: {str(e)}", "ERROR")
+    except Exception:
+        # 扫描被中断时不记录错误日志
+        pass
         return None
 
 

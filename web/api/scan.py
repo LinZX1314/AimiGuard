@@ -26,10 +26,13 @@ def scan_findings():
     where_clauses = []
     params = []
     
-    # 严重性映射：前端中文 -> 数据库值
-    SEV_MAP = {'严重': 'vulnerable', '高危': 'vulnerable', '中危': 'error', '低危': 'safe', '信息': 'safe'}
+    # 严重性映射：精简为 3 个状态
+    SEV_MAP = {
+        '发现漏洞': 'vulnerable', 
+        '安全': 'safe', 
+        '连接失败': 'error'
+    }
     if severity:
-        # 将中文严重性映射到数据库值
         db_severity = SEV_MAP.get(severity, severity)
         where_clauses.append('vuln_result = ?')
         params.append(db_severity)
@@ -48,9 +51,19 @@ def scan_findings():
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
 
-    # 数据库值 -> 前端中文
-    SEV = {'vulnerable': '高危', 'error': '中危', 'safe': '低危'}
-    STA = {'vulnerable': 'open', 'safe': 'fixed', 'error': 'open'}
+    # 数据库值 -> 极简三个状态
+    SEV = {
+        'vulnerable': '发现漏洞',
+        'safe': '安全',
+        'info': '安全',
+        'error': '连接失败'
+    }
+    STA = {
+        'vulnerable': 'open',
+        'safe': 'fixed',
+        'info': 'fixed',
+        'error': 'fixed'  # 连接失败也计入安全面板，但标记为灰色
+    }
     findings = [{
         'id': r.get('id', 0),
         'vuln_name': r.get('vuln_name', '未知漏洞'),

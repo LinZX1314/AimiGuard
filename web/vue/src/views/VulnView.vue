@@ -45,15 +45,13 @@ const total    = ref(0)
 
 const headers = ['漏洞名称', '主机 IP', '严重度', '状态 / 发现时间', '操作']
 
-const severities = ['严重', '高危', '中危', '低危', '信息']
+const severities = ['发现漏洞', '安全', '连接失败']
 const statuses   = ['open', 'fixed', 'ignored', 'false_positive']
 
 const SEV_STYLES: Record<string, string> = {
-  '严重': 'bg-red-500/10 text-red-500 border-red-500/20',
-  '高危': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  '中危': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-  '低危': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-  '信息': 'bg-slate-500/10 text-slate-500 border-slate-500/20'
+  '发现漏洞': 'bg-red-500/10 text-red-500 border-red-500/20',
+  '安全': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  '连接失败': 'bg-slate-500/10 text-slate-500 border-slate-500/20'
 }
 
 const STA_STYLES: Record<string, string> = {
@@ -81,7 +79,7 @@ const filteredVulns = computed(() => {
     )
   }
   if (hideSafe.value) {
-    result = result.filter(v => v.severity !== '低危' && v.severity !== '信息')
+    result = result.filter((v: any) => v.severity !== '安全' && v.severity !== '信息')
   }
   return result
 })
@@ -97,10 +95,12 @@ async function load() {
   if (d) {
     vulns.value = d.items ?? d.data?.items ?? d.data ?? []
     total.value = d.total ?? vulns.value.length
-    stats.value.total    = total.value
-    stats.value.critical = vulns.value.filter(v => v.severity === '严重').length
-    stats.value.high     = vulns.value.filter(v => v.severity === '高危').length
-    stats.value.fixed    = vulns.value.filter(v => v.status === 'fixed').length
+    // 统计值从全部数据计算，不受筛选器影响
+    const allVulns: any[] = d.items ?? d.data?.items ?? d.data ?? []
+    stats.value.total    = allVulns.length
+    stats.value.critical = allVulns.filter((v: any) => v.severity === '发现漏洞').length
+    stats.value.high     = allVulns.filter((v: any) => v.severity === '连接失败').length
+    stats.value.fixed    = allVulns.filter((v: any) => v.severity === '安全').length
   }
   loading.value = false
 }
@@ -120,10 +120,10 @@ async function markStatus(id: number, status: string) {
 }
 
 const statSummaries = computed(() => [
-  { label: '漏洞总数', val: stats.value.total, icon: Bug, color: 'text-primary' },
-  { label: '严重威胁', val: stats.value.critical, icon: Flame, color: 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]' },
-  { label: '高危漏洞', val: stats.value.high, icon: AlertTriangle, color: 'text-orange-400' },
-  { label: '安全', val: stats.value.fixed, icon: ShieldCheck, color: 'text-emerald-400' }
+  { label: '扫描记录', val: stats.value.total, icon: Bug, color: 'text-primary' },
+  { label: '发现漏洞', val: stats.value.critical, icon: Flame, color: 'text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]' },
+  { label: '连接失败', val: stats.value.high, icon: AlertTriangle, color: 'text-slate-400' },
+  { label: '确认安全', val: stats.value.fixed, icon: ShieldCheck, color: 'text-emerald-400' }
 ])
 
 onMounted(load)

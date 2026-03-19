@@ -174,7 +174,7 @@ def _dhcp_query(args: dict, cfg: dict = None) -> dict:
 
 @tool_registry.register(
     name='nmap_scan',
-    description='执行 Nmap 网络扫描，发现存活主机、开放端口、服务版本和操作系统信息',
+    description='执行 Nmap 网络扫描（备选，仅当fscan不可用时使用）。发现存活主机、开放端口、服务版本和操作系统信息',
     parameters={
         'type': 'object',
         'properties': {
@@ -309,6 +309,13 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': '缺少目标IP: target_ip'}
 
     rule_id = None
+
+    # ban 前检查目标IP是否已存在（去重）
+    if action == 'ban':
+        existing_rules = SwitchAclModel.get_rules(host, acl_number)
+        for r in existing_rules:
+            if r.get('target_ip') == target_ip and r.get('action') == 'ban':
+                return {'ok': False, 'error': f'IP {target_ip} 已在封禁列表中，无需重复封禁'}
 
     try:
         # 获取规则ID
@@ -533,6 +540,190 @@ def _get_honeypot_stats(args: dict, cfg: dict = None) -> dict:
         }
     except Exception as e:
         return {'ok': False, 'error': f'蜜罐态势获取失败: {e}'}
+
+
+@tool_registry.register(
+    name='run_fscan',
+    description='【网络扫描工具】当你需要扫描局域网IP段、发现存活主机、探测端口服务时，必须使用此工具。参数说明：target可以是IP(192.168.1.1)、CIDR网段(192.168.1.0/24)或多IP(192.168.1.1,192.168.1.2)。port是端口列表如22,80,443。threads是线程数默认6000。重要：扫描局域网时必须用此工具！',
+    parameters={
+        'type': 'object',
+        'properties': {
+            'target': {
+                'type': 'string',
+                'description': '扫描目标：单个IP(如192.168.1.1)、CIDR网段(如192.168.1.0/24)、或多IP逗号分隔(如192.168.1.1,192.168.1.2,192.168.1.3)',
+            },
+            'port': {
+                'type': 'string',
+                'description': '指定扫描端口，如 22,80,443 或 1-65535（所有端口），默认常用端口',
+                'default': '21,22,23,80,81,135,139,443,445,1433,3306,5432,6379,8080,8443',
+            },
+            'threads': {
+                'type': 'integer',
+                'description': '扫描线程数，默认6000',
+                'default': 6000,
+            },
+        },
+        'required': ['target'],
+    },
+)
+def _run_fscan(args: dict, cfg: dict = None) -> dict:
+    """fscan网络探测工具"""
+    import subprocess
+    import re
+    import shutil
+    import os
+    from datetime import datetime
+
+    target = str(args.get('target', '')).strip()
+    port = args.get('port', '21,22,23,80,81,135,139,443,445,1433,3306,5432,6379,8080,8443')
+    threads = int(args.get('threads', 6000))
+
+    if not target:
+        return {'ok': False, 'error': '缺少 target 参数'}
+
+    # 查找fscan可执行文件
+    fscan_path = None
+    # 先在项目lib目录查找
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_fscan = os.path.join(base_dir, 'lib', 'fscan.exe')
+    if os.path.isfile(local_fscan):
+        fscan_path = local_fscan
+    else:
+        # 从系统PATH查找
+        system_fscan = shutil.which('fscan')
+        if system_fscan:
+            fscan_path = system_fscan
+
+    if not fscan_path:
+        return {'ok': False, 'error': '未找到fscan.exe，请将fscan.exe放置在 lib/fscan.exe 或配置到系统PATH'}
+
+    try:
+        import tempfile
+        # 创建临时文件存储JSON输出
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tf:
+            json_file = tf.name
+
+        # 构建fscan命令: fscan -h <target> -t <threads> -p <ports> -nobr -nopoc -o <tmpfile> -f json
+        cmd = [fscan_path, '-h', target, '-t', str(threads), '-p', port, '-nobr', '-nopoc', '-o', json_file, '-f', 'json']
+
+        # 执行扫描
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 最多等待5分钟
+            encoding='utf-8',
+            errors='ignore',
+        )
+
+        # 先执行扫描（不等待完成）
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+        )
+
+        # 等待完成（最多5分钟）
+        try:
+            stdout, stderr = proc.communicate(timeout=300)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            if os.path.exists(json_file):
+                os.unlink(json_file)
+            return {'ok': False, 'error': 'fscan扫描超时（超过5分钟）'}
+
+        output = stdout + stderr
+
+        # 尝试读取JSON文件
+        scan_data = None
+        if os.path.exists(json_file):
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():
+                        scan_data = json.loads(content)
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.unlink(json_file)
+                except Exception:
+                    pass
+
+        # 如果成功解析JSON
+        if scan_data:
+            hosts = []
+            vulns = []
+
+            # 解析主机列表
+            items = scan_data if isinstance(scan_data, list) else scan_data.get('data', [])
+            for h in items:
+                host_info = {
+                    'ip': h.get('ip', ''),
+                    'hostname': h.get('host', ''),
+                }
+                ports = h.get('ports', [])
+                if ports:
+                    host_info['ports'] = ','.join(str(p.get('port', '')) for p in ports if p.get('port'))
+                hosts.append(host_info)
+
+            # 解析漏洞列表
+            for v in scan_data.get('vulns', []) if isinstance(scan_data, dict) else []:
+                vulns.append({
+                    'ip': v.get('ip', ''),
+                    'port': v.get('port', ''),
+                    'service': v.get('type', ''),
+                    'vuln': v.get('info', ''),
+                })
+
+            return {
+                'ok': True,
+                'target': target,
+                '扫描时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                '发现主机': len(hosts),
+                '主机列表': hosts[:30],
+                '漏洞列表': vulns[:20],
+            }
+
+        # Fallback: 解析纯文本输出
+        lines = output.split('\n')
+        host_ports = {}
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if '端口开放' in line:
+                # 提取 "端口开放 192.168.0.5:445" 格式
+                parts = line.split('端口开放')
+                if len(parts) >= 2:
+                    ip_port = parts[-1].strip()
+                    if ':' in ip_port:
+                        ip, port = ip_port.rsplit(':', 1)
+                        if ip not in host_ports:
+                            host_ports[ip] = []
+                        host_ports[ip].append(port)
+
+        # 合并为一行
+        summary = []
+        for ip in sorted(host_ports.keys()):
+            ports = ', '.join(sorted(host_ports[ip], key=lambda x: int(x) if x.isdigit() else 0))
+            summary.append(f'{ip}: {ports}')
+
+        return {
+            'ok': True,
+            'target': target,
+            '扫描时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            '概要': summary if summary else ['扫描完成'],
+        }
+
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'error': 'fscan扫描超时（超过5分钟）'}
+    except Exception as e:
+        return {'ok': False, 'error': f'fscan执行失败: {e}'}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

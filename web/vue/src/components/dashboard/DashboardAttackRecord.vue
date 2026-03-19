@@ -21,7 +21,7 @@ function formatThreatLevel(level?: string) {
   const lower = level.toLowerCase()
   if (level === '高危' || lower === 'high') return '高危'
   if (level === '中危' || lower === 'medium') return '中危'
-  if (level === '低危' || lower === 'low') return '低危'
+  if (level === '安全' || lower === 'low') return '安全'
   return level
 }
 </script>

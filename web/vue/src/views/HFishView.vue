@@ -296,7 +296,7 @@ async function onPageSizeChange(next: number) {
 function threatClass(level: string) {
   if (level === 'high' || level === '高危') return 'bg-red-500/10 text-red-400 border-red-500/30'
   if (level === 'medium' || level === '中危') return 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-  if (level === 'low' || level === '低危') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+  if (level === 'low' || level === '安全') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
   return 'bg-slate-500/10 text-muted-foreground border-slate-500/30'
 }
 
@@ -305,7 +305,7 @@ function threatLabel(level: string) {
   const l = level.toLowerCase()
   if (l === 'high') return '高危'
   if (l === 'medium') return '中危'
-  if (l === 'low') return '低危'
+  if (l === 'low') return '安全'
   return level
 }
 

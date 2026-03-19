@@ -33,7 +33,6 @@ def _get_system_context() -> str:
     """获取实时系统摘要，作为 AI 的底座背景知识"""
     from database.models import StatsModel, HFishModel, VulnModel
     try:
-        summary = StatsModel.get_dashboard_summary()
         hfish_stats = HFishModel.get_stats()
         vuln_stats = VulnModel.get_vuln_stats()
 
@@ -43,12 +42,23 @@ def _get_system_context() -> str:
         top_attackers = hfish_stats.get('ip_stats', [])[:5]
         attacker_summary = [f"{ip['ip']}({ip['count']}次)" for ip in top_attackers]
 
+        # 通过DHCP查询在线设备数
+        online_devices = 0
+        try:
+            from ai.tools import execute_tool
+            import json
+            dhcp_result = execute_tool('dhcp_query', {}, {})
+            dhcp_data = json.loads(dhcp_result) if isinstance(dhcp_result, str) else dhcp_result
+            if dhcp_data.get('ok'):
+                online_devices = dhcp_data.get('count', 0)
+        except Exception:
+            pass
+
         ctx = [
             "### 当前系统态势摘要 ###",
-            f"- 在线设备数: {summary.get('online_devices', 0)}",
+            f"- DHCP在线设备数: {online_devices}",
             f"- 存疑/有风险设备: {vuln_stats.get('vulnerable_devices', 0)}",
-            f"- 24小时内遭受攻击次数: {summary.get('attacks_24h', 0)}",
-            f"- 最近扫描时间: {summary.get('last_scan', '尚未扫描')}",
+            f"- 24小时内遭受攻击次数: {hfish_stats.get('total', 0)}",
             "",
             "### 蜜罐态势统计 ###",
             f"- 总攻击次数: {hfish_stats.get('total', 0)}",
