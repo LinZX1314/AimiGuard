@@ -109,13 +109,9 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_ip ON assets(current_ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_asset_ip_history_asset ON asset_ip_history(asset_id)')
     
-    # 性能优化索引
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)')
+    # 性能优化索引（attack_logs 和 ai_analysis_logs 的索引在各表创建后）
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)')
 
     # ================= 漏洞扫描相关表 =================
     cursor.execute('''
@@ -147,7 +143,12 @@ def init_db():
             create_time_timestamp INTEGER
         )
     ''')
-    
+
+    # attack_logs 表创建后的索引
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)')
+
     # ================= AI 分析记录表 =================
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ai_analysis_logs (
@@ -158,6 +159,9 @@ def init_db():
             status TEXT DEFAULT 'pending'
         )
     ''')
+
+    # ai_analysis_logs 表创建后的索引
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)')
 
     # ================= AI 聊天与会话持久化表 =================
     cursor.execute('''

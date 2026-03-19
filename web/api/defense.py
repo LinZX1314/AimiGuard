@@ -23,7 +23,6 @@ def defense_hfish_logs():
     offset = (page - 1) * page_size
     aggregated = _as_bool(request.args.get('aggregated', '0'))
     service_name = request.args.get('service_name')
-    threat_level = request.args.get('threat_level')
 
     conn = get_connection()
     c = conn.cursor()
@@ -64,7 +63,6 @@ def defense_hfish_logs():
         return ok({'items': rows, 'total': total, 'page': page, 'page_size': page_size})
 
     logs = HFishModel.get_attack_logs(limit=page_size, offset=offset,
-                                       threat_level=threat_level,
                                        service_name=service_name)
     conn.close()
     return ok({'items': logs, 'total': total, 'page': page, 'page_size': page_size})
@@ -182,7 +180,7 @@ def defense_hfish_type_detail(service_name):
     logs_q = f"""
         SELECT
             id, attack_ip, ip_location, service_name, service_port,
-            client_id, create_time_str, threat_level
+            client_id, create_time_str
         FROM attack_logs {where_sql}
         ORDER BY create_time_timestamp DESC
         LIMIT ? OFFSET ?
@@ -199,7 +197,6 @@ def defense_hfish_type_detail(service_name):
             'service_port': row['service_port'],
             'client_id': row['client_id'],
             'attack_time': row['create_time_str'],
-            'threat_level': row['threat_level'],
         })
 
     # 5. Get total count for pagination

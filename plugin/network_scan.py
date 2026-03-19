@@ -65,6 +65,21 @@ def get_vuln_scripts_map():
     return {}
 
 
+def get_service_scripts_map():
+    """获取服务与漏洞检测脚本的映射字典"""
+    config_file = os.path.join(get_project_root(), "config.json")
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                service_map = config.get('nmap', {}).get('vuln_scripts_by_service')
+                if service_map:
+                    return {k.lower(): v for k, v in service_map.items()}
+    except Exception:
+        log("VulnScan", f"读取服务脚本映射失败", "WARNING")
+    return {}
+
+
 def scan_hosts(ip_range, arguments='-sS -O -T5'):
     """
     扫描指定 IP 范围
@@ -203,29 +218,35 @@ def auto_detect_os_tags(osmatch):
     return ','.join(sorted(tags)) if tags else 'unknown'
 
 
-def get_vuln_scripts_for_os(os_tags):
+def get_vuln_scripts_for_host(host_info):
     """
-    根据系统标签获取需要扫描的漏洞脚本列表
+    根据主机信息（操作系统标签和服务）获取需要扫描的漏洞脚本列表
 
     参数:
-        os_tags: 系统标签字符串，如 "windows 10,linux"
+        host_info: 主机信息字典
 
     返回:
         漏洞脚本名称列表
     """
-    if not os_tags:
-        return []
-
-    tag_list = [tag.strip().lower() for tag in os_tags.split(',')]
     vuln_scripts = set()
     
-    # 动态获取映射配置
-    vuln_scripts_by_tag = get_vuln_scripts_map()
+    # 1. 根据操作系统标签获取脚本
+    os_tags = host_info.get('os_tags', '')
+    if os_tags:
+        tag_list = [tag.strip().lower() for tag in os_tags.split(',')]
+        vuln_scripts_by_tag = get_vuln_scripts_map()
+        for tag in tag_list:
+            if tag in vuln_scripts_by_tag:
+                vuln_scripts.update(vuln_scripts_by_tag[tag])
 
-    # 遍历所有标签，收集对应的漏洞脚本
-    for tag in tag_list:
-        if tag in vuln_scripts_by_tag:
-            vuln_scripts.update(vuln_scripts_by_tag[tag])
+    # 2. 根据开放服务获取脚本
+    services = host_info.get('services', [])
+    if services:
+        vuln_scripts_by_service = get_service_scripts_map()
+        for svc in services:
+            svc_name = svc.get('service', '').lower()
+            if svc_name in vuln_scripts_by_service:
+                vuln_scripts.update(vuln_scripts_by_service[svc_name])
 
     return list(vuln_scripts)
 
@@ -300,7 +321,7 @@ def run_vuln_scan(hosts_data):
         if not mac_address:
             continue
 
-        vuln_scripts = get_vuln_scripts_for_os(os_tags)
+        vuln_scripts = get_vuln_scripts_for_host(host)
 
         if not vuln_scripts:
             continue

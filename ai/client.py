@@ -44,7 +44,10 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
         response = client.chat.completions.create(model=model, messages=messages)
         if not response.choices:
             return {'content': '⚠️ AI 返回为空'}
-        content = _content_to_text(response.choices[0].message.content)
+        message = response.choices[0].message
+        if message is None:
+            return {'content': '⚠️ AI 返回消息为空'}
+        content = _content_to_text(message.content)
         return {'content': content}
     except Exception as e:
         return {'content': f'⚠️ AI 调用失败: {e}'}
@@ -78,7 +81,7 @@ def stream_openai_chat_completion(
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
-            if delta.content:
+            if delta is not None and delta.content:
                 yield (delta.content, '')
     except Exception as e:
         yield ('', f'⚠️ AI 调用失败: {e}')
@@ -131,11 +134,11 @@ def stream_openai_chat_with_tools(
             delta = choice.delta
 
             # ── 普通文本内容 ────────────────────────────────────────────────
-            if delta.content:
+            if delta is not None and delta.content:
                 yield (delta.content, '', None)
 
             # ── 工具调用增量 ────────────────────────────────────────────────
-            if delta.tool_calls:
+            if delta is not None and delta.tool_calls:
                 for tc_delta in delta.tool_calls:
                     idx = tc_delta.index
                     if idx not in pending_tool_calls:
@@ -154,7 +157,8 @@ def stream_openai_chat_with_tools(
                             tc['arguments_str'] += tc_delta.function.arguments
 
         # ── 流结束，若有工具调用则 yield ────────────────────────────────────
-        if finish_reason == 'tool_calls' and pending_tool_calls:
+        # 兼容性处理：只要收集到了工具调用信息，就应该执行，不完全依赖 finish_reason
+        if (finish_reason == 'tool_calls' or finish_reason == 'function_call' or len(pending_tool_calls) > 0) and pending_tool_calls:
             for tc in pending_tool_calls.values():
                 try:
                     arguments = json.loads(tc['arguments_str'] or '{}')

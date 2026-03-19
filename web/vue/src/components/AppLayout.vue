@@ -156,7 +156,7 @@ const logoUrl = new URL('@/assets/aimiguard-logo.png', import.meta.url).href
 const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
   { title: 'HFish 蜜罐', icon: Bug,             to: '/hfish' },
-  { title: 'Nmap 扫描',  icon: Radar,           to: '/nmap' },
+  { title: '主机探测',  icon: Radar,           to: '/nmap' },
   { title: '漏洞管理',   icon: Siren,           to: '/vuln' },
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },

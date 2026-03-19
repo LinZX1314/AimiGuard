@@ -327,7 +327,10 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                   <td class="py-3 px-4">
                     <div class="flex items-center gap-2">
                       <div class="h-2 w-2 rounded-full" :class="h.state === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-600'"></div>
-                      <span class="font-bold text-foreground">{{ h.ip }}</span>
+                      <span
+                        class="font-bold text-foreground cursor-pointer hover:text-primary transition-colors"
+                        @click="openDetail(h)"
+                      >{{ h.ip }}</span>
                     </div>
                   </td>
                   <td class="py-3 px-4">

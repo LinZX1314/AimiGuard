@@ -36,15 +36,26 @@ def _get_system_context() -> str:
         summary = StatsModel.get_dashboard_summary()
         hfish_stats = HFishModel.get_stats()
         vuln_stats = VulnModel.get_vuln_stats()
-        
+
+        hot_services = hfish_stats.get('service_stats', [])[:5]
+        service_summary = [f"{svc['name']}({svc['count']}次)" for svc in hot_services]
+
+        top_attackers = hfish_stats.get('ip_stats', [])[:5]
+        attacker_summary = [f"{ip['ip']}({ip['count']}次)" for ip in top_attackers]
+
         ctx = [
             "### 当前系统态势摘要 ###",
             f"- 在线设备数: {summary.get('online_devices', 0)}",
             f"- 存疑/有风险设备: {vuln_stats.get('vulnerable_devices', 0)}",
             f"- 24小时内遭受攻击次数: {summary.get('attacks_24h', 0)}",
             f"- 最近扫描时间: {summary.get('last_scan', '尚未扫描')}",
-            f"- 高危威胁统计: " + ", ".join([f"{s['level']}: {s['count']}" for s in hfish_stats.get('threat_stats', [])]),
-            "\n你不仅是一个安服专家，还具备调用本地工具的能力。"
+            "",
+            "### 蜜罐态势统计 ###",
+            f"- 总攻击次数: {hfish_stats.get('total', 0)}",
+            f"- 热门攻击服务(Top5): {', '.join(service_summary) if service_summary else '暂无数据'}",
+            f"- 主要攻击来源(Top5): {', '.join(attacker_summary) if attacker_summary else '暂无数据'}",
+            "",
+            "你不仅是一个安服专家，还具备调用本地工具的能力。",
         ]
         return "\n".join(ctx)
     except Exception as e:

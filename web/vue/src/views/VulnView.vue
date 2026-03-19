@@ -35,6 +35,7 @@ const vulns    = ref<any[]>([])
 const search   = ref('')
 const sevFlt   = ref<string>("ALL")
 const statusFlt= ref<string>("ALL")
+const hideSafe = ref(false)
 const stats    = ref({ total: 0, critical: 0, high: 0, fixed: 0 })
 
 // Pagination
@@ -65,7 +66,7 @@ const STA_STYLES: Record<string, string> = {
 // 后端状态值保持英文，前端统一显示中文
 const STATUS_TEXT: Record<string, string> = {
   open: '待处理',
-  fixed: '已修复',
+  fixed: '未发现',
   ignored: '已忽略',
   false_positive: '误报'
 }
@@ -74,10 +75,13 @@ const filteredVulns = computed(() => {
   let result = vulns.value
   if (search.value) {
     const s = search.value.toLowerCase()
-    result = result.filter(v => 
-      (v.vuln_name || '').toLowerCase().includes(s) || 
+    result = result.filter(v =>
+      (v.vuln_name || '').toLowerCase().includes(s) ||
       (v.ip || '').toLowerCase().includes(s)
     )
+  }
+  if (hideSafe.value) {
+    result = result.filter(v => v.severity !== '低危' && v.severity !== '信息')
   }
   return result
 })
@@ -193,6 +197,18 @@ onMounted(load)
                 <SelectItem v-for="s in statuses" :key="s" :value="s">{{ STATUS_TEXT[s] || s }}</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="[
+                'h-10 px-3 bg-black/20 border-border/40 transition-all',
+                hideSafe ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
+              ]"
+              @click="hideSafe = !hideSafe"
+            >
+              <ShieldCheck :size="16" class="mr-2" />
+              {{ hideSafe ? '已隐藏安全项' : '隐藏安全项' }}
+            </Button>
           </div>
         </div>
 

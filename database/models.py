@@ -348,14 +348,11 @@ class HFishModel:
     """HFish 攻击日志模型。"""
 
     @staticmethod
-    def get_attack_logs(limit=100, offset=0, threat_level=None, service_name=None):
+    def get_attack_logs(limit=100, offset=0, service_name=None):
         conn = get_connection()
         cursor = conn.cursor()
         query = "SELECT * FROM attack_logs WHERE 1=1"
         params = []
-        if threat_level:
-            query += " AND threat_level = ?"
-            params.append(threat_level)
         if service_name:
             query += " AND service_name = ?"
             params.append(service_name)
@@ -384,8 +381,6 @@ class HFishModel:
     def get_stats():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT threat_level, COUNT(*) as count FROM attack_logs GROUP BY threat_level")
-        threat_stats = [{"level": row[0], "count": row[1]} for row in cursor.fetchall()]
 
         cursor.execute("SELECT service_name, COUNT(*) as count FROM attack_logs GROUP BY service_name ORDER BY count DESC LIMIT 10")
         service_stats = [{"name": row[0], "count": row[1]} for row in cursor.fetchall()]
@@ -408,7 +403,6 @@ class HFishModel:
         conn.close()
         return {
             "total": total,
-            "threat_stats": threat_stats,
             "service_stats": service_stats,
             "ip_stats": ip_stats,
             "time_stats": time_stats

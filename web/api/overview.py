@@ -17,14 +17,12 @@ def overview_metrics():
     nmap_stats = NmapModel.get_stats()
     vuln = VulnModel.get_vuln_stats()
 
-    high_count = next((s['count'] for s in hfish.get('threat_stats', []) if s['level'] in ('高危', 'HIGH')), 0)
     online = next((s['count'] for s in nmap_stats.get('state_stats', []) if s['state'] == 'up'), 0)
     ai_analyses = AiModel.get_all_analyses()
     blocked = sum(1 for a in ai_analyses.values() if a.get('decision') == 'true')
 
     return ok({
         'hfish_total': hfish.get('total', 0),
-        'hfish_high': high_count,
         'nmap_online': online,
         'vuln_open': vuln.get('vulnerable', 0),
         'ai_decisions': len(ai_analyses),
@@ -60,7 +58,6 @@ def overview_screen():
     ai_analyses = AiModel.get_all_analyses()
     cfg = _load_cfg()
 
-    high_count = next((s['count'] for s in hfish.get('threat_stats', []) if s['level'] in ('高危', 'HIGH')), 0)
     online = next((s['count'] for s in nmap_stats.get('state_stats', []) if s['state'] == 'up'), 0)
     blocked = sum(1 for a in ai_analyses.values() if a.get('decision') == 'true')
 
@@ -72,7 +69,7 @@ def overview_screen():
     c = conn.cursor()
 
     c.execute("""
-        SELECT attack_ip, ip_location, service_name, threat_level, create_time_str
+        SELECT attack_ip, ip_location, service_name, create_time_str
         FROM attack_logs
         ORDER BY create_time_timestamp DESC
         LIMIT 10
@@ -84,7 +81,6 @@ def overview_screen():
             'attack_ip': row.get('attack_ip') or '-',
             'ip_location': row.get('ip_location') or '未知地区',
             'service_name': row.get('service_name') or '未知服务',
-            'threat_level': row.get('threat_level') or '未分级',
             'create_time_str': row.get('create_time_str') or '-',
         })
 
@@ -153,7 +149,6 @@ def overview_screen():
     payload = {
         'top_metrics': {
             'hfish_total': hfish.get('total', 0),
-            'hfish_high': high_count,
             'nmap_online': online,
             'vuln_open': vuln.get('vulnerable', 0),
             'ai_decisions': len(ai_analyses),
@@ -168,10 +163,6 @@ def overview_screen():
         'trends': {
             'labels': [x.get('date') for x in hfish.get('time_stats', [])],
             'counts': [x.get('count', 0) for x in hfish.get('time_stats', [])],
-        },
-        'threat_distribution': {
-            'levels': [x.get('level') for x in hfish.get('threat_stats', [])],
-            'counts': [x.get('count', 0) for x in hfish.get('threat_stats', [])],
         },
         'hot_services': hfish.get('service_stats', []),
         'recent_attacks': recent_attacks,

@@ -446,6 +446,95 @@ def _get_ban_records(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': f'获取封禁记录失败: {e}'}
 
 
+@tool_registry.register(
+    name='get_honeypot_logs',
+    description='查询蜜罐攻击日志，获取攻击来源IP、服务类型等信息。支持按服务类型筛选和分页。',
+    parameters={
+        'type': 'object',
+        'properties': {
+            'service_name': {
+                'type': 'string',
+                'description': '服务名称筛选，如 ssh、http、mysql、redis 等',
+            },
+            'limit': {
+                'type': 'integer',
+                'description': '返回记录数量，默认50条，最大200条',
+                'default': 50,
+            },
+            'offset': {
+                'type': 'integer',
+                'description': '分页偏移量，默认0',
+                'default': 0,
+            },
+        },
+        'required': [],
+    },
+)
+def _get_honeypot_logs(args: dict, cfg: dict = None) -> dict:
+    """蜜罐日志查询工具"""
+    from database.models import HFishModel
+
+    service_name = args.get('service_name')
+    limit = min(int(args.get('limit', 50)), 200)
+    offset = int(args.get('offset', 0))
+
+    try:
+        logs = HFishModel.get_attack_logs(
+            limit=limit,
+            offset=offset,
+            service_name=service_name,
+        )
+
+        formatted = []
+        for log in logs:
+            formatted.append({
+                '攻击IP': log.get('attack_ip', 'N/A'),
+                '来源地区': log.get('ip_location', '未知'),
+                '服务': log.get('service_name', '未知'),
+                '攻击时间': log.get('create_time_str', ''),
+            })
+
+        return {
+            'ok': True,
+            '查询参数': {
+                '服务': service_name or '全部',
+                'limit': limit,
+                'offset': offset,
+            },
+            '总数': len(formatted),
+            '攻击记录': formatted,
+        }
+    except Exception as e:
+        return {'ok': False, 'error': f'蜜罐日志查询失败: {e}'}
+
+
+@tool_registry.register(
+    name='get_honeypot_stats',
+    description='获取蜜罐系统整体态势统计，包括热门攻击服务、攻击来源Top10、7天趋势等',
+    parameters={
+        'type': 'object',
+        'properties': {},
+        'required': [],
+    },
+)
+def _get_honeypot_stats(args: dict, cfg: dict = None) -> dict:
+    """蜜罐态势统计工具"""
+    from database.models import HFishModel
+
+    try:
+        stats = HFishModel.get_stats()
+
+        return {
+            'ok': True,
+            '总攻击次数': stats.get('total', 0),
+            '热门攻击服务': stats.get('service_stats', []),
+            '攻击来源Top10': stats.get('ip_stats', []),
+            '7天趋势': stats.get('time_stats', []),
+        }
+    except Exception as e:
+        return {'ok': False, 'error': f'蜜罐态势获取失败: {e}'}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 导出
 # ──────────────────────────────────────────────────────────────────────────────

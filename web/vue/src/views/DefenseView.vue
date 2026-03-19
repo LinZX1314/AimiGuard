@@ -41,7 +41,7 @@ const STA_STYLES: Record<string, string>  = {
 // 后端状态值保持不变，前端展示中文
 const STATUS_TEXT: Record<string, string> = {
   pending: '待处理',
-  approved: '已通过',
+  approved: '已封禁',
   rejected: '已拒绝',
   false_positive: '误报'
 }
