@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import DashboardWelcomeBanner from './DashboardWelcomeBanner.vue'
 import DashboardWorldMap from './DashboardWorldMap.vue'
 import DashboardTopology from './DashboardTopology.vue'
-import { Button } from '@/components/ui/button'
-import { Maximize2, Minimize2, Activity, Globe, Wifi } from 'lucide-vue-next'
+import DashboardDevicePanel from './DashboardDevicePanel.vue'
+import { Activity, Wifi, Server } from 'lucide-vue-next'
 
 interface TopMetrics {
   hfish_total: number
@@ -41,7 +41,6 @@ const props = defineProps<{
   loadError: string
 }>()
 
-const isFullscreen = ref(false)
 const containerRef = ref<HTMLElement>()
 
 // 入场动画状态
@@ -52,57 +51,112 @@ const animationState = ref({
 
 const dashboardViews = [
   { key: 'overview', label: '总览', icon: Activity },
-  { key: 'map', label: '地图', icon: Globe },
   { key: 'topology', label: '拓扑', icon: Wifi },
+  { key: 'device', label: '设备面板', icon: Server },
 ] as const
 
 const activeView = ref<(typeof dashboardViews)[number]['key']>('overview')
+const mockFeedRows = ref<HoneypotFeedItem[]>([])
+let mockFeedTimer = 0
 
-const toggleFullscreen = async () => {
-  if (!document.fullscreenElement) {
-    await containerRef.value?.requestFullscreen()
-    isFullscreen.value = true
-  } else {
-    await document.exitFullscreen()
-    isFullscreen.value = false
+interface HoneypotFeedItem {
+  id: string
+  ip: string
+  location: string
+  service: string
+  level: string
+  time: string
+}
+
+const honeypotFeedItems = computed<HoneypotFeedItem[]>(() => {
+  const realRows = props.payload.recent_attacks.map((item, idx) => ({
+    id: `${item.attack_ip}-${item.create_time_str || idx}-${item.service_name || 'unknown'}`,
+    ip: item.attack_ip || '未知IP',
+    location: item.ip_location || '未知区域',
+    service: item.service_name || '未知服务',
+    level: item.threat_level || 'medium',
+    time: item.create_time_str || '刚刚',
+  }))
+
+  // 按时间倒序排列，解析失败时保持原有顺序
+  const withTs = realRows.map((item, index) => ({
+    ...item,
+    index,
+    ts: Number.isNaN(Date.parse(item.time)) ? -1 : Date.parse(item.time),
+  }))
+
+  const sortedRealRows = withTs
+    .sort((a, b) => {
+      if (a.ts === -1 && b.ts === -1) return a.index - b.index
+      if (a.ts === -1) return 1
+      if (b.ts === -1) return -1
+      return b.ts - a.ts
+    })
+    .slice(0, 8)
+    .map(({ index, ts, ...item }) => item)
+
+  if (sortedRealRows.length > 0) {
+    return sortedRealRows
   }
+
+  return mockFeedRows.value.slice(0, 8)
+})
+
+const honeypotLevelText = (level: string) => {
+  const lv = level.toLowerCase()
+  if (lv === 'critical') return '严重'
+  if (lv === 'high') return '高危'
+  if (lv === 'medium') return '中危'
+  return '低危'
 }
 
 onMounted(() => {
-  const handleFullscreenChange = () => {
-    isFullscreen.value = !!document.fullscreenElement
-  }
-  document.addEventListener('fullscreenchange', handleFullscreenChange)
-  
   // 启动入场动画序列
   setTimeout(() => { animationState.value.welcome = true }, 200)
   setTimeout(() => { animationState.value.overviewMap = true }, 400)
 
-  onUnmounted(() => {
-    document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  })
+  // 无真实数据时，模拟“加载后逐条新增”的历史告警效果
+  if (!props.payload.recent_attacks.length) {
+    const now = Date.now()
+    const mockSeeds: HoneypotFeedItem[] = [
+      { id: 'sim-1', ip: '185.220.101.45', location: '俄罗斯-莫斯科', service: 'SSH暴力破解', level: 'critical', time: new Date(now - 15_000).toISOString() },
+      { id: 'sim-2', ip: '45.227.255.98', location: '巴西-圣保罗', service: 'SQL注入', level: 'high', time: new Date(now - 11_000).toISOString() },
+      { id: 'sim-3', ip: '198.51.100.78', location: '美国-纽约', service: 'API滥用', level: 'medium', time: new Date(now - 7_000).toISOString() },
+      { id: 'sim-4', ip: '203.0.113.41', location: '印度-孟买', service: '端口扫描', level: 'medium', time: new Date(now - 3_000).toISOString() },
+    ]
+
+    let cursor = 0
+    mockFeedTimer = window.setInterval(() => {
+      const row = mockSeeds[cursor % mockSeeds.length]
+
+      // 新数据插入头部，形成倒序时间列表和自然位移动画
+      mockFeedRows.value = [{
+        ...row,
+        id: `${row.id}-${Date.now()}`,
+        time: new Date().toISOString(),
+      }, ...mockFeedRows.value].slice(0, 8)
+
+      cursor += 1
+    }, 1800)
+  }
+})
+
+onUnmounted(() => {
+  if (mockFeedTimer) {
+    window.clearInterval(mockFeedTimer)
+  }
 })
 </script>
 
 <template>
-  <div ref="containerRef" class="flex-1 relative overflow-hidden bg-gradient-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm rounded-xl border border-border/20">
-    <!-- 背景粒子动画 -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute w-2 h-2 bg-cyan-500/20 rounded-full animate-float-1" style="top: 10%; left: 20%;" />
-      <div class="absolute w-3 h-3 bg-purple-500/20 rounded-full animate-float-2" style="top: 60%; left: 80%;" />
-      <div class="absolute w-2 h-2 bg-green-500/20 rounded-full animate-float-3" style="top: 80%; left: 15%;" />
-      <div class="absolute w-4 h-4 bg-cyan-500/10 rounded-full animate-float-4" style="top: 30%; left: 70%;" />
-      <div class="absolute w-2 h-2 bg-red-500/10 rounded-full animate-float-5" style="top: 50%; left: 40%;" />
-    </div>
-
+  <div ref="containerRef" class="flex-1 relative overflow-hidden bg-gradient-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm rounded-lg border border-border/20">
     <!-- 主内容区域 -->
-    <div class="h-full p-4 md:p-5">
-      <!-- Topbar: 视图切换 + 全屏控制 -->
-      <div class="mb-3 flex items-center justify-between">
-        <div class="w-10" />
-        <div class="flex items-center gap-1 rounded-lg bg-card/60 p-1 backdrop-blur-sm border border-cyan-500/20 shadow-lg shadow-cyan-500/5">
+    <div class="h-full p-3 md:p-3.5">
+      <!-- Topbar: 仅保留当前页面视图切换 -->
+      <div class="mb-2.5 flex items-start justify-start">
+        <div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-cyan-500/20 shadow-lg shadow-cyan-500/5">
           <button
-            v-for="(view, index) in dashboardViews"
+            v-for="view in dashboardViews"
             :key="view.key"
             @click="activeView = view.key"
             class="group relative flex items-center gap-2 overflow-hidden rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-300"
@@ -115,20 +169,10 @@ onMounted(() => {
             <span class="relative">{{ view.label }}</span>
           </button>
         </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          @click="toggleFullscreen"
-          class="bg-card/60 backdrop-blur-sm border border-border/40 hover:bg-card/80 transition-all duration-300 hover:border-cyan-500/50"
-        >
-          <Maximize2 v-if="!isFullscreen" class="w-4 h-4" />
-          <Minimize2 v-else class="w-4 h-4" />
-        </Button>
       </div>
 
       <!-- 总览视图 -->
-      <div v-if="activeView === 'overview'" class="h-full space-y-4">
+      <div v-if="activeView === 'overview'" class="h-full space-y-3">
         <!-- 欢迎横幅 -->
         <div
           class="transition-all duration-700 ease-out"
@@ -139,66 +183,196 @@ onMounted(() => {
 
         <!-- 总览主视图（地图 + 攻击记录） -->
         <div
-          class="h-[calc(100%-165px)] flex flex-col gap-4 transition-all duration-700 ease-out"
+          class="h-[calc(100%-132px)] flex flex-col gap-3 transition-all duration-700 ease-out"
           :class="animationState.overviewMap ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'"
         >
-          <div class="flex-1 min-h-0">
+          <div class="map-card h-[520px] shrink-0">
             <DashboardWorldMap
               :recent-attacks="payload.recent_attacks"
               :loading="loading"
               :load-error="loadError"
             />
           </div>
-        </div>
-      </div>
 
-      <!-- 地图视图 -->
-      <div v-else-if="activeView === 'map'" class="h-full">
-        <DashboardWorldMap
-          :recent-attacks="payload.recent_attacks"
-          :loading="loading"
-          :load-error="loadError"
-        />
+          <div class="honeypot-feed-card" v-if="honeypotFeedItems.length">
+            <div class="honeypot-feed__title">最新蜜罐捕获</div>
+            <TransitionGroup name="honeypot-list" tag="div" class="honeypot-feed__list">
+              <div class="honeypot-feed__item" v-for="item in honeypotFeedItems" :key="item.id">
+                <span class="honeypot-feed__level" :class="`level-${item.level.toLowerCase()}`">
+                  {{ honeypotLevelText(item.level) }}
+                </span>
+                <span class="honeypot-feed__ip">{{ item.ip }}</span>
+                <span class="honeypot-feed__service">{{ item.service }}</span>
+                <span class="honeypot-feed__location">{{ item.location }}</span>
+                <span class="honeypot-feed__time">{{ item.time }}</span>
+              </div>
+            </TransitionGroup>
+          </div>
+        </div>
       </div>
 
       <!-- 拓扑视图 -->
       <div v-else-if="activeView === 'topology'" class="h-full">
-        <DashboardTopology :topology="payload.topology" :loading="loading" />
+        <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
+      </div>
+
+      <div v-else class="h-full">
+        <DashboardDevicePanel />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 浮动动画 */
-@keyframes float-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
-  50% { transform: translate(20px, -30px) scale(1.2); opacity: 0.6; }
+.map-card {
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border) / 0.45);
+  background: linear-gradient(160deg, hsl(var(--card) / 0.78), hsl(var(--card) / 0.58));
+  padding: 8px;
 }
 
-@keyframes float-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
-  50% { transform: translate(-15px, 25px) scale(1.1); opacity: 0.5; }
+.honeypot-feed-card {
+  border-radius: 12px;
+  border: 1px solid rgb(34 211 238 / 0.2);
+  background: linear-gradient(145deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.45));
+  padding: 8px 10px 8px;
 }
 
-@keyframes float-3 {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.25; }
-  50% { transform: translate(25px, 15px) scale(1.3); opacity: 0.4; }
+.honeypot-feed__title {
+  display: inline-flex;
+  margin-bottom: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: rgb(165 243 252 / 0.95);
+  border: 1px solid rgb(34 211 238 / 0.32);
+  background: rgb(8 47 73 / 0.68);
 }
 
-@keyframes float-4 {
-  0%, 100% { transform: translate(0, 0); opacity: 0.15; }
-  50% { transform: translate(-20px, -20px); opacity: 0.3; }
+.honeypot-feed__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 176px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
-@keyframes float-5 {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.1; }
-  50% { transform: translate(10px, -15px) scale(0.8); opacity: 0.25; }
+.honeypot-feed__list::-webkit-scrollbar {
+  width: 6px;
 }
 
-.animate-float-1 { animation: float-1 6s ease-in-out infinite; }
-.animate-float-2 { animation: float-2 8s ease-in-out infinite; }
-.animate-float-3 { animation: float-3 7s ease-in-out infinite; }
-.animate-float-4 { animation: float-4 9s ease-in-out infinite; }
-.animate-float-5 { animation: float-5 5s ease-in-out infinite; }
+.honeypot-feed__list::-webkit-scrollbar-track {
+  background: rgb(15 23 42 / 0.45);
+  border-radius: 999px;
+}
+
+.honeypot-feed__list::-webkit-scrollbar-thumb {
+  background: rgb(34 211 238 / 0.45);
+  border-radius: 999px;
+}
+
+.honeypot-feed__item {
+  display: grid;
+  grid-template-columns: 54px 1.2fr 1fr 1fr 78px;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  border-radius: 10px;
+  border: 1px solid rgb(34 211 238 / 0.2);
+  background: linear-gradient(135deg, rgb(4 47 74 / 0.84), rgb(2 6 23 / 0.8));
+  color: rgb(224 242 254);
+  padding: 7px 10px;
+  box-shadow: 0 10px 28px rgb(2 6 23 / 0.45);
+}
+
+.honeypot-feed__level {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.honeypot-feed__level.level-critical {
+  color: rgb(254 226 226);
+  background: rgb(220 38 38 / 0.65);
+}
+
+.honeypot-feed__level.level-high {
+  color: rgb(255 237 213);
+  background: rgb(234 88 12 / 0.62);
+}
+
+.honeypot-feed__level.level-medium {
+  color: rgb(254 249 195);
+  background: rgb(202 138 4 / 0.62);
+}
+
+.honeypot-feed__level.level-low {
+  color: rgb(220 252 231);
+  background: rgb(22 163 74 / 0.58);
+}
+
+.honeypot-feed__ip,
+.honeypot-feed__service,
+.honeypot-feed__location,
+.honeypot-feed__time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.honeypot-feed__service {
+  color: rgb(165 243 252 / 0.95);
+}
+
+.honeypot-feed__time {
+  text-align: right;
+  color: rgb(125 211 252 / 0.88);
+}
+
+.honeypot-list-enter-active,
+.honeypot-list-leave-active {
+  transition: all 0.38s ease;
+}
+
+.honeypot-list-move {
+  transition: transform 0.42s ease;
+}
+
+.honeypot-list-enter-from {
+  opacity: 0;
+  transform: translateY(-14px) scale(0.98);
+}
+
+.honeypot-list-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.honeypot-list-leave-from {
+  opacity: 1;
+}
+
+.honeypot-list-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+@media (max-width: 1024px) {
+  .honeypot-feed__item {
+    grid-template-columns: 50px 1fr 1fr;
+    row-gap: 5px;
+  }
+
+  .honeypot-feed__location,
+  .honeypot-feed__time {
+    display: none;
+  }
+}
 </style>

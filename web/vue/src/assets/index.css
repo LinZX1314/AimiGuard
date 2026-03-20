@@ -215,3 +215,25 @@ html.view-transitioning body * {
   opacity: 0;
   transform: translate3d(0, -10px, 0);
 }
+
+/* Themes from Reference */
+:root {
+  --cyber-cyan: #00d4ff;
+  --cyber-green: #00ff88;
+  --cyber-orange: #ff7f24;
+  --cyber-yellow: #ffd700;
+  --cyber-red: #ff4444;
+  --cyber-purple: #9ca3af;
+}
+
+.honeypot-feed__list::-webkit-scrollbar {
+    width: 6px;
+}
+.honeypot-feed__list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.honeypot-feed__list::-webkit-scrollbar-thumb {
+    background: rgba(34, 211, 238, 0.2); 
+    border-radius: 999px;
+}
+

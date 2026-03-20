@@ -80,8 +80,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full w-full overflow-hidden p-4 md:p-6">
-    <div class="grid h-full grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+  <div class="h-full w-full overflow-hidden p-2 md:p-3">
+    <div class="grid h-full grid-cols-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)_330px]">
       <!-- 左栏：态势摘要 -->
       <DashboardMetricSidebar :payload="payload" :loading="loading" />
 

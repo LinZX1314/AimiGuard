@@ -22,6 +22,8 @@ const loginSuccess = ref(false)
 const focusField = ref<'none' | 'user' | 'pass'>('none')
 let animFrame: number
 let cleanupResize: (() => void) | null = null
+let typingInterval: number | null = null
+let blinkInterval: number | null = null
 
 // ─── Typing subtitle ─────────────────────────────────────────────────────────────────────
 const subtitleText = 'INTELLIGENT THREAT DEFENSE SYSTEM'
@@ -36,13 +38,18 @@ function handleToggleTheme() {
 
 function startTyping() {
   let i = 0
-  const iv = setInterval(() => {
-    if (i >= subtitleText.length) { clearInterval(iv); return }
+  typingInterval = window.setInterval(() => {
+    if (i >= subtitleText.length) {
+      if (typingInterval) {
+        window.clearInterval(typingInterval)
+        typingInterval = null
+      }
+      return
+    }
     typedLen.value = ++i
   }, 55)
   // blink cursor
-  const blink = setInterval(() => { showCursor.value = !showCursor.value }, 530)
-  onUnmounted(() => { clearInterval(iv); clearInterval(blink) })
+  blinkInterval = window.setInterval(() => { showCursor.value = !showCursor.value }, 530)
 }
 
 // ─── Particle Background ────────────────────────────────────────────────────────────────
@@ -132,6 +139,14 @@ onMounted(async () => {
 onUnmounted(() => {
   if (animFrame) cancelAnimationFrame(animFrame)
   cleanupResize?.()
+  if (typingInterval) {
+    window.clearInterval(typingInterval)
+    typingInterval = null
+  }
+  if (blinkInterval) {
+    window.clearInterval(blinkInterval)
+    blinkInterval = null
+  }
 })
 
 // ─── Auth ────────────────────────────────────────────────────────────────────────────────

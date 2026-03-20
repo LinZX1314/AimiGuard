@@ -214,9 +214,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-card/30 border border-border/60 rounded-xl overflow-hidden relative backdrop-blur-2xl">
+  <div class="h-full flex flex-col bg-card/30 border border-border/60 rounded-lg overflow-hidden relative backdrop-blur-2xl">
     <!-- Header - 科技风设计 + 历史记录/设置按钮 -->
-    <div class="flex items-center gap-3 px-4 py-3 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-cyan-500/5">
+    <div class="flex items-center gap-3 px-3 py-2.5 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-cyan-500/5">
       <div class="relative">
         <div class="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
           <Bot class="h-4 w-4 text-cyan-400" />
@@ -231,14 +231,14 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-1">
         <button
           @click="showHistory = !showHistory; showSettings = false"
-          class="w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
+          class="w-7 h-7 rounded-md flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
           title="历史记录"
         >
           <History class="w-4 h-4 text-cyan-400" />
         </button>
         <button
           @click="showSettings = !showSettings; showHistory = false"
-          class="w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
+          class="w-7 h-7 rounded-md flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
           title="设置"
         >
           <Settings class="w-4 h-4 text-cyan-400" />
@@ -247,14 +247,14 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 快捷输入选项 -->
-    <div v-if="showQuickPrompts && messages.length === 0" class="px-4 py-3 border-b border-border/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
+    <div v-if="showQuickPrompts && messages.length === 0" class="px-3 py-2.5 border-b border-border/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
       <p class="text-xs text-muted-foreground mb-2 font-medium">💡 快捷指令</p>
       <div class="grid grid-cols-2 gap-2">
         <button
           v-for="prompt in quickPrompts"
           :key="prompt.label"
           @click="selectQuickPrompt(prompt.text)"
-          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/60 border border-border/40 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-200 text-left group"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-card/60 border border-border/40 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-200 text-left group"
         >
           <component :is="prompt.icon" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
           <span class="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{{ prompt.label }}</span>
