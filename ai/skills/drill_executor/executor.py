@@ -24,6 +24,17 @@ from .drill_tools import get_drill_tool_definitions
 from utils.logger import log as unified_log
 
 
+# ── 公共辅助函数 ──────────────────────────────────────────────────────────────
+def _safe_parse_json(result_str):
+    """安全解析 JSON，失败时返回错误结构"""
+    if isinstance(result_str, str):
+        try:
+            return json.loads(result_str)
+        except (json.JSONDecodeError, ValueError):
+            return {'ok': False, 'error': result_str}
+    return result_str if isinstance(result_str, dict) else {'ok': False, 'error': str(result_str)}
+
+
 # ─── 演练状态 ────────────────────────────────────────────────────────────────
 
 class DrillState:
@@ -47,23 +58,17 @@ class DrillState:
         self.history: list[dict] = []             # Agent 对话历史
         self._start_time = datetime.now()
 
-    def add_scan_result(self, result: dict):
-        self.scan_results.append(result)
-
-    def add_screenshot_result(self, result: dict):
-        self.screenshot_results.append(result)
-
-    def add_bruteforce_result(self, result: dict):
-        self.bruteforce_results.append(result)
-
-    def add_honeypot_result(self, result: dict):
-        self.honeypot_results.append(result)
-
-    def add_finding(self, finding: dict):
-        self.findings.append(finding)
-
-    def add_ban_record(self, record: dict):
-        self.ban_records.append(record)
+    def add_result(self, result_type: str, result: dict):
+        """通用结果收集，支持类型：scan/screenshot/bruteforce/honeypot/finding/ban"""
+        mapping = {
+            'scan': self.scan_results,
+            'screenshot': self.screenshot_results,
+            'bruteforce': self.bruteforce_results,
+            'honeypot': self.honeypot_results,
+            'finding': self.findings,
+            'ban': self.ban_records,
+        }
+        mapping.get(result_type, self.findings).append(result)
 
     def get_exec_summary(self) -> str:
         elapsed = (datetime.now() - self._start_time).total_seconds()
@@ -134,13 +139,10 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             'threads': threads,
         }, cfg)
 
-        try:
-            result = json.loads(result_str) if isinstance(result_str, str) else result_str
-        except Exception:
-            result = {'ok': False, 'error': result_str}
+        result = _safe_parse_json(result_str)
 
         if result.get('ok'):
-            state.add_scan_result({
+            state.add_result('scan', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'target': target,
                 'result': result,
@@ -169,7 +171,7 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
                     'severity': 'high',
                 })
             for f in findings:
-                state.add_finding(f)
+                state.add_result('finding', f)
 
             host_count = result.get('发现主机', 0)
             result['analysis'] = f'发现 {host_count} 台存活主机，已记录到演练状态'
@@ -191,20 +193,17 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             'port': port,
         }, cfg)
 
-        try:
-            result = json.loads(result_str) if isinstance(result_str, str) else result_str
-        except Exception:
-            result = {'ok': False, 'error': result_str}
+        result = _safe_parse_json(result_str)
 
         if result.get('ok'):
-            state.add_screenshot_result({
+            state.add_result('screenshot', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'ip': ip,
                 'port': port,
                 'url': url,
                 'screenshot_url': result.get('screenshot_url', ''),
             })
-            state.add_finding({
+            state.add_result('finding', {
                 'ip': ip,
                 'port': port,
                 'url': url,
@@ -228,7 +227,7 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
         result = run_bruteforce(tool_name, target_ip, port)
 
         if result.get('ok'):
-            state.add_bruteforce_result({
+            state.add_result('bruteforce', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'tool': tool_name,
                 'target': target_ip,
@@ -237,7 +236,7 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             })
 
             if result.get('vulnerable'):
-                state.add_finding({
+                state.add_result('finding', {
                     'ip': target_ip,
                     'port': port,
                     'service': tool_name.replace('drill_bruteforce_', '').upper(),
@@ -259,13 +258,10 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             'limit': limit,
         }, cfg)
 
-        try:
-            result = json.loads(result_str) if isinstance(result_str, str) else result_str
-        except Exception:
-            result = {'ok': False, 'error': result_str}
+        result = _safe_parse_json(result_str)
 
         if result.get('ok'):
-            state.add_honeypot_result({
+            state.add_result('honeypot', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'service': service_name or '全部',
                 'count': result.get('总数', 0),
@@ -274,7 +270,7 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
 
             records = result.get('攻击记录', [])
             for rec in records:
-                state.add_finding({
+                state.add_result('finding', {
                     'ip': rec.get('攻击IP'),
                     'service': rec.get('服务'),
                     'type': 'honeypot_attack',
@@ -288,10 +284,7 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
     if tool_name == 'drill_honeypot_stats':
         result_str = execute_existing_tool('get_honeypot_stats', {}, cfg)
 
-        try:
-            result = json.loads(result_str) if isinstance(result_str, str) else result_str
-        except Exception:
-            result = {'ok': False, 'error': result_str}
+        result = _safe_parse_json(result_str)
 
         return result
 
@@ -309,13 +302,10 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             'description': reason,
         }, cfg)
 
-        try:
-            result = json.loads(result_str) if isinstance(result_str, str) else result_str
-        except Exception:
-            result = {'ok': False, 'error': result_str}
+        result = _safe_parse_json(result_str)
 
         if result.get('ok'):
-            state.add_ban_record({
+            state.add_result('ban', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'ip': target_ip,
                 'reason': reason,
@@ -359,11 +349,12 @@ def _generate_markdown_report(state: DrillState, exec_summary: str, scan_results
     """生成 Markdown 格式的演练报告"""
     from datetime import datetime
 
-    # 按严重级别分组
-    critical = [f for f in state.findings if f.get('severity') == 'critical']
-    high = [f for f in state.findings if f.get('severity') == 'high']
-    medium = [f for f in state.findings if f.get('severity') == 'medium']
-    info = [f for f in state.findings if f.get('severity') == 'info']
+    # 按严重级别分组（一次遍历）
+    grouped = {'critical': [], 'high': [], 'medium': [], 'info': []}
+    for f in state.findings:
+        sev = f.get('severity', 'info')
+        grouped.get(sev, grouped['info']).append(f)
+    critical, high, medium, info = grouped['critical'], grouped['high'], grouped['medium'], grouped['info']
 
     report = f"""# 🛡️ 安全演练报告
 

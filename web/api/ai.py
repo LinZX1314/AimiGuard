@@ -2,6 +2,7 @@
 AI Module - AI Chat endpoints（含上下文/会话持久化与 Tool Use 支持）
 """
 import json
+import re
 import threading
 from flask import Blueprint, request, g, Response, stream_with_context
 from ai import (
@@ -21,6 +22,10 @@ from .helpers import (
     _now_iso
 )
 from utils.logger import log as unified_log
+
+# ── 预编译正则（避免重复编译开销）─────────────────────────────────────────────
+_RE_IP_SUBNET = re.compile(r'\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?')
+_RE_SERVICES  = re.compile(r'(?:SSH|RDP|MySQL|SMB|MSSQL|PostgreSQL|Redis|SMTP|HTTP|HTTPS|Web)', re.IGNORECASE)
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -149,7 +154,7 @@ def ai_chat_stream():
 
     # 检查是否进入演练模式（用户上传了文档）
     is_drill_mode = body.get('drill_mode', False) or ('【演练文档】' in message)
-    drill_state: DrillState | None = None
+    drill_state: DrillState | None = DrillState()  # 始终创建，由后续条件决定是否进入演练模式
 
     if is_drill_mode:
         drill_state = DrillState()
@@ -272,8 +277,7 @@ def ai_chat_stream():
 
         # 检查是否需要进入演练模式（AI 智能调用了 drill 工具 或 用户上传了演练文档）
         has_drill_tools = any(tc['name'].startswith('drill_') for tc in tool_calls_received)
-        if (has_drill_tools or is_drill_mode) and not drill_state:
-            drill_state = DrillState()
+        if (has_drill_tools or is_drill_mode) and drill_state.document_content == '':
             drill_state.document_content = message
             if has_drill_tools and not is_drill_mode:
                 yield f"data: {json.dumps({'drill_mode': True}, ensure_ascii=False)}\n\n"
@@ -323,9 +327,8 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 if drill_state:
                     drill_state.document_content = doc_content
                     # 智能提取关键信息
-                    import re
-                    targets = re.findall(r'\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?', doc_content)
-                    services = re.findall(r'(?:SSH|RDP|MySQL|SMB|MSSQL|PostgreSQL|Redis|SMTP|HTTP|HTTPS|Web)', doc_content, re.IGNORECASE)
+                    targets = _RE_IP_SUBNET.findall(doc_content)
+                    services = _RE_SERVICES.findall(doc_content)
                     analysis = f"文档分析完成。提取到 {len(targets)} 个目标， {len(services)} 种服务类型。"
                     if targets:
                         analysis += f" 目标：{', '.join(set(targets[:5]))}"
@@ -335,7 +338,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 return _json.dumps({
                     'ok': True,
                     'message': f'文档分析完成。提取到目标网络，正在制定行动计划...',
-                    'target_count': len(set(re.findall(r'\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?', doc_content))),
+                    'target_count': len(set(_RE_IP_SUBNET.findall(doc_content))),
                     'document_summary': analysis if drill_state else '',
                 })
 

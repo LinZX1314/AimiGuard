@@ -275,7 +275,7 @@ def run_bruteforce(tool_name: str, target_ip: str, port: int = None) -> dict:
 
     # 优先使用 fscan
     fscan_result = run_fscan_bruteforce(target_ip, service_type, target_port)
-    if fscan_result.get('ok') is not False:
+    if fscan_result.get('ok'):
         return fscan_result
 
     # fscan 不可用时降级到 Python 原生检测
