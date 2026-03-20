@@ -70,3 +70,319 @@
     "port": 110
   }
 }
+{
+  "time": "2026-03-20T11:59:47.2044797+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 143
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.2057119+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 80
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.2070132+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 7680
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.2083414+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 8060
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.2095409+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 110
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.2117647+08:00",
+  "type": "PORT",
+  "target": "10.24.100.15",
+  "status": "open",
+  "details": {
+    "port": 10001
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.4279982+08:00",
+  "type": "PORT",
+  "target": "10.24.100.3",
+  "status": "open",
+  "details": {
+    "port": 22
+  }
+}
+{
+  "time": "2026-03-20T11:59:47.4279982+08:00",
+  "type": "PORT",
+  "target": "10.24.100.3",
+  "status": "open",
+  "details": {
+    "port": 23
+  }
+}
+{
+  "time": "2026-03-20T11:59:49.0789716+08:00",
+  "type": "PORT",
+  "target": "10.24.100.30",
+  "status": "open",
+  "details": {
+    "port": 22
+  }
+}
+{
+  "time": "2026-03-20T11:59:49.0800115+08:00",
+  "type": "PORT",
+  "target": "10.24.100.30",
+  "status": "open",
+  "details": {
+    "port": 110
+  }
+}
+{
+  "time": "2026-03-20T11:59:49.0800115+08:00",
+  "type": "PORT",
+  "target": "10.24.100.30",
+  "status": "open",
+  "details": {
+    "port": 143
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3566894+08:00",
+  "type": "PORT",
+  "target": "10.24.100.7",
+  "status": "open",
+  "details": {
+    "port": 139
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3566894+08:00",
+  "type": "PORT",
+  "target": "10.24.100.7",
+  "status": "open",
+  "details": {
+    "port": 443
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.359722+08:00",
+  "type": "PORT",
+  "target": "10.24.100.7",
+  "status": "open",
+  "details": {
+    "port": 135
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.359722+08:00",
+  "type": "PORT",
+  "target": "10.24.100.7",
+  "status": "open",
+  "details": {
+    "port": 445
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3777325+08:00",
+  "type": "PORT",
+  "target": "10.24.100.70",
+  "status": "open",
+  "details": {
+    "port": 80
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3795669+08:00",
+  "type": "PORT",
+  "target": "10.24.100.70",
+  "status": "open",
+  "details": {
+    "port": 139
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3805829+08:00",
+  "type": "PORT",
+  "target": "10.24.100.70",
+  "status": "open",
+  "details": {
+    "port": 445
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3805829+08:00",
+  "type": "PORT",
+  "target": "10.24.100.70",
+  "status": "open",
+  "details": {
+    "port": 135
+  }
+}
+{
+  "time": "2026-03-20T11:59:53.3816184+08:00",
+  "type": "PORT",
+  "target": "10.24.100.70",
+  "status": "open",
+  "details": {
+    "port": 1433
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.5243316+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.7",
+  "status": "identified",
+  "details": {
+    "hostname": "WIN-QQF676CCSGO",
+    "ipv4": [
+      "172.16.100.180"
+    ],
+    "ipv6": null
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.5248441+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.70",
+  "status": "identified",
+  "details": {
+    "hostname": "WIN-B3AVSQ1TA4I",
+    "ipv4": [
+      "10.24.100.70"
+    ],
+    "ipv6": null
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.525903+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.7",
+  "status": "identified",
+  "details": {
+    "computer_name": "WIN-QQF676CCSGO",
+    "domain_name": "WIN-QQF676CCSGO",
+    "netbios_computer": "WIN-QQF676CCSGO",
+    "netbios_domain": "WIN-QQF676CCSGO",
+    "os_version": "Windows Server 2016 Standard 14393",
+    "port": "139",
+    "server_service": "WIN-QQF676CCSGO",
+    "workstation_service": "WIN-QQF676CCSGO"
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.525903+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.70",
+  "status": "identified",
+  "details": {
+    "computer_name": "WIN-B3AVSQ1TA4I",
+    "domain_name": "WIN-B3AVSQ1TA4I",
+    "netbios_computer": "WIN-B3AVSQ1TA4I",
+    "netbios_domain": "WIN-B3AVSQ1TA4I",
+    "os_version": "Windows Server 2016 Standard 14393",
+    "port": "139",
+    "server_service": "WIN-B3AVSQ1TA4I",
+    "workstation_service": "WIN-B3AVSQ1TA4I"
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.5284912+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.70",
+  "status": "identified",
+  "details": {
+    "Url": "http://10.24.100.70",
+    "fingerprints": null,
+    "length": "13073",
+    "port": "80",
+    "server_info": {
+      "cache-control": "private",
+      "content-length": "13073",
+      "content-type": "text/html; charset=utf-8",
+      "date": "Fri, 20 Mar 2026 04:00:00 GMT",
+      "length": "13073",
+      "server": "Microsoft-IIS/10.0",
+      "set-cookie": "ASP.NET_SessionId=mk4wcefwi1e5v1k4rgsrijlp; path=/; HttpOnly",
+      "status_code": 200,
+      "title": "主 页 - WPSAOA(Web版)，V2.23.9.12",
+      "x-powered-by": "ASP.NET"
+    },
+    "service": "http",
+    "status_code": 200,
+    "title": "主 页 - WPSAOA(Web版)，V2.23.9.12"
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.5312736+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.15",
+  "status": "identified",
+  "details": {
+    "Url": "http://10.24.100.15",
+    "fingerprints": null,
+    "length": "0",
+    "port": "80",
+    "server_info": {
+      "content-length": "0",
+      "date": "Fri, 20 Mar 2026 04:00:00 GMT",
+      "length": "0",
+      "server": "Microsoft-IIS/10.0",
+      "status_code": 404,
+      "title": "无标题"
+    },
+    "service": "http",
+    "status_code": 404,
+    "title": "无标题"
+  }
+}
+{
+  "time": "2026-03-20T11:59:59.5351213+08:00",
+  "type": "SERVICE",
+  "target": "10.24.100.7",
+  "status": "identified",
+  "details": {
+    "Url": "https://10.24.100.7",
+    "fingerprints": null,
+    "length": "0",
+    "port": "443",
+    "server_info": {
+      "content-length": "0",
+      "content-security-policy": "block-all-mixed-content",
+      "content-type": "text/plain; charset=utf-8",
+      "date": "Fri, 20 Mar 2026 04:03:03 GMT",
+      "length": "0",
+      "status_code": 403,
+      "strict-transport-security": "max-age=31536000",
+      "title": "无标题",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "x-xss-protection": "1"
+    },
+    "service": "http",
+    "status_code": 403,
+    "title": "无标题"
+  }
+}
