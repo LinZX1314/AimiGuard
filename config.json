@@ -28,7 +28,7 @@
     "ip_ranges": [
       "192.168.0.1/24"
     ],
-    "arguments": "-sS -T5 -O -sV ",
+    "fscan_timeout": 6000,
     "scan_interval": 604800,
     "scan_enabled": true,
     "vuln_scripts_by_tag": {

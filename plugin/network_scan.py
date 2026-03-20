@@ -3,26 +3,20 @@
 """
 IP 范围扫描脚本
 自动扫描指定 IP 范围，将存活的电脑信息存储到数据库
-使用 nmap 扫描模式：直接使用 nmap 扫描
+使用 fscan 二进制执行扫描
 """
 
-import nmap
-import sqlite3
 import time
 import os
-import shutil
+import json
+import subprocess
 from datetime import datetime
-
-# nmap 路径配置
-# 现在使用系统环境变量中的 nmap
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from database.db import get_connection
-from database.models import ScannerModel, VulnModel, NmapModel
+from database.models import ScannerModel, VulnModel
 from utils.logger import log
-
-import json
 
 
 def get_project_root():
@@ -30,334 +24,169 @@ def get_project_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def get_nmap_executable():
-    """检测可用的 nmap 可执行文件路径。"""
-    system_nmap = shutil.which('nmap')
-    if system_nmap:
-        log("Nmap", f"使用系统 nmap: {system_nmap}", "INFO")
-        return system_nmap
+def get_fscan_executable():
+    """检测可用的 fscan 可执行文件路径。"""
+    import shutil
 
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    local_nmap = os.path.join(base_dir, 'lib', 'Nmap', 'nmap.exe')
-    if os.path.isfile(local_nmap):
-        log("Nmap", f"系统未安装 nmap，降级使用项目内置: {local_nmap}", "WARNING")
-        return local_nmap
+    fscan_path = shutil.which('fscan')
+    if fscan_path:
+        log("Fscan", f"找到 fscan: {fscan_path}", "INFO")
+        return fscan_path
 
-    log("Nmap", "未找到 nmap！系统 PATH 和 lib/Nmap/ 均无可用二进制。", "ERROR")
+    log("Fscan", "未找到 fscan！请确保已安装并添加到 PATH。", "ERROR")
     return None
 
 
-
-def get_vuln_scripts_map():
-    """获取系统标签与漏洞检测脚本的映射字典（优先从配置读取）"""
-    config_file = os.path.join(get_project_root(), "config.json")
-    try:
-        if os.path.exists(config_file):
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                vuln_map = config.get('nmap', {}).get('vuln_scripts_by_tag')
-                if vuln_map:
-                    # 将所有键转换为小写，确保匹配时不受大小写影响
-                    return {k.lower(): v for k, v in vuln_map.items()}
-                log("VulnScan", "配置中未找到 nmap.vuln_scripts_by_tag，漏洞扫描脚本映射为空", "WARNING")
-    except Exception:
-        log("VulnScan", f"读取漏洞脚本映射失败: {config_file}", "WARNING")
-    return {}
-
-
-def get_service_scripts_map():
-    """获取服务与漏洞检测脚本的映射字典"""
-    config_file = os.path.join(get_project_root(), "config.json")
-    try:
-        if os.path.exists(config_file):
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                service_map = config.get('nmap', {}).get('vuln_scripts_by_service')
-                if service_map:
-                    return {k.lower(): v for k, v in service_map.items()}
-    except Exception:
-        log("VulnScan", f"读取服务脚本映射失败", "WARNING")
-    return {}
-
-
-def scan_hosts(ip_range, arguments='-sS -O -T5'):
+def run_fscan(ip_range, timeout=6000):
     """
-    扫描指定 IP 范围
+    执行 fscan 扫描，读取 JSON 输出文件
 
     参数:
         ip_range: IP 范围，如 '192.168.1.1/24'
-        arguments: nmap 扫描参数
+        timeout: 超时时间（毫秒）
 
     返回:
-        扫描结果字典
+        扫描结果字典列表
     """
-    nmap_path = get_nmap_executable()
-    if not nmap_path:
+    fscan_path = get_fscan_executable()
+    if not fscan_path:
         return None
 
-    nm = nmap.PortScanner(nmap_search_path=(nmap_path,))
+    # 每个扫描使用唯一的临时文件
+    output_file = os.path.join(get_project_root(), f"fscan_result_{int(time.time() * 1000)}.json")
+    cmd = [fscan_path, '-h', ip_range, '-t', str(timeout), '-nobr', '-np', '-f', 'json', '-o', output_file]
+
+    log("Fscan", f"执行命令: {' '.join(cmd)}")
 
     try:
-        nm.scan(hosts=ip_range, arguments=arguments)
-        return nm
-    except Exception:
-        # 扫描被中断时不记录错误日志
-        pass
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=max(timeout / 1000 + 30, 300)
+        )
+    except subprocess.TimeoutExpired:
+        log("Fscan", "扫描超时", "ERROR")
+        return None
+    except Exception as e:
+        log("Fscan", f"扫描执行失败: {e}", "ERROR")
         return None
 
+    # 解析 JSON Lines 输出文件
+    hosts = {}  # ip -> host_info
 
-def parse_scan_results(nm):
-    """解析扫描结果"""
-    hosts_data = []
+    try:
+        if not os.path.exists(output_file):
+            log("Fscan", f"输出文件不存在: {output_file}", "ERROR")
+            log("Fscan", f"stderr: {result.stderr}", "ERROR")
+            return None
 
-    if nm is None:
-        return hosts_data
+        with open(output_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-    for host in nm.all_hosts():
-        host_info = {
-            'ip': host,
-            'mac_address': '',
-            'vendor': '',
-            'hostname': nm[host].hostname() if nm[host].hostname() else '',
-            'state': nm[host].state(),
-            'os_type': '',
-            'os_accuracy': '',
-            'os_tags': 'unknown',
-            'open_ports': [],
-            'services': []
-        }
+                item_type = item.get('type', '')
+                target = item.get('target', '')
+                details = item.get('details', {})
 
-        # MAC 地址信息
-        if 'addresses' in nm[host]:
-            addresses = nm[host]['addresses']
-            if 'mac' in addresses:
-                host_info['mac_address'] = addresses['mac']
-            # 厂商信息通常和 MAC 地址在一起
-            if 'mac' in addresses and 'vendor' in nm[host]:
-                vendor_info = nm[host].get('vendor', {})
-                host_info['vendor'] = vendor_info.get(addresses['mac'], '')
+                if not target:
+                    continue
 
-        # 操作系统信息
-        if 'osmatch' in nm[host] and nm[host]['osmatch']:
-            osmatch = nm[host]['osmatch'][0]
-            host_info['os_type'] = osmatch.get('name', '')
-            host_info['os_accuracy'] = osmatch.get('accuracy', '')
-            # 自动识别系统标签
-            host_info['os_tags'] = auto_detect_os_tags(osmatch)
-
-        # 端口和服务信息
-        for proto in nm[host].all_protocols():
-            ports = nm[host][proto].keys()
-            for port in ports:
-                port_info = nm[host][proto][port]
-                if port_info.get('state') == 'open':
-                    host_info['open_ports'].append(port)
-
-                    service_info = {
-                        'port': port,
-                        'service': port_info.get('name', ''),
-                        'product': port_info.get('product', ''),
-                        'version': port_info.get('version', ''),
-                        'extrainfo': port_info.get('extrainfo', '')
+                # 初始化主机
+                if target not in hosts:
+                    hosts[target] = {
+                        'ip': target,
+                        'mac_address': '',
+                        'vendor': '',
+                        'hostname': '',
+                        'state': 'alive',
+                        'os_type': '',
+                        'os_accuracy': '',
+                        'os_tags': 'unknown',
+                        'open_ports': [],
+                        'services': []
                     }
-                    host_info['services'].append(service_info)
 
-        hosts_data.append(host_info)
+                if item_type == 'PORT' and item.get('status') == 'open':
+                    port = details.get('port')
+                    if port:
+                        port = int(port)
+                        if port not in hosts[target]['open_ports']:
+                            hosts[target]['open_ports'].append(port)
+                            hosts[target]['services'].append({
+                                'port': port,
+                                'service': details.get('service', ''),
+                                'product': details.get('product', ''),
+                                'version': '',
+                                'extrainfo': ''
+                            })
 
-    return hosts_data
+                elif item_type == 'SERVICE':
+                    hostname = details.get('hostname')
+                    if hostname:
+                        hosts[target]['hostname'] = hostname
+                    # SERVICE 可能带端口信息
+                    port = details.get('port')
+                    service_name = details.get('service', '')
+                    if port and service_name:
+                        port = int(port)
+                        existing = next((s for s in hosts[target]['services'] if s['port'] == port), None)
+                        if existing:
+                            existing['service'] = service_name
+                        elif port not in hosts[target]['open_ports']:
+                            title = details.get('title', '')
+                            hosts[target]['open_ports'].append(port)
+                            hosts[target]['services'].append({
+                                'port': port,
+                                'service': service_name,
+                                'product': title,
+                                'version': '',
+                                'extrainfo': ''
+                            })
 
+        # 删除临时文件
+        try:
+            os.remove(output_file)
+        except Exception:
+            pass
 
-def auto_detect_os_tags(osmatch):
-    """
-    根据 nmap 的 osmatch 信息自动识别系统标签
-
-    参数:
-        osmatch: nmap 返回的 osmatch 字典, 包含 'name', 'line', 'classes' 等信息
-
-    返回:
-        逗号分隔的系统标签字符串，如 "win7,windows,workstation"
-    """
-    if not osmatch:
-        return 'unknown'
-
-    tags = set()
-    os_name = osmatch.get('name', '').lower()
-    classes = osmatch.get('classes', [])
-
-    # 定义关键词到标签的映射规则
-    keyword_mapping = {
-        'windows 10': 'windows 10','windows 11': 'windows 10',
-        'windows 8': 'win8', 'win8': 'win8',
-        'windows 7': 'windows 7', 'vista': 'windows 7',
-        'xp': 'windows xp', '2000': 'windows xp', '2003': 'windows xp', '2008': 'windows xp',
-        'server': 'winserver',
-        'linux': 'linux',
-        'bsd': 'bsd',
-        'mac': 'macos', 'apple': 'macos', 'os x': 'macos'
-    }
-
-    # 合并字符串进行全局搜索，提高匹配命中率
-    search_texts = [os_name]
-    for cls in classes:
-        search_texts.append(cls.get('osfamily', '').lower())
-        search_texts.append(cls.get('osgen', '').lower())
-    
-    full_text = " || ".join(search_texts)
-
-    # 基础家族判断
-    if 'windows' in full_text or 'win' in full_text:
-        tags.add('windows')
-
-    # 基于关键字映射规则添加标签
-    for keyword, tag_values in keyword_mapping.items():
-        if keyword in full_text:
-            if isinstance(tag_values, list):
-                tags.update(tag_values)
-            else:
-                tags.add(tag_values)
-
-    return ','.join(sorted(tags)) if tags else 'unknown'
-
-
-def get_vuln_scripts_for_host(host_info):
-    """
-    根据主机信息（操作系统标签和服务）获取需要扫描的漏洞脚本列表
-
-    参数:
-        host_info: 主机信息字典
-
-    返回:
-        漏洞脚本名称列表
-    """
-    vuln_scripts = set()
-    
-    # 1. 根据操作系统标签获取脚本
-    os_tags = host_info.get('os_tags', '')
-    if os_tags:
-        tag_list = [tag.strip().lower() for tag in os_tags.split(',')]
-        vuln_scripts_by_tag = get_vuln_scripts_map()
-        for tag in tag_list:
-            if tag in vuln_scripts_by_tag:
-                vuln_scripts.update(vuln_scripts_by_tag[tag])
-
-    # 2. 根据开放服务获取脚本
-    services = host_info.get('services', [])
-    if services:
-        vuln_scripts_by_service = get_service_scripts_map()
-        for svc in services:
-            svc_name = svc.get('service', '').lower()
-            if svc_name in vuln_scripts_by_service:
-                vuln_scripts.update(vuln_scripts_by_service[svc_name])
-
-    return list(vuln_scripts)
-
-
-def should_skip_vuln(mac_address, vuln_name):
-    """判断是否跳过某漏洞的扫描"""
-    status = VulnModel.get_vuln_status(mac_address, vuln_name)
-    return status == 'safe'
-
-
-def scan_vuln(nm, host_ip, vuln_script):
-    """
-    对指定主机执行单个漏洞扫描
-
-    参数:
-        nm: nmap 端口扫描器对象
-        host_ip: 目标 IP
-        vuln_script: 漏洞脚本名称
-
-    返回:
-        (result, details): (结果字符串, 详情)
-    """
-    try:
-        # 使用 --script 参数执行漏洞检测
-        nm.scan(hosts=host_ip, arguments=f'--script {vuln_script} -T5')
-
-        if host_ip in nm.all_hosts():
-            # 检查脚本输出
-            if 'script' in nm[host_ip]:
-                for script_id, script_output in nm[host_ip]['script'].items():
-                    if script_id == vuln_script:
-                        output = script_output.lower()
-                        # 注意：必须先判断 'not vulnerable'，因为它包含 'vulnerable' 子串
-                        if 'not vulnerable' in output or 'failed' in output:
-                            return 'safe', script_output
-                        elif 'vulnerable' in output or 'expl' in output:
-                            return 'vulnerable', script_output
-                        elif 'error' in output:
-                            return 'error', script_output
-                        else:
-                            return 'safe', script_output
-
-            # 没有找到脚本输出，认为安全
-            return 'safe', 'No vulnerability detected'
-        else:
-            return 'error', 'Host not reachable'
+        log("Fscan", f"解析完成，共发现 {len(hosts)} 台主机", "INFO")
+        return list(hosts.values())
 
     except Exception as e:
-        return 'error', str(e)
+        log("Fscan", f"解析 JSON 结果失败: {e}", "ERROR")
+        try:
+            os.remove(output_file)
+        except Exception:
+            pass
+        return None
 
 
-def run_vuln_scan(hosts_data):
-    """
-    对发现的主机执行漏洞扫描
-    """
-    stats = {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
-
-    nmap_path = get_nmap_executable()
-    if not nmap_path:
-        return stats
-
-    nm = nmap.PortScanner(nmap_search_path=(nmap_path,))
-
-    for host in hosts_data:
-        mac_address = host.get('mac_address')
-        ip = host.get('ip')
-        os_tags = host.get('os_tags', '')
-
-        if not mac_address:
-            mac_address = ip
-        
-        if not mac_address:
-            continue
-
-        vuln_scripts = get_vuln_scripts_for_host(host)
-
-        if not vuln_scripts:
-            continue
-
-        stats['total'] += len(vuln_scripts)
-
-        for vuln_script in vuln_scripts:
-            if should_skip_vuln(mac_address, vuln_script):
-                stats['skipped'] += 1
-                log("VulnScan", f"[跳过] {ip} ({mac_address}): {vuln_script} (历史确认安全)", "DEBUG")
-                continue
-
-            prev_status = VulnModel.get_vuln_status(mac_address, vuln_script)
-            if prev_status == 'vulnerable':
-                log("VulnScan", f"[警告] {ip} ({mac_address}): {vuln_script} (历史发现漏洞)", "WARN")
-                stats['vulnerable'] += 1
-                continue
-
-            log("VulnScan", f"[扫描] {ip} ({mac_address}): {vuln_script}")
-            result, details = scan_vuln(nm, ip, vuln_script)
-
-            VulnModel.save_vuln_result(mac_address, ip, vuln_script, result, details, os_tags, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
-            if result == 'vulnerable':
-                stats['vulnerable'] += 1
-                log("VulnScan", f"发现漏洞: {details[:100]}...", "WARN")
-            elif result == 'safe':
-                stats['safe'] += 1
-            else:
-                stats['error'] += 1
-
-            # 避免扫描过快
-            time.sleep(0.5)
-
-    return stats
+def get_fscan_config():
+    """从配置中获取 fscan 扫描参数"""
+    config_file = os.path.join(get_project_root(), "config.json")
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                nmap_cfg = config.get('nmap', {})
+                return {
+                    'ip_ranges': nmap_cfg.get('ip_ranges', []),
+                    'timeout': nmap_cfg.get('fscan_timeout', 6000),
+                    'scan_interval': nmap_cfg.get('scan_interval', 0),
+                    'scan_enabled': nmap_cfg.get('scan_enabled', False),
+                    'vuln_scripts_by_tag': nmap_cfg.get('vuln_scripts_by_tag', {}),
+                    'vuln_scripts_by_service': nmap_cfg.get('vuln_scripts_by_service', {}),
+                }
+    except Exception as e:
+        log("Fscan", f"读取配置失败: {e}", "ERROR")
+    return {}
 
 
 def save_to_db(scan_id, hosts_data):
@@ -371,7 +200,7 @@ def save_to_db(scan_id, hosts_data):
     for host in hosts_data:
         try:
             open_ports_str = ','.join(map(str, host['open_ports'])) if host['open_ports'] else ''
-            
+
             services_list = []
             for svc in host['services']:
                 svc_str = f"{svc['port']}/{svc['service']}"
@@ -386,79 +215,159 @@ def save_to_db(scan_id, hosts_data):
             ScannerModel.upsert_asset(scan_id, host, scan_time)
             count += 1
         except Exception as e:
-            pass
+            log("Fscan", f"保存主机失败 {host.get('ip')}: {e}", "ERROR")
 
     ScannerModel.increment_hosts_count(scan_id, count)
     return count
 
 
-def main(ip_ranges=None, scan_args=None, scan_interval=0):
+def run_vuln_scan(hosts_data):
+    """
+    对发现的主机执行漏洞扫描（基于 nmap 脚本，仍需 python-nmap）
+    fscan 本身不包含漏洞扫描脚本，此功能暂时保留 python-nmap
+    """
+    try:
+        import nmap
+    except ImportError:
+        log("VulnScan", "python-nmap 未安装，跳过漏洞扫描", "WARNING")
+        return {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
+
+    stats = {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
+
+    # 复用原有漏洞扫描逻辑，读取配置中的 vuln_scripts_by_tag/service
+    vuln_map = get_fscan_config().get('vuln_scripts_by_tag', {})
+
+    for host in hosts_data:
+        mac_address = host.get('mac_address') or host.get('ip')
+        ip = host.get('ip')
+        os_tags = host.get('os_tags', '')
+
+        if not ip:
+            continue
+
+        if not mac_address:
+            mac_address = ip
+
+        # 根据 os_tags 查找对应脚本
+        tag_list = [tag.strip().lower() for tag in os_tags.split(',')]
+        vuln_scripts = set()
+        for tag in tag_list:
+            if tag in vuln_map:
+                vuln_scripts.update(vuln_map[tag])
+
+        if not vuln_scripts:
+            continue
+
+        stats['total'] += len(vuln_scripts)
+
+        nm = nmap.PortScanner()
+        for vuln_script in vuln_scripts:
+            if should_skip_vuln(mac_address, vuln_script):
+                stats['skipped'] += 1
+                log("VulnScan", f"[跳过] {ip} ({mac_address}): {vuln_script}", "DEBUG")
+                continue
+
+            prev_status = VulnModel.get_vuln_status(mac_address, vuln_script)
+            if prev_status == 'vulnerable':
+                log("VulnScan", f"[警告] {ip} ({mac_address}): {vuln_script} (历史发现漏洞)", "WARN")
+                stats['vulnerable'] += 1
+                continue
+
+            log("VulnScan", f"[扫描] {ip} ({mac_address}): {vuln_script}")
+            result, details = scan_vuln_impl(nm, ip, vuln_script)
+            VulnModel.save_vuln_result(mac_address, ip, vuln_script, result, details, os_tags, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+            if result == 'vulnerable':
+                stats['vulnerable'] += 1
+            elif result == 'safe':
+                stats['safe'] += 1
+            else:
+                stats['error'] += 1
+
+            time.sleep(0.5)
+
+    return stats
+
+
+def should_skip_vuln(mac_address, vuln_name):
+    """判断是否跳过某漏洞的扫描"""
+    status = VulnModel.get_vuln_status(mac_address, vuln_name)
+    return status == 'safe'
+
+
+def scan_vuln_impl(nm, host_ip, vuln_script):
+    """对指定主机执行单个漏洞扫描"""
+    try:
+        nm.scan(hosts=host_ip, arguments=f'--script {vuln_script} -T5')
+        if host_ip in nm.all_hosts():
+            if 'script' in nm[host_ip]:
+                for script_id, script_output in nm[host_ip]['script'].items():
+                    if script_id == vuln_script:
+                        output = script_output.lower()
+                        if 'not vulnerable' in output or 'failed' in output:
+                            return 'safe', script_output
+                        elif 'vulnerable' in output or 'expl' in output:
+                            return 'vulnerable', script_output
+                        elif 'error' in output:
+                            return 'error', script_output
+                        else:
+                            return 'safe', script_output
+            return 'safe', 'No vulnerability detected'
+        else:
+            return 'error', 'Host not reachable'
+    except Exception as e:
+        return 'error', str(e)
+
+
+def main(ip_ranges=None, timeout=6000, scan_interval=0):
     """主函数"""
-    # 读取配置
-    import json
-    config_file = os.path.join(get_project_root(), "config.json")
-    if os.path.exists(config_file):
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            nmap_config = config.get('nmap', {})
-            ip_ranges = ip_ranges or nmap_config.get('ip_ranges')
-            scan_args = scan_args or nmap_config.get('arguments')
-    
+    config = get_fscan_config()
+
+    # 配置覆盖：优先使用传入参数，否则用配置文件
+    ip_ranges = ip_ranges or config.get('ip_ranges', [])
+    timeout = timeout or config.get('timeout', 6000)
+    scan_interval = scan_interval or config.get('scan_interval', 0)
+
     # 如果既没有传入参数，配置文件里也没有，则直接退出
-    if not ip_ranges or not scan_args:
-        log("Nmap", "未指定 IP 范围或扫描参数 (配置文件缺失或参数为空)", "ERROR")
+    if not ip_ranges:
+        log("Fscan", "未指定 IP 范围 (配置文件缺失或参数为空)", "ERROR")
         return
 
-    # 确保ip_ranges是列表
     if isinstance(ip_ranges, str):
         ip_ranges = [ip_ranges]
 
-    scan_interval = scan_interval  # 0 表示只扫描一次
-
     while True:
         total_hosts = 0
-        total_count = 0
-        all_hosts_data = []  # 收集所有主机的数据
         try:
             scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # 构造 scan_args 用于兼容数据库记录
+            scan_args = f"-h {{ip_range}} -t {timeout} -nobr -np -f json -o <file>"
             scan_id = ScannerModel.create_scan(ip_ranges, scan_args, scan_time)
 
-            log("Nmap", f"开始扫描 #{scan_id}: {ip_ranges}")
+            log("Fscan", f"开始扫描 #{scan_id}: {ip_ranges}")
 
-            log("ScanMode", "使用纯 Nmap 扫描模式")
+            all_hosts_data = []
 
             for ip_range in ip_ranges:
-                nm = scan_hosts(ip_range, scan_args)
-
-                if nm:
-                    hosts_data = parse_scan_results(nm)
+                hosts_data = run_fscan(ip_range, timeout)
+                if hosts_data:
                     all_hosts_data.extend(hosts_data)
 
                     count = save_to_db(scan_id, hosts_data)
                     total_hosts += len(hosts_data)
 
-            log("Nmap", f"扫描完成，发现 {total_hosts} 台主机")
-
-            if all_hosts_data:
-                log("VulnScan", "开始漏洞扫描...")
-                vuln_stats = run_vuln_scan(all_hosts_data)
-                log("VulnScan", f"漏洞扫描完成: 总计 {vuln_stats['total']}, "
-                      f"跳过 {vuln_stats['skipped']}, "
-                      f"发现漏洞 {vuln_stats['vulnerable']}, "
-                      f"安全 {vuln_stats['safe']}, "
-                      f"错误 {vuln_stats['error']}")
+            log("Fscan", f"扫描完成，发现 {total_hosts} 台主机")
 
         except Exception as e:
             import traceback
-            log("Nmap", f"扫描引擎发生致命错误: {e}", "ERROR")
+            log("Fscan", f"扫描引擎发生致命错误: {e}", "ERROR")
             traceback.print_exc()
 
         if scan_interval <= 0:
             break
 
         time.sleep(scan_interval)
-
-
 
 
 if __name__ == "__main__":

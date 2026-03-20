@@ -10,7 +10,6 @@ from .defense import defense_bp
 from .scan import scan_bp
 from .ai import ai_bp
 from .system import system_bp
-from .settings import settings_bp
 from .nmap_routes import nmap_bp
 from .legacy import legacy_bp
 
@@ -24,7 +23,6 @@ def register_blueprints(app):
     app.register_blueprint(scan_bp)
     app.register_blueprint(ai_bp, url_prefix='/api/v1/ai')
     app.register_blueprint(system_bp)
-    app.register_blueprint(settings_bp, url_prefix='/api/v1')
     app.register_blueprint(nmap_bp)
     app.register_blueprint(legacy_bp)
 
@@ -38,7 +36,6 @@ __all__ = [
     'scan_bp',
     'ai_bp',
     'system_bp',
-    'settings_bp',
     'nmap_bp',
     'legacy_bp',
 ]

@@ -21,7 +21,6 @@ import {
   Radar,
   ShieldAlert,
   Bot,
-  Settings,
   LogOut,
   ChevronDown,
   User,
@@ -31,7 +30,6 @@ import {
   Moon,
   Network,
   Zap,
-  ExternalLink
 } from 'lucide-vue-next'
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
@@ -135,16 +133,6 @@ const testHFish = async () => {
   }
 }
 
-function openSettingsWithFocus(target: 'hfish' | 'switch') {
-  router.push({
-    path: '/settings',
-    query: {
-      focus: target,
-      t: String(Date.now()),
-    },
-  })
-}
-
 function handleToggleTheme(e: MouseEvent) {
   toggleTheme(e, () => {
     uiStore.setTheme(uiStore.theme === 'dark' ? 'light' : 'dark')
@@ -160,7 +148,6 @@ const navItems = [
   { title: '漏洞管理',   icon: Siren,           to: '/vuln' },
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
-  { title: '系统设置',   icon: Settings,        to: '/settings' },
 ]
 
 const currentNavItem = computed(() => {
@@ -300,10 +287,6 @@ onUnmounted(() => {
                     <Zap class="size-3" :class="hfishTesting ? 'animate-pulse' : ''" />
                     {{ hfishTesting ? '测试中…' : '测试连接' }}
                   </Button>
-                  <Button variant="ghost" size="sm" class="cursor-pointer h-7 text-xs gap-1" @click="openSettingsWithFocus('hfish')">
-                    <ExternalLink class="size-3" />
-                    配置
-                  </Button>
                 </div>
               </PopoverContent>
             </Popover>
@@ -360,10 +343,6 @@ onUnmounted(() => {
                 <div v-else class="rounded border border-border/50 p-2 text-[11px] text-muted-foreground text-center">
                   暂无交换机配置
                 </div>
-                <Button variant="ghost" size="sm" class="cursor-pointer w-full h-7 text-xs gap-1" @click="openSettingsWithFocus('switch')">
-                  <ExternalLink class="size-3" />
-                  设备管理
-                </Button>
               </PopoverContent>
             </Popover>
           </div>
@@ -396,11 +375,6 @@ onUnmounted(() => {
                   <p class="text-xs leading-none text-muted-foreground">玄枢安全系统指挥官</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem @click="router.push('/settings')">
-                <Settings class="mr-2 h-4 w-4" />
-                <span>个人设置</span>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem @click="handleLogout" class="text-destructive focus:bg-destructive focus:text-destructive-foreground">
                 <LogOut class="mr-2 h-4 w-4" />

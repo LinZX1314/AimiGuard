@@ -69,12 +69,12 @@ onUnmounted(() => {
       <!-- 左栏：态势摘要 -->
       <DashboardMetricSidebar :payload="payload" :loading="loading" />
 
-      <!-- 中栏：最近攻击记录 -->
-      <DashboardAttackRecord :recent-attacks="payload.recent_attacks" :loading="loading" :load-error="loadError" />
+      <!-- 中栏：AI 指挥侧边栏 -->
+      <DashboardAiSidebar />
 
-      <!-- 右栏：AI 侧边栏 + 防御队列 -->
+      <!-- 右栏：最近攻击记录 + 防御队列 -->
       <aside class="min-h-0 overflow-hidden space-y-4 pl-1 flex flex-col">
-        <DashboardAiSidebar />
+        <DashboardAttackRecord :recent-attacks="payload.recent_attacks" :loading="loading" :load-error="loadError" />
         <DashboardDefenseQueue :defense-events="payload.defense_events" :loading="loading" />
       </aside>
     </div>

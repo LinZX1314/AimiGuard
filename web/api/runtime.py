@@ -40,25 +40,30 @@ def get_runtime_scan_status() -> dict:
     }
 
 
-def run_nmap_scan(ip_ranges, arguments):
-    """后台执行一次 Nmap 扫描"""
+def run_fscan_scan(ip_ranges, timeout=6000):
+    """后台执行一次 Fscan 扫描"""
     global _is_scanning
-    
+
     # 原子检查并设置标志
     with _scan_lock:
         if _is_scanning:
             return
         _is_scanning = True
-    
+
     try:
         sys.path.insert(0, os.path.join(BASE_DIR, 'plugin'))
         import network_scan
-        network_scan.main(ip_ranges=ip_ranges, scan_args=arguments, scan_interval=0)
+        network_scan.main(ip_ranges=ip_ranges, timeout=timeout, scan_interval=0)
     except Exception as e:
-        _runtime_log('error', f'Nmap 扫描执行失败: {e}')
+        _runtime_log('error', f'Fscan 扫描执行失败: {e}')
     finally:
         with _scan_lock:
             _is_scanning = False
+
+
+def run_nmap_scan(ip_ranges, arguments=None, timeout=6000):
+    """后台执行一次 Fscan 扫描（兼容旧 nmap 参数签名）"""
+    run_fscan_scan(ip_ranges, timeout)
 
 
 def run_vuln_scan_task():
@@ -138,26 +143,30 @@ def run_hfish_sync_loop():
             time.sleep(10)
 
 
-def run_nmap_scan_loop():
-    """Nmap 定时扫描循环"""
+def run_fscan_scan_loop():
+    """Fscan 定时扫描循环"""
     while True:
         try:
             cfg = _load_cfg()
             nmap_cfg = cfg.get('nmap', {})
             ip_ranges = nmap_cfg.get('ip_ranges', [])
-            arguments = nmap_cfg.get('arguments', '-sS -T5')
+            timeout = nmap_cfg.get('fscan_timeout', 6000)
             scan_interval = nmap_cfg.get('scan_interval', 0)
 
-            if not ip_ranges or not arguments:
-                _runtime_log('warn', 'Nmap 定时扫描跳过: 未配置 IP 范围或扫描参数')
+            if not ip_ranges:
+                _runtime_log('warn', 'Fscan 定时扫描跳过: 未配置 IP 范围')
                 time.sleep(60)
                 continue
 
-            run_nmap_scan(ip_ranges, arguments)
+            run_fscan_scan(ip_ranges, timeout)
             time.sleep(int(scan_interval))
         except Exception as e:
-            _runtime_log('error', f'Nmap 定时扫描异常: {e}')
+            _runtime_log('error', f'Fscan 定时扫描异常: {e}')
             time.sleep(10)
+
+
+# 向后兼容别名
+run_nmap_scan_loop = run_fscan_scan_loop
 
 
 def start_runtime_workers():
@@ -172,6 +181,6 @@ def start_runtime_workers():
             _runtime_log('info', 'HFish 同步线程已启动')
 
         if cfg.get('nmap', {}).get('scan_enabled', False) and not _scan_thread_started:
-            threading.Thread(target=run_nmap_scan_loop, daemon=True).start()
+            threading.Thread(target=run_fscan_scan_loop, daemon=True).start()
             _scan_thread_started = True
-            _runtime_log('info', 'Nmap 扫描线程已启动')
+            _runtime_log('info', 'Fscan 扫描线程已启动')
