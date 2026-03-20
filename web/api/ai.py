@@ -470,16 +470,50 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
         if not tool_calls:
             unified_log('AIChat', f'Agent循环结束（无更多工具调用）| 共 {step_count} 步', 'INFO')
 
-            # 演练模式：蜜罐审计完成后自动生成报告（无需 AI 再调用）
+            # 演练模式：让 AI 生成丰富的 HTML 报告
             if is_drill_mode and drill_state and step_count > 1 and not drill_state.is_complete:
-                report = _generate_drill_report(drill_state)
-                drill_state.report_content = report
+                # 先获取最新蜜罐数据（实时）
+                try:
+                    from database.models import HFishModel
+                    hfish = HFishModel.get_stats()
+                except Exception:
+                    hfish = {'total': 0, 'service_stats': [], 'ip_stats': [], 'time_stats': []}
+
+                # 收集所有演练数据
+                scan_data = drill_state.scan_results
+                bruteforce_data = drill_state.bruteforce_results
+                honeypot_data = drill_state.honeypot_results
+                ban_data = drill_state.ban_records
+                findings_data = drill_state.findings
+                screenshots_data = drill_state.screenshot_results
+
+                # 构造报告生成 Prompt
+                report_prompt = _build_report_prompt(
+                    drill_state, hfish,
+                    scan_data, bruteforce_data, honeypot_data,
+                    ban_data, findings_data, screenshots_data
+                )
+
+                # 调用 AI 生成 HTML 报告
+                messages = [{'role': 'user', 'content': report_prompt}]
+                result = call_openai_chat_completion(messages, cfg)
+
+                if isinstance(result, dict) and result.get('content'):
+                    report_html = result['content']
+                    # 确保是完整 HTML（可能 AI 忘了加 DOCTYPE）
+                    if '<html' not in report_html.lower():
+                        report_html = f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>安全演练报告</title>\n</head>\n<body>\n{report_html}\n</body>\n</html>'
+                else:
+                    report_html = '<div class="error">报告生成失败，请查看控制台日志。</div>'
+
+                drill_state.report_content = report_html
                 drill_state.is_complete = True
                 yield json.dumps({'drill_complete': {
-                    'report': report,
+                    'report': report_html,
                     'summary': drill_state.get_exec_summary(),
                     'findings_count': len(drill_state.findings),
                     'auto_generated': True,
+                    'is_html': True,
                 }})
             break
 
@@ -557,6 +591,132 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
         except Exception:
             pass
 
+
+
+def _build_report_prompt(
+    state: DrillState,
+    hfish: dict,
+    scan_data: list, bruteforce_data: list,
+    honeypot_data: list, ban_data: list,
+    findings_data: list, screenshots_data: list
+) -> str:
+    """构造 AI 报告生成 Prompt，包含所有演练数据"""
+    from datetime import datetime
+
+    elapsed = (datetime.now() - state._start_time).total_seconds()
+    elapsed_str = f"{int(elapsed) // 60}分{int(elapsed) % 60}秒" if elapsed >= 60 else f"{int(elapsed)}秒"
+
+    # 蜜罐统计
+    service_stats = hfish.get('service_stats', [])
+    ip_stats = hfish.get('ip_stats', [])
+    time_stats = hfish.get('time_stats', [])
+    hfish_total = hfish.get('total', 0)
+
+    # 扫描汇总
+    total_hosts = sum(r.get('result', {}).get('发现主机', 0) for r in scan_data)
+    scan_targets = [r.get('target', '') for r in scan_data if r.get('target')]
+
+    # 弱口令
+    vulnerable_bf = [r for r in bruteforce_data if r.get('result', {}).get('vulnerable')]
+
+    # 格式化 JSON 数据供 AI 分析
+    import json
+    context = {
+        '演练开始时间': state._start_time.strftime('%Y-%m-%d %H:%M:%S'),
+        '运行时长': elapsed_str,
+        '目标网络': state.target_network or '未指定',
+        '执行步骤': state.step_count,
+        '扫描结果': scan_data,
+        '弱口令检测结果': bruteforce_data,
+        '蜜罐审计结果': honeypot_data,
+        '封禁记录': ban_data,
+        '发现的问题': findings_data,
+        '截图记录': screenshots_data,
+        '蜜罐总攻击次数': hfish_total,
+        '蜜罐服务统计': service_stats,
+        '蜜罐攻击来源Top10': ip_stats,
+        '蜜罐7天趋势': time_stats,
+        '网络扫描次数': len(scan_data),
+        '发现主机数': total_hosts,
+        '弱口令风险数': len(vulnerable_bf),
+        '蜜罐审计次数': len(honeypot_data),
+        '封禁IP数': len(ban_data),
+        '安全问题数': len(findings_data),
+    }
+    ctx_json = json.dumps(context, ensure_ascii=False, indent=2)
+
+    prompt = f"""你是「玄枢指挥官」，一个专业的网络安全 AI。请根据以下演练数据生成一份**完整的 HTML 安全演练报告**。
+
+## 核心要求
+1. 输出**完整的单个 HTML 页面**（包含 <!DOCTYPE html> 和 <html>），不要只输出片段
+2. 使用 **ECharts**（CDN: https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js）绘制图表
+3. 使用 **Bootstrap 5**（CDN）美化布局，响应式设计
+4. **暗黑军事风格**：深色背景(#0a0e14 或 #1a1a2e)，亮色文字(#00ff88, #ff6b6b, #ffd93d)，科技感字体
+5. 所有中文内容，图表标题和标签也必须是中文
+
+## 必须包含的板块（全部都要有，缺一不可）
+
+### 1. 报告头部
+- 标题：「🛡️ 安全演练报告」
+- 副标题：演练时间、目标网络、运行时长
+- 状态标签：总体风险等级（根据发现数量动态评定）
+
+### 2. 执行摘要卡片
+- 4~6 个 KPI 卡片横向排列：扫描主机数、弱口令风险数、蜜罐攻击次数、封禁IP数、安全问题数、审计时长
+- 每个卡片带图标和颜色区分
+
+### 3. ECharts 图表区（至少 3 个图表）
+**图表1 - 7天攻击趋势（折线图）**
+- 数据：{json.dumps(time_stats, ensure_ascii=False)}
+- X轴：日期，Y轴：攻击次数
+- 线条颜色：渐变绿 (#00ff88)
+
+**图表2 - 攻击服务分布（饼图）**
+- 数据：{json.dumps(service_stats, ensure_ascii=False)}
+- 饼图，带标签显示服务名和次数
+
+**图表3 - Top 10 攻击来源（水平柱状图）**
+- 数据：{json.dumps(ip_stats[:10], ensure_ascii=False)}
+- IP地址为Y轴，攻击次数为X轴
+- 颜色：橙色渐变
+
+### 4. 网络扫描详情
+- 扫描目标：{', '.join(scan_targets) or '无'}
+- 发现主机：{total_hosts} 台
+- 若有主机数据，列出 IP、端口、服务
+
+### 5. 弱口令检测结果
+- 共检测 {len(bruteforce_data)} 个服务
+- 若有发现，**红色高亮**显示每个弱口令（用户名/密码）
+- 若无发现，显示「未发现常见弱口令」
+
+### 6. 蜜罐审计记录
+- 最新攻击记录表格（时间、来源IP、服务类型）
+- 从 honeypot_data 中提取，若无则从 service_stats 描述
+
+### 7. 封禁IP列表
+- 列出所有已封禁IP和原因
+- 若无，显示「暂无封禁记录」
+
+### 8. 安全问题汇总表
+- 按 severity 分组（严重/高危/中危/信息）
+- 包含：类型、IP地址、端口、描述
+
+### 9. 修复建议
+- 按优先级列出具体修复步骤
+- 每个建议对应一个问题
+
+### 10. 页脚
+- 「本报告由玄枢·AI 攻防指挥官自动生成 | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}」
+
+## 完整演练数据（JSON）
+```json
+{ctx_json}
+```
+
+请立即生成完整 HTML，不要解释，直接输出 HTML 代码。
+"""
+    return prompt
 
 
 def _generate_drill_report(state: DrillState) -> str:

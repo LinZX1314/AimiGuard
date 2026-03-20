@@ -86,6 +86,7 @@ const drillStep = ref(0)
 const drillMaxStep = ref(30)
 const drillProgress = ref(0)
 const drillReport = ref('')
+const drillReportHtml = ref(false)
 const drillSummary = ref('')
 const drillFindingCount = ref(0)
 const drillPanelOpen = ref(false)
@@ -363,11 +364,13 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
           if (parsed.drill_complete) {
             drillReport.value = parsed.drill_complete.report || ''
+            drillReportHtml.value = !!parsed.drill_complete.is_html
             drillSummary.value = parsed.drill_complete.summary || ''
             drillFindingCount.value = parsed.drill_complete.findings_count || 0
             stopDrillTimer()
             const autoTag = parsed.drill_complete.auto_generated ? ' [自动生成]' : ''
-            drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题，演练结束${autoTag}`, 'check-circle', 'text-emerald-400')
+            const htmlTag = parsed.drill_complete.is_html ? ' 📊' : ''
+            drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题，演练结束${autoTag}${htmlTag}`, 'check-circle', 'text-emerald-400')
           }
 
           if (parsed.drill_warning) {
@@ -443,6 +446,15 @@ async function handleFileUpload(file: File) {
     const text = await file.text()
     await send(`请分析并执行以下安全演练文档：\n${file.name}`, {}, text)
   } catch(e: any) { console.error('文件读取失败:', e) }
+}
+
+function openReportWindow() {
+  if (!drillReport.value) return
+  const win = window.open('', '_blank')
+  if (win) {
+    win.document.write(drillReport.value)
+    win.document.close()
+  }
 }
 
 onMounted(async () => {
@@ -652,10 +664,23 @@ onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSyn
                   <Badge v-if="drillFindingCount > 0" variant="outline" class="h-5 text-[10px] border-orange-500/30 text-orange-400 bg-orange-500/5">
                     {{ drillFindingCount }} 项
                   </Badge>
+                  <button
+                    v-if="drillReportHtml"
+                    @click="openReportWindow"
+                    class="ml-1 px-2 py-0.5 text-[10px] rounded border border-primary/30 text-primary/70 hover:text-primary hover:border-primary/60 transition-colors cursor-pointer bg-transparent"
+                  >新窗口</button>
                 </div>
               </div>
-              <ScrollArea class="flex-1 p-4">
-                <div class="prose prose-invert prose-sm max-w-none text-foreground/70 whitespace-pre-wrap text-xs font-mono leading-relaxed">
+              <ScrollArea class="flex-1">
+                <!-- HTML 报告：使用 iframe 渲染 -->
+                <iframe
+                  v-if="drillReportHtml && drillReport"
+                  :srcdoc="drillReport"
+                  class="w-full h-full border-0"
+                  sandbox="allow-scripts"
+                ></iframe>
+                <!-- Markdown 报告：纯文本展示 -->
+                <div v-else-if="drillReport || drillSummary" class="p-4 prose prose-invert prose-sm max-w-none text-foreground/70 whitespace-pre-wrap text-xs font-mono leading-relaxed">
                   {{ drillReport || drillSummary }}
                 </div>
               </ScrollArea>
