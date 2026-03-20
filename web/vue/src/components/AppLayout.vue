@@ -29,6 +29,7 @@ import {
   Moon,
   Network,
   Zap,
+  Settings,
 } from 'lucide-vue-next'
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
@@ -378,6 +379,10 @@ onUnmounted(() => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem @click="router.push('/settings')">
+                <Settings class="mr-2 h-4 w-4" />
+                <span>系统设置</span>
+              </DropdownMenuItem>
               <DropdownMenuItem @click="handleLogout" class="text-destructive focus:bg-destructive focus:text-destructive-foreground">
                 <LogOut class="mr-2 h-4 w-4" />
                 <span>退出系统</span>
