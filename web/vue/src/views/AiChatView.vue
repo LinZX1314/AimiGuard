@@ -366,7 +366,8 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             drillSummary.value = parsed.drill_complete.summary || ''
             drillFindingCount.value = parsed.drill_complete.findings_count || 0
             stopDrillTimer()
-            drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题，演练结束`, 'check-circle', 'text-emerald-400')
+            const autoTag = parsed.drill_complete.auto_generated ? ' [自动生成]' : ''
+            drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题，演练结束${autoTag}`, 'check-circle', 'text-emerald-400')
           }
 
           if (parsed.drill_warning) {

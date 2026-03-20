@@ -469,6 +469,18 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
         # 无工具调用则结束
         if not tool_calls:
             unified_log('AIChat', f'Agent循环结束（无更多工具调用）| 共 {step_count} 步', 'INFO')
+
+            # 演练模式：蜜罐审计完成后自动生成报告（无需 AI 再调用）
+            if is_drill_mode and drill_state and step_count > 1 and not drill_state.is_complete:
+                report = _generate_drill_report(drill_state)
+                drill_state.report_content = report
+                drill_state.is_complete = True
+                yield json.dumps({'drill_complete': {
+                    'report': report,
+                    'summary': drill_state.get_exec_summary(),
+                    'findings_count': len(drill_state.findings),
+                    'auto_generated': True,
+                }})
             break
 
         # 保存 assistant tool_call 消息
