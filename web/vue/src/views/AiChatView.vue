@@ -1,10 +1,25 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { api } from '@/api/index'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import { api } from '@/api/index'
 import AiSessionSidebar from '@/components/ai/AiSessionSidebar.vue'
 import AiMessageList from '@/components/ai/AiMessageList.vue'
 import AiChatInput from '@/components/ai/AiChatInput.vue'
+import {
+  Terminal,
+  FileText,
+  Shield,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Camera,
+  Server,
+  Clock,
+} from 'lucide-vue-next'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
 
 interface ToolCall {
   id: string
@@ -44,6 +59,7 @@ interface Message {
 
 interface Session { id: number; title: string; created_at: string }
 
+// ─── 通用状态 ────────────────────────────────────────────────────────────────
 const sessions = ref<Session[]>([])
 const messages = ref<Message[]>([])
 const loading = ref(false)
@@ -53,45 +69,154 @@ const activeChatController = ref<AbortController | null>(null)
 const ttsEnabled = ref(true)
 const route = useRoute()
 
-// TTS logic
+// ─── 演练模式状态 ────────────────────────────────────────────────────────────
+const drillMode = ref(false)
+const drillLog = ref<Array<{
+  id: number
+  type: 'step' | 'thinking' | 'tool_call' | 'tool_result' | 'complete' | 'warning' | 'text'
+  icon: string
+  color: string
+  label: string
+  content: string
+  timestamp: string
+  expanded: boolean
+  toolIcon: string
+}>>([])
+const drillStep = ref(0)
+const drillMaxStep = ref(30)
+const drillProgress = ref(0)
+const drillReport = ref('')
+const drillSummary = ref('')
+const drillFindingCount = ref(0)
+const drillPanelOpen = ref(false)
+const drillElapsed = ref(0)
+const drillHostsFound = ref(0)
+const drillScreenshotsTaken = ref(0)
+let drillLogId = 0
+let drillTimer: ReturnType<typeof setInterval> | null = null
+
+const toolIconMap: Record<string, string> = {
+  search: 'search',
+  network_scan: 'search',
+  scan: 'search',
+  camera: 'camera',
+  screenshot: 'camera',
+  web: 'camera',
+  bruteforce: 'lock',
+  ssh: 'lock',
+  rdp: 'lock',
+  mysql: 'lock',
+  honeypot: 'bug',
+  audit: 'bug',
+  stats: 'bug',
+  ban: 'ban',
+  report: 'file-text',
+  generate: 'file-text',
+  status: 'target',
+  plan: 'target',
+  analyze: 'eye',
+  document: 'eye',
+}
+
+function getToolIcon(toolName: string): string {
+  if (!toolName) return 'terminal'
+  const lower = toolName.toLowerCase()
+  for (const [key, icon] of Object.entries(toolIconMap)) {
+    if (lower.includes(key)) return icon
+  }
+  return 'zap'
+}
+
+function drillAdd(type: 'step' | 'thinking' | 'tool_call' | 'tool_result' | 'complete' | 'warning' | 'text', label: string, content: string, icon: string, color: string, toolIcon = 'terminal') {
+  drillLog.value.push({
+    id: ++drillLogId,
+    type,
+    icon,
+    color,
+    label,
+    content,
+    timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    expanded: type === 'tool_result',
+    toolIcon,
+  })
+  nextTick(() => {
+    const el = document.querySelector('.drill-log-scroll')
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+function drillToggleExpand(id: number) {
+  const entry = drillLog.value.find(e => e.id === id)
+  if (entry) entry.expanded = !entry.expanded
+}
+
+function formatToolResult(result: string): string {
+  try {
+    const parsed = JSON.parse(result)
+    if (parsed.error) return `❌ ${parsed.error}`
+    if (parsed.vulnerable) {
+      const creds = parsed.vulnerable_creds || []
+      if (creds.length > 0) {
+        return `🔴 弱口令发现！\n${creds.map((c: any) => `  ${c.username} / ${c.password}`).join('\n')}`
+      }
+      return `✅ 检测完成，未发现弱口令`
+    }
+    if (parsed.发现主机 !== undefined) {
+      drillHostsFound.value = Math.max(drillHostsFound.value, parsed.发现主机)
+      return `✅ 发现 ${parsed.发现主机} 台主机`
+    }
+    if (parsed.total !== undefined) return `✅ 蜜罐记录 ${parsed.total} 次攻击`
+    if (parsed.screenshot_url) { drillScreenshotsTaken.value++; return `✅ 截图已保存` }
+    if (parsed.report) return `✅ 报告生成完毕，共 ${parsed.findings_count || 0} 项发现`
+    if (parsed.message) return parsed.message
+    return JSON.stringify(parsed, null, 2)
+  } catch { return result }
+}
+
+function toggleDrillPanel() { drillPanelOpen.value = !drillPanelOpen.value }
+
+function startDrillTimer() {
+  drillElapsed.value = 0
+  if (drillTimer) clearInterval(drillTimer)
+  drillTimer = setInterval(() => { drillElapsed.value++ }, 1000)
+}
+
+function stopDrillTimer() {
+  if (drillTimer) { clearInterval(drillTimer); drillTimer = null }
+}
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 function speak(text: string) {
   if (!ttsEnabled.value || !window.speechSynthesis) return
   const stripped = text.replace(/[#*`>~_\[\]()!]/g, ' ').replace(/\s+/g, ' ').trim()
   const utt = new SpeechSynthesisUtterance(stripped.slice(0, 400))
-  utt.lang = 'zh-CN'
-  utt.rate = 1.1
+  utt.lang = 'zh-CN'; utt.rate = 1.1
   window.speechSynthesis.speak(utt)
 }
 
 function toggleTts() {
-  if (ttsEnabled.value && window.speechSynthesis) {
-    window.speechSynthesis.cancel()
-  }
+  if (ttsEnabled.value && window.speechSynthesis) window.speechSynthesis.cancel()
   ttsEnabled.value = !ttsEnabled.value
 }
 
-function stopGenerating() {
-  activeChatController.value?.abort()
-}
+function stopGenerating() { activeChatController.value?.abort() }
 
 // Session Management
 async function loadSessions() {
   try {
     const d = await api.get<any>('/api/v1/ai/sessions')
-    const list = d.data ?? d
-    sessions.value = list
+    sessions.value = (d.data ?? d) as Session[]
   } catch(e) { console.error(e) }
 }
 
 async function loadMessages(sid: number) {
-  if (sid === -1) {
-    currentSession.value = -1
-    messages.value = []
-    loading.value = false
-    return
-  }
-  loading.value = true
-  currentSession.value = sid
+  if (sid === -1) { currentSession.value = -1; messages.value = []; loading.value = false; return }
+  loading.value = true; currentSession.value = sid
   try {
     const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
     messages.value = normalizeMessages((d.data ?? d) as ApiMessage[])
@@ -114,8 +239,7 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
     const current = source[index]
     if (current.role === 'user') {
       normalized.push({ role: 'user', content: current.content || '', created_at: current.created_at })
-      index += 1
-      continue
+      index += 1; continue
     }
     if (current.role === 'assistant' && current.tool_calls?.length) {
       const toolResults: ToolResult[] = []
@@ -145,20 +269,28 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
       normalized.push({ role: 'assistant', content: current.content || fallbackReply, created_at: current.created_at })
       index += 1; continue
     }
-    normalized.push({
-      role: 'assistant', content: '', created_at: current.created_at,
-      tool_results: [{ content: current.content || '', created_at: current.created_at, name: current.name, tool_call_id: current.tool_call_id }]
-    })
+    normalized.push({ role: 'assistant', content: '', created_at: current.created_at, tool_results: [{ content: current.content || '', created_at: current.created_at, name: current.name, tool_call_id: current.tool_call_id }] })
     index += 1
   }
   if (!normalized.length && fallbackReply) normalized.push({ role: 'assistant', content: fallbackReply })
   return normalized
 }
 
-// Sending logic
-async function send(text: string, extraParams: any = {}) {
-  if (!text || sending.value) return
-  messages.value.push({ role: 'user', content: text })
+// Send
+async function send(text: string, extraParams: any = {}, documentContent?: string) {
+  if (!text && !documentContent) return
+  if (sending.value) return
+
+  const isDrill = !!documentContent
+  if (isDrill) {
+    drillLog.value = []; drillReport.value = ''; drillMode.value = true; drillPanelOpen.value = true
+    drillStep.value = 0; drillFindingCount.value = 0; drillElapsed.value = 0
+    drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
+    startDrillTimer()
+  }
+
+  const displayText = isDrill ? `【演练文档】\n${documentContent}` : text
+  messages.value.push({ role: 'user', content: displayText })
   sending.value = true
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
   messages.value.push(assistantMsg as any)
@@ -167,7 +299,7 @@ async function send(text: string, extraParams: any = {}) {
   activeChatController.value = controller
 
   try {
-    const body: any = { message: text, ...extraParams }
+    const body: any = { message: isDrill ? `【演练文档】${documentContent}` : text, drill_mode: isDrill, ...extraParams }
     if (currentSession.value && currentSession.value !== -1) body.session_id = currentSession.value
 
     const token = localStorage.getItem('token')
@@ -194,9 +326,7 @@ async function send(text: string, extraParams: any = {}) {
           if (hasTools) assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue.slice(0, popCount)
           else assistantMsg.content += typeQueue.slice(0, popCount)
           typeQueue = typeQueue.slice(popCount)
-        } else {
-          clearInterval(typeInterval); typeInterval = null
-        }
+        } else { clearInterval(typeInterval); typeInterval = null }
       }, 30)
     }
 
@@ -213,58 +343,115 @@ async function send(text: string, extraParams: any = {}) {
         if (data === '[DONE]') continue
         try {
           const parsed = JSON.parse(data)
-          if (parsed.content) { typeQueue += parsed.content; startTypewriter() }
-          if (parsed.tool_call) {
-             if (typeQueue) {
-               const hasTools = (assistantMsg as any).tool_calls?.length > 0
-               if (hasTools) assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
-               else assistantMsg.content += typeQueue
-               typeQueue = ''
-             }
-             if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
-             ;(assistantMsg as any).tool_calls.push({ id: parsed.tool_call.name + '_' + Date.now(), name: parsed.tool_call.name, arguments: parsed.tool_call.arguments })
+
+          if (parsed.drill_mode) {
+            drillMode.value = true; drillLog.value = []; drillReport.value = ''
+            drillFindingCount.value = 0; drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
+            startDrillTimer()
+            drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行动计划...', 'zap', 'text-cyan-400')
+            continue
           }
+
+          if (parsed.drill_step) {
+            drillStep.value = parsed.drill_step.step || 0
+            drillMaxStep.value = parsed.drill_step.max_steps || 30
+            drillProgress.value = Math.round((drillStep.value / drillMaxStep.value) * 100)
+            if (parsed.drill_step.status === 'thinking') {
+              drillAdd('thinking', '🤔 AI 决策中', parsed.drill_step.message || '', 'loader', 'text-yellow-400')
+            }
+          }
+
+          if (parsed.drill_complete) {
+            drillReport.value = parsed.drill_complete.report || ''
+            drillSummary.value = parsed.drill_complete.summary || ''
+            drillFindingCount.value = parsed.drill_complete.findings_count || 0
+            stopDrillTimer()
+            drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题，演练结束`, 'check-circle', 'text-emerald-400')
+          }
+
+          if (parsed.drill_warning) {
+            drillAdd('warning', '⚠️ 演练警告', parsed.drill_warning, 'alert-triangle', 'text-orange-400')
+          }
+
+          if (parsed.drill_final) {
+            drillAdd('complete', '📋 最终状态', parsed.drill_final.exec_summary || '', 'shield', 'text-blue-400')
+          }
+
+          if (parsed.content) { typeQueue += parsed.content; startTypewriter() }
+
+          if (parsed.tool_call) {
+            if (typeQueue) {
+              if ((assistantMsg as any).tool_calls?.length > 0) assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
+              else assistantMsg.content += typeQueue
+              typeQueue = ''
+            }
+            if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
+            const tcId = 'tc_' + Date.now()
+            ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, arguments: parsed.tool_call.arguments })
+            if (drillMode.value) {
+              const tIcon = getToolIcon(parsed.tool_call.name)
+              const toolLabel = parsed.tool_call.name.replace('drill_', '').replace(/_/g, ' ').toUpperCase()
+              drillAdd('tool_call', `🔧 ${toolLabel}`, JSON.stringify(parsed.tool_call.arguments || {}, null, 2), 'terminal', 'text-purple-400', tIcon)
+            }
+          }
+
           if (parsed.tool_result) {
             if (typeQueue) { assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue; typeQueue = '' }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
-            const matchedToolCall = parsed.tool_call_id ? (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === parsed.tool_call_id) : (assistantMsg as any).tool_calls?.slice(-1)[0]
-            ;(assistantMsg as any).tool_results.push({ name: matchedToolCall?.name || 'tool', tool_call_id: parsed.tool_call_id || matchedToolCall?.id, content: parsed.tool_result })
+            const tcId = parsed.tool_call_id || (assistantMsg as any).tool_calls?.slice(-1)[0]?.id || ''
+            const result = typeof parsed.tool_result === 'string' ? parsed.tool_result : JSON.stringify(parsed.tool_result, null, 2)
+            ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: result })
+            if (drillMode.value) {
+              const lastLog = [...drillLog.value].reverse().find(e => e.type === 'tool_call')
+              if (lastLog) {
+                lastLog.content = formatToolResult(result)
+                try {
+                  const r = JSON.parse(result)
+                  if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
+                } catch {}
+              }
+            }
           }
+
           if (parsed.session_id && (!currentSession.value || currentSession.value === -1)) {
-            currentSession.value = parsed.session_id
-            await loadSessions()
+            currentSession.value = parsed.session_id; await loadSessions()
           }
         } catch {}
       }
     }
-    speak(assistantMsg.content)
+    if (!drillMode.value) speak(assistantMsg.content)
   } catch(e: any) {
+    stopDrillTimer()
     if (e.name !== 'AbortError') assistantMsg.content = `错误：${e.message || '请求失败'}`
+    if (drillMode.value) drillAdd('warning', '❌ 请求失败', e.message || '', 'alert-triangle', 'text-red-400')
   } finally {
-    sending.value = false; activeChatController.value = null
+    stopDrillTimer(); sending.value = false; activeChatController.value = null
+    if (drillMode.value && !sending.value) setTimeout(() => { if (!sending.value) drillMode.value = false }, 500)
   }
 }
 
 function handleNewChat() {
-  messages.value = []
-  currentSession.value = -1
+  messages.value = []; currentSession.value = -1; drillMode.value = false
+  drillLog.value = []; drillReport.value = ''; stopDrillTimer()
   sessions.value = [{ id: -1, title: '新对话', created_at: new Date().toLocaleString() }, ...sessions.value.filter(s => s.id !== -1)]
+}
+
+async function handleFileUpload(file: File) {
+  if (!file) return
+  try {
+    const text = await file.text()
+    await send(`请分析并执行以下安全演练文档：\n${file.name}`, {}, text)
+  } catch(e: any) { console.error('文件读取失败:', e) }
 }
 
 onMounted(async () => {
   await loadSessions()
-  const { context_type, context_id, prompt } = route.query
-  if (prompt) {
-    await send(String(prompt), { context_type, context_id })
-  } else if (context_type && context_id) {
-    await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
-  }
+  const { context_type, context_id, prompt } = route.query as any
+  if (prompt) await send(String(prompt), { context_type, context_id })
+  else if (context_type && context_id) await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
 })
 
-onBeforeUnmount(() => {
-  stopGenerating()
-  if (window.speechSynthesis) window.speechSynthesis.cancel()
-})
+onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel() })
 </script>
 
 <template>
@@ -277,6 +464,275 @@ onBeforeUnmount(() => {
       @delete-session="deleteSession"
     />
     <main class="flex-1 bg-transparent flex flex-col relative w-full overflow-hidden">
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- 演练执行面板（Agent 循环可视化 - 军事指挥中心风格）           -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <Transition name="slide-up">
+        <div v-if="drillPanelOpen" class="absolute inset-0 z-50 flex flex-col bg-background/98 backdrop-blur-2xl border-t border-primary/30">
+
+          <!-- ── 顶部状态栏 ── -->
+          <div class="flex items-center justify-between px-6 py-3 border-b border-border/60 bg-gradient-to-r from-background via-background to-muted/20 shrink-0 relative overflow-hidden">
+            <!-- 扫描线动画 -->
+            <div class="absolute inset-0 overflow-hidden pointer-events-none">
+              <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent animate-scanline"></div>
+            </div>
+
+            <div class="flex items-center gap-4 relative z-10">
+              <!-- Logo区域 -->
+              <div class="flex items-center gap-2.5">
+                <div class="relative">
+                  <div class="absolute inset-0 bg-primary/20 rounded-lg blur-md animate-pulse"></div>
+                  <div class="relative bg-primary/10 p-2 rounded-lg border border-primary/30">
+                    <Shield :size="20" class="text-primary" />
+                  </div>
+                </div>
+                <div>
+                  <h2 class="text-sm font-bold tracking-wide text-foreground flex items-center gap-1.5">
+                    <span class="text-primary">⬡</span> 玄枢·AI 攻防指挥官
+                  </h2>
+                  <p class="text-[10px] text-muted-foreground/60 font-mono tracking-widest uppercase">
+                    Security Drill Executor v2.0
+                  </p>
+                </div>
+              </div>
+
+              <!-- 状态指示器 -->
+              <div class="h-8 w-px bg-border/40 mx-2"></div>
+
+              <!-- 统计数据 -->
+              <div class="flex items-center gap-4">
+                <div class="flex items-center gap-1.5" title="已用时">
+                  <Clock :size="12" class="text-cyan-400/70" />
+                  <span class="text-xs font-mono text-cyan-400/90 tabular-nums">{{ formatElapsed(drillElapsed) }}</span>
+                </div>
+                <div class="flex items-center gap-1.5" title="发现主机">
+                  <Server :size="12" class="text-emerald-400/70" />
+                  <span class="text-xs font-mono text-emerald-400/90 tabular-nums">{{ drillHostsFound }}</span>
+                </div>
+                <div class="flex items-center gap-1.5" title="截图数量">
+                  <Camera :size="12" class="text-blue-400/70" />
+                  <span class="text-xs font-mono text-blue-400/90 tabular-nums">{{ drillScreenshotsTaken }}</span>
+                </div>
+                <div class="flex items-center gap-1.5" title="安全问题">
+                  <AlertTriangle :size="12" class="text-orange-400/70" />
+                  <span class="text-xs font-mono text-orange-400/90 tabular-nums">{{ drillFindingCount }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧: 进度 + 控制 -->
+            <div class="flex items-center gap-4 relative z-10">
+              <!-- 进度条 -->
+              <div class="flex items-center gap-3">
+                <div class="text-xs text-muted-foreground/60 font-mono">
+                  STEP {{ drillStep }}/{{ drillMaxStep }}
+                </div>
+                <div class="w-40 h-1.5 bg-muted/40 rounded-full overflow-hidden border border-border/20">
+                  <div
+                    class="h-full transition-all duration-500 ease-out rounded-full"
+                    :class="drillProgress > 80 ? 'bg-gradient-to-r from-emerald-500 to-cyan-500' : drillProgress > 40 ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : 'bg-gradient-to-r from-primary to-cyan-500'"
+                    :style="{ width: drillProgress + '%' }"
+                  ></div>
+                </div>
+                <div class="text-xs font-mono text-primary tabular-nums w-8">{{ drillProgress }}%</div>
+              </div>
+
+              <Badge v-if="drillFindingCount > 0" variant="outline" class="text-xs border-orange-500/40 text-orange-400 bg-orange-500/10 font-mono">
+                ⚠ {{ drillFindingCount }} 发现
+              </Badge>
+
+              <Button variant="ghost" size="sm" class="h-7 text-xs gap-1 hover:bg-muted/30" @click="toggleDrillPanel">
+                <ChevronDown :size="14" />收起
+              </Button>
+            </div>
+          </div>
+
+          <!-- ── 主内容区 ── -->
+          <div class="flex-1 flex overflow-hidden">
+
+            <!-- Agent 执行日志（终端风格） -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+              <!-- 终端头部 -->
+              <div class="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b border-border/40 shrink-0">
+                <div class="flex gap-1.5">
+                  <div class="w-2.5 h-2.5 rounded-full bg-red-500/60"></div>
+                  <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/60"></div>
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/60"></div>
+                </div>
+                <div class="text-[10px] text-muted-foreground/60 font-mono tracking-wider">
+                  XUANSHU-DRILL :: AGENT-LOOP-TERMINAL
+                </div>
+                <div class="ml-auto flex items-center gap-1.5">
+                  <div v-if="sending && drillMode" class="flex items-center gap-1 text-[10px] text-emerald-400/70 font-mono">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                    EXECUTING
+                  </div>
+                </div>
+              </div>
+
+              <!-- 终端内容 -->
+              <ScrollArea class="drill-log-scroll flex-1 p-3 space-y-1.5 bg-[#0a0e14]">
+                <!-- 欢迎信息 -->
+                <div class="text-[11px] font-mono text-cyan-400/40 mb-3 leading-relaxed">
+                  <div>╔══════════════════════════════════════════════════════════════════╗</div>
+                  <div>║  玄枢·AI 攻防指挥官 Security Drill Executor                    ║</div>
+                  <div>║  Copyright (c) 2026 XuanShu Security Systems                 ║</div>
+                  <div>╚══════════════════════════════════════════════════════════════════╝</div>
+                </div>
+
+                <div
+                  v-for="entry in drillLog"
+                  :key="entry.id"
+                  class="rounded overflow-hidden border transition-all duration-200"
+                  :class="{
+                    'bg-yellow-500/5 border-yellow-500/20': entry.type === 'thinking',
+                    'bg-purple-500/5 border-purple-500/25': entry.type === 'tool_call',
+                    'bg-emerald-500/5 border-emerald-500/20': entry.type === 'tool_result',
+                    'bg-emerald-500/8 border-emerald-500/40': entry.type === 'complete',
+                    'bg-orange-500/5 border-orange-500/20': entry.type === 'warning',
+                    'bg-cyan-500/5 border-cyan-500/20': entry.type === 'text',
+                  }"
+                >
+                  <!-- 日志行头部 -->
+                  <div
+                    class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                    :class="{ 'cursor-default': entry.type !== 'tool_result' }"
+                    @click="entry.type === 'tool_result' ? drillToggleExpand(entry.id) : null"
+                  >
+                    <span class="text-[9px] text-muted-foreground/30 shrink-0 font-mono">{{ entry.timestamp }}</span>
+                    <span class="text-[10px] font-mono font-bold tracking-wider shrink-0"
+                      :class="{
+                        'text-yellow-400': entry.type === 'thinking',
+                        'text-purple-400': entry.type === 'tool_call',
+                        'text-emerald-400': entry.type === 'tool_result' || entry.type === 'complete',
+                        'text-orange-400': entry.type === 'warning',
+                        'text-cyan-400': entry.type === 'text',
+                      }"
+                    >[{{ entry.label }}]</span>
+                    <span v-if="entry.type === 'tool_call'" class="text-[10px] text-muted-foreground/60 font-mono">
+                      {{ entry.content.split('\n')[0].slice(0, 80) }}{{ entry.content.length > 80 ? '...' : '' }}
+                    </span>
+                    <span v-if="entry.type === 'tool_result'" class="ml-auto flex items-center gap-1">
+                      <ChevronUp v-if="entry.expanded" :size="10" class="text-muted-foreground/50" />
+                      <ChevronDown v-else :size="10" class="text-muted-foreground/50" />
+                    </span>
+                    <!-- 执行中动画 -->
+                    <div v-if="sending && entry.id === drillLog[drillLog.length - 1]?.id" class="ml-auto flex items-center gap-1">
+                      <span class="text-[9px] text-primary/60 font-mono animate-pulse">●</span>
+                    </div>
+                  </div>
+
+                  <!-- 日志行内容 -->
+                  <div v-if="entry.type !== 'tool_result' || entry.expanded" class="px-3 pb-2">
+                    <pre
+                      v-if="entry.type === 'tool_result'"
+                      class="text-[11px] font-mono text-emerald-300/80 whitespace-pre-wrap break-all max-h-48 overflow-auto leading-relaxed"
+                      :class="entry.content.startsWith('🔴') ? 'text-red-400' : entry.content.startsWith('❌') ? 'text-red-400' : 'text-emerald-300/80'"
+                    >{{ entry.content }}</pre>
+                    <p v-else class="text-[11px] text-muted-foreground/70 font-mono leading-relaxed">{{ entry.content }}</p>
+                  </div>
+                </div>
+
+                <!-- 执行中占位 -->
+                <div v-if="sending && drillMode" class="flex items-center gap-2 text-[11px] font-mono text-muted-foreground/40 py-2">
+                  <span class="animate-pulse">▶</span>
+                  <span>AI 正在执行中...</span>
+                </div>
+              </ScrollArea>
+            </div>
+
+            <!-- 报告预览侧边栏 -->
+            <div v-if="drillReport || drillSummary" class="w-[440px] border-l border-border/50 flex flex-col shrink-0 bg-muted/5">
+              <div class="px-4 py-2.5 border-b border-border/40 bg-muted/20 flex items-center gap-2 shrink-0">
+                <FileText :size="12" class="text-primary" />
+                <span class="text-xs font-bold text-foreground tracking-wide">演练报告预览</span>
+                <div class="ml-auto flex items-center gap-1.5">
+                  <Badge v-if="drillFindingCount > 0" variant="outline" class="h-5 text-[10px] border-orange-500/30 text-orange-400 bg-orange-500/5">
+                    {{ drillFindingCount }} 项
+                  </Badge>
+                </div>
+              </div>
+              <ScrollArea class="flex-1 p-4">
+                <div class="prose prose-invert prose-sm max-w-none text-foreground/70 whitespace-pre-wrap text-xs font-mono leading-relaxed">
+                  {{ drillReport || drillSummary }}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <!-- 空的侧边栏（无报告时显示统计） -->
+            <div v-else class="w-[300px] border-l border-border/50 flex flex-col shrink-0 bg-muted/5">
+              <div class="px-4 py-2.5 border-b border-border/40 bg-muted/20 shrink-0">
+                <span class="text-xs font-bold text-foreground tracking-wide">实时统计</span>
+              </div>
+              <div class="flex-1 p-4 space-y-3">
+                <div class="bg-muted/30 rounded-lg p-3 border border-border/30">
+                  <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-1">执行步骤</div>
+                  <div class="text-2xl font-mono font-bold text-primary">{{ drillStep }}</div>
+                  <div class="text-[10px] text-muted-foreground/50">/ {{ drillMaxStep }} 最大步数</div>
+                </div>
+                <div class="bg-muted/30 rounded-lg p-3 border border-border/30">
+                  <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-1">发现主机</div>
+                  <div class="text-2xl font-mono font-bold text-emerald-400">{{ drillHostsFound }}</div>
+                  <div class="text-[10px] text-muted-foreground/50">台存活主机</div>
+                </div>
+                <div class="bg-muted/30 rounded-lg p-3 border border-border/30">
+                  <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-1">截图采集</div>
+                  <div class="text-2xl font-mono font-bold text-blue-400">{{ drillScreenshotsTaken }}</div>
+                  <div class="text-[10px] text-muted-foreground/50">张 Web 截图</div>
+                </div>
+                <div class="bg-orange-500/5 rounded-lg p-3 border border-orange-500/20">
+                  <div class="text-[10px] text-orange-400/60 uppercase tracking-wider mb-1">安全问题</div>
+                  <div class="text-2xl font-mono font-bold text-orange-400">{{ drillFindingCount }}</div>
+                  <div class="text-[10px] text-orange-400/50">项发现</div>
+                </div>
+                <div class="bg-muted/30 rounded-lg p-3 border border-border/30">
+                  <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-1">已用时间</div>
+                  <div class="text-xl font-mono font-bold text-cyan-400">{{ formatElapsed(drillElapsed) }}</div>
+                </div>
+
+                <!-- 工具调用历史 -->
+                <div class="space-y-1">
+                  <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-2">工具调用记录</div>
+                  <div v-for="entry in [...drillLog].reverse().filter(e => e.type === 'tool_result').slice(0, 8)" :key="entry.id"
+                    class="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/60 bg-muted/20 rounded px-2 py-1">
+                    <span class="text-emerald-400/60">✓</span>
+                    <span>{{ entry.label }}</span>
+                  </div>
+                  <div v-if="drillLog.filter(e => e.type === 'tool_result').length === 0" class="text-[10px] text-muted-foreground/30 font-mono italic">
+                    尚未调用工具...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- 迷你演练进度条（非展开时）                                      -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <div v-if="drillMode && !drillPanelOpen" class="absolute top-0 left-0 right-0 z-40">
+        <div class="h-0.5 bg-muted">
+          <div class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500" :style="{ width: drillProgress + '%' }"></div>
+        </div>
+        <div class="bg-muted/90 border-b border-border/40 px-4 py-1.5 flex items-center justify-between backdrop-blur">
+          <div class="flex items-center gap-3 text-xs">
+            <Shield :size="12" class="text-primary animate-pulse" />
+            <span class="text-muted-foreground font-mono">演练执行中... 第 {{ drillStep }} 步</span>
+            <span class="text-muted-foreground/40 font-mono text-[10px]">{{ formatElapsed(drillElapsed) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <Badge v-if="drillFindingCount > 0" variant="outline" class="h-5 text-[10px] border-orange-500/30 text-orange-400 bg-orange-500/5">
+              {{ drillFindingCount }} 发现
+            </Badge>
+            <Button variant="ghost" size="sm" class="h-5 text-[10px] gap-1" @click="toggleDrillPanel">
+              <Terminal :size="12" />查看详情
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <AiMessageList :messages="messages" :loading="loading" />
       <AiChatInput
         :sending="sending"
@@ -284,7 +740,22 @@ onBeforeUnmount(() => {
         @send="send"
         @stop="stopGenerating"
         @toggle-tts="toggleTts"
+        @upload="handleFileUpload"
       />
     </main>
   </div>
 </template>
+
+<style scoped>
+.slide-up-enter-active, .slide-up-leave-active { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); opacity: 0; }
+
+@keyframes scanline {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.animate-scanline {
+  animation: scanline 4s linear infinite;
+  background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.15), transparent);
+}
+</style>

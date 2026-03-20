@@ -10,6 +10,7 @@ import {
   X,
   History,
   Settings,
+  FileUp,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -26,12 +27,15 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'send', text: string): void
+  (e: 'send', text: string, extra?: any): void
   (e: 'stop'): void
   (e: 'toggleTts'): void
+  (e: 'upload', file: File): void
 }>()
 
 const input = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const uploadedFileName = ref('')
 
 // STT ------------------------------------------------------------------------
 const listening = ref(false)
@@ -237,6 +241,15 @@ function handleSend() {
   input.value = ''
 }
 
+async function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  emit('upload', file)
+  uploadedFileName.value = file.name
+  target.value = ''
+}
+
 defineExpose({
     setInput: (text: string) => { input.value = text }
 })
@@ -336,6 +349,21 @@ defineExpose({
                 </TooltipTrigger>
                 <TooltipContent>{{ ttsEnabled ? '关闭语音播报' : '开启语音播报' }}</TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-9 w-9 rounded-full transition-all"
+                    :class="uploadedFileName ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'"
+                    @click="fileInputRef?.click()"
+                  >
+                    <FileUp :size="18" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>上传演练文档</TooltipContent>
+              </Tooltip>
+              <input ref="fileInputRef" type="file" accept=".txt,.md,.doc,.docx,.pdf" class="hidden" @change="handleFileChange" />
               <Button variant="ghost" size="icon" class="h-9 w-9 rounded-full text-muted-foreground"><History :size="18" /></Button>
               <Button variant="ghost" size="icon" class="h-9 w-9 rounded-full text-muted-foreground"><Settings :size="18" /></Button>
             </TooltipProvider>
