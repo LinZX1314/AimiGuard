@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { api, apiCall } from '@/api/index'
+import { api, apiCall, getToken } from '@/api/index'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -36,10 +36,14 @@ import {
   Activity,
   History,
   Server,
-  PackageSearch
+  PackageSearch,
+  Camera,
+  X,
+  ExternalLink,
 } from 'lucide-vue-next'
 
 const router = useRouter()
+const currentTab = ref<'hosts' | 'screenshots'>('hosts')
 const loading  = ref(false)
 const scanning = ref(false)
 const hosts    = ref<any[]>([])
@@ -57,8 +61,31 @@ const total    = ref(0)
 // Host detail dialog
 const detailDlg = ref(false)
 const detailHost= ref<any>(null)
+const detailScreenshots = ref<any[]>([])
+const screenshotDlg = ref(false)
+const screenshotImg = ref('')
+const screenshotTitle = ref('')
+const takingScreenshot = ref(false)
 
-const headers = ['IP 地址', 'MAC / 状态', '主机名', '厂商 / 系统', '开放端口', '操作']
+// Screenshot gallery state
+const galleryScreenshots = ref<any[]>([])
+const galleryLoading = ref(false)
+const gallerySearch = ref('')
+const galleryPreviewDlg = ref(false)
+const galleryPreviewImg = ref('')
+const galleryPreviewTitle = ref('')
+
+const filteredGalleryScreenshots = computed(() => {
+  if (!gallerySearch.value) return galleryScreenshots.value
+  const s = gallerySearch.value.toLowerCase()
+  return galleryScreenshots.value.filter(sh =>
+    (sh.ip || '').toLowerCase().includes(s) ||
+    (sh.url || '').toLowerCase().includes(s) ||
+    String(sh.port).includes(s)
+  )
+})
+
+const headers = ['IP 地址', '主机名', '开放端口', '操作']
 
 const scanItems = computed(() =>
   scans.value.map(s => ({ id: String(s.id), label: `#${s.id} 扫描 ${s.scan_time?.slice(0,16) ?? ''}` }))
@@ -188,6 +215,7 @@ async function openDetail(host: any) {
     services: buildServicesFallback(host),
   }
   detailDlg.value = true
+  detailScreenshots.value = []
 
   const ip = host?.ip
   if (!ip) return
@@ -202,6 +230,14 @@ async function openDetail(host: any) {
       services: buildServicesFallback(detail),
     }
   }
+
+  // 加载截图
+  const shots = await apiCall<any[]>(async () =>
+    api.get<any[]>(`/api/nmap/screenshots/${encodeURIComponent(ip)}`)
+  , { silent: true })
+  if (shots && Array.isArray(shots)) {
+    detailScreenshots.value = shots
+  }
 }
 
 function analyzeWithAi(host: any) {
@@ -213,6 +249,54 @@ function analyzeWithAi(host: any) {
       context_id: host.ip
     }
   })
+}
+
+function getScreenshotUrl(ip: string, port: number) {
+  const token = getToken() || ''
+  return `/api/nmap/screenshot/${encodeURIComponent(ip)}/${port}?token=${encodeURIComponent(token)}&t=${Date.now()}`
+}
+
+function viewScreenshot(ip: string, port: number, title?: string) {
+  screenshotImg.value = getScreenshotUrl(ip, port)
+  screenshotTitle.value = title || `${ip}:${port}`
+  screenshotDlg.value = true
+}
+
+async function takeScreenshot(ip: string, port: number, url: string) {
+  takingScreenshot.value = true
+  try {
+    // 直接调用截图 API，传递当前扫描编号
+    await api.post('/api/nmap/screenshot', { ip, port, url, scan_id: currentScanId.value })
+    // 刷新截图列表
+    const shots = await apiCall<any[]>(async () =>
+      api.get<any[]>(`/api/nmap/screenshots/${encodeURIComponent(ip)}`)
+    , { silent: true })
+    if (shots && Array.isArray(shots)) {
+      detailScreenshots.value = shots
+    }
+  } catch (e) {
+    console.error('截图失败', e)
+  } finally {
+    takingScreenshot.value = false
+  }
+}
+
+// Screenshot gallery functions
+async function loadGalleryScreenshots() {
+  galleryLoading.value = true
+  const d = await apiCall<any>(async () =>
+    api.get<any>('/api/nmap/screenshots/all')
+  )
+  if (d) {
+    galleryScreenshots.value = Array.isArray(d) ? d : (d?.data ?? [])
+  }
+  galleryLoading.value = false
+}
+
+function viewGalleryScreenshot(sh: any) {
+  galleryPreviewImg.value = getScreenshotUrl(sh.ip, sh.port)
+  galleryPreviewTitle.value = `${sh.ip}:${sh.port} — ${sh.url || ''}`
+  galleryPreviewDlg.value = true
 }
 
 onUnmounted(() => clearInterval(progressTimer))
@@ -285,14 +369,30 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
           <div class="bg-primary/10 p-2 rounded-lg">
             <Network :size="20" class="text-primary" />
           </div>
-          <CardTitle class="text-lg">网络探测结果</CardTitle>
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+              :class="currentTab === 'hosts' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'"
+              @click="currentTab = 'hosts'"
+            >
+              网络探测结果
+            </button>
+            <button
+              class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5"
+              :class="currentTab === 'screenshots' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'"
+              @click="currentTab = 'screenshots'; loadGalleryScreenshots()"
+            >
+              <Camera :size="14" />
+              截图画廊
+            </button>
+          </div>
         </div>
-        <Button variant="ghost" size="icon" @click="loadHosts" :disabled="loading">
+        <Button variant="ghost" size="icon" @click="loadHosts" :disabled="loading" v-if="currentTab === 'hosts'">
           <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
         </Button>
       </CardHeader>
       
-      <CardContent class="p-0">
+      <CardContent class="p-0" v-if="currentTab === 'hosts'">
         <div class="p-4 flex flex-wrap gap-4 border-b border-border/10">
           <div class="relative w-64">
             <Search :size="16" class="absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -333,27 +433,7 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                       >{{ h.ip }}</span>
                     </div>
                   </td>
-                  <td class="py-3 px-4">
-                    <div class="flex flex-col gap-0.5">
-                      <span class="text-xs font-mono text-slate-400">{{ h.mac_address || '未知 MAC' }}</span>
-                      <Badge
-                        variant="outline"
-                        class="w-fit text-[10px] h-4 px-1 py-0"
-                        :class="h.state === 'up'
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          : 'bg-slate-500/15 text-slate-300 border-slate-500/30'"
-                      >
-                        {{ h.state === 'up' ? '在线' : '离线' }}
-                      </Badge>
-                    </div>
-                  </td>
                   <td class="py-3 px-4 text-slate-300 font-medium">{{ h.hostname || '-' }}</td>
-                  <td class="py-3 px-4">
-                    <div class="flex flex-col gap-0.5">
-                      <span class="text-xs text-primary/80 font-medium">{{ h.vendor || '-' }}</span>
-                      <span class="text-[11px] text-slate-500 uppercase tracking-tighter">{{ h.os_type || '-' }}</span>
-                    </div>
-                  </td>
                   <td class="py-3 px-4">
                     <div class="max-w-[200px] truncate text-xs text-slate-400 font-mono" :title="h.open_ports?.join(', ')">
                       {{ Array.isArray(h.open_ports) ? h.open_ports.join(', ') : h.open_ports || '-' }}
@@ -374,9 +454,81 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
         </div>
         <Pagination v-model:page="page" v-model:page-size="pageSize" :total="total" @update:page="loadHosts" @update:page-size="loadHosts" />
       </CardContent>
+
+      <!-- Screenshot Gallery Tab -->
+      <CardContent class="p-4" v-else>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div class="relative w-64">
+            <Search :size="16" class="absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input v-model="gallerySearch" placeholder="搜索 IP、端口、URL..." class="pl-9 h-9 bg-black/20" />
+          </div>
+          <Button variant="ghost" size="icon" @click="loadGalleryScreenshots" :disabled="galleryLoading">
+            <RefreshCw :size="16" :class="{ 'animate-spin': galleryLoading }" />
+          </Button>
+        </div>
+
+        <div v-if="galleryLoading && galleryScreenshots.length === 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div v-for="i in 8" :key="i" class="rounded-xl border border-border/50 overflow-hidden">
+            <div class="aspect-[4/3] bg-muted/40 animate-pulse"></div>
+            <div class="p-3 space-y-2">
+              <div class="h-4 bg-muted/40 rounded animate-pulse w-3/4"></div>
+              <div class="h-3 bg-muted/40 rounded animate-pulse w-1/2"></div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="filteredGalleryScreenshots.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div
+            v-for="sh in filteredGalleryScreenshots"
+            :key="`${sh.ip}-${sh.port}`"
+            class="rounded-xl border border-border/50 overflow-hidden bg-card hover:border-primary/40 transition-all cursor-pointer group"
+            @click="viewGalleryScreenshot(sh)"
+          >
+            <div class="aspect-[4/3] bg-muted/20 relative overflow-hidden">
+              <img
+                :src="getScreenshotUrl(sh.ip, sh.port)"
+                :alt="`${sh.ip}:${sh.port}`"
+                class="w-full h-full object-cover object-top"
+                @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+              />
+              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
+                <ExternalLink :size="28" class="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div class="absolute top-2 left-2">
+                <Badge v-if="sh.scan_id" variant="secondary" class="bg-primary/70 text-white border-0 text-[10px] px-1.5 py-0">
+                  #{{ sh.scan_id }}
+                </Badge>
+              </div>
+              <div class="absolute top-2 right-2">
+                <Badge variant="secondary" class="bg-black/60 text-white border-0 text-xs px-2 py-0.5 font-mono">
+                  :{{ sh.port }}
+                </Badge>
+              </div>
+            </div>
+            <div class="p-3 space-y-1.5">
+              <div class="flex items-center gap-2">
+                <Monitor :size="12" class="text-muted-foreground shrink-0" />
+                <span class="text-sm font-bold text-foreground truncate">{{ sh.ip }}</span>
+              </div>
+              <div class="text-[11px] text-muted-foreground truncate font-mono" :title="sh.url || ''">
+                {{ sh.url || '—' }}
+              </div>
+              <div v-if="sh.scan_time" class="text-[10px] text-muted-foreground/60">
+                {{ sh.scan_time?.slice(0, 16) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="flex flex-col items-center justify-center py-24 text-muted-foreground">
+          <Camera :size="48" class="mb-4 opacity-30" />
+          <p class="text-sm font-medium">暂无截图记录</p>
+          <p class="text-xs mt-1">网络扫描时将对 Web 服务自动截图</p>
+        </div>
+      </CardContent>
     </Card>
 
-    <!-- Detail Dialog -->
+    <!-- Gallery Preview Dialog -->
     <Dialog v-model:open="detailDlg">
       <DialogContent class="sm:max-w-[600px] bg-background border-border text-foreground p-0 overflow-hidden">
         <div class="p-6 bg-gradient-to-r from-muted/70 to-primary/10 border-b border-border/60">
@@ -464,6 +616,66 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                 </table>
               </div>
             </div>
+
+            <!-- Web 截图区域 -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 class="text-sm font-semibold flex items-center gap-2 text-primary">
+                  <Camera class="h-4 w-4" /> Web 截图
+                </h4>
+              </div>
+
+              <!-- 已有截图 -->
+              <div v-if="detailScreenshots.length > 0" class="grid grid-cols-2 gap-3">
+                <div
+                  v-for="shot in detailScreenshots"
+                  :key="shot.port"
+                  class="relative rounded-xl border border-border/60 overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group"
+                  @click="viewScreenshot(detailHost.ip, shot.port, `${shot.url}`)"
+                >
+                  <img
+                    :src="getScreenshotUrl(detailHost.ip, shot.port)"
+                    :alt="`${detailHost.ip}:${shot.port}`"
+                    class="w-full h-28 object-cover object-top bg-muted"
+                    @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+                  />
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                    <div class="text-white text-[10px] font-medium truncate">{{ shot.port }}/{{ shot.url }}</div>
+                  </div>
+                  <div class="absolute top-1 left-1">
+                    <Badge v-if="shot.scan_id" variant="secondary" class="bg-primary/70 text-white border-0 text-[10px] px-1.5 py-0">
+                      #{{ shot.scan_id }}
+                    </Badge>
+                  </div>
+                  <div class="absolute top-1 right-1">
+                    <Badge variant="secondary" class="bg-black/50 text-white border-0 text-[10px] px-1.5 py-0">
+                      :{{ shot.port }}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无截图时的提示 -->
+              <div v-else class="rounded-xl border border-dashed border-border/60 p-6 text-center text-xs text-muted-foreground">
+                暂无截图记录，扫描时将自动对 Web 服务进行截图
+              </div>
+
+              <!-- Web 服务截图入口 -->
+              <div v-if="detailHost.services?.length" class="flex flex-wrap gap-2">
+                <Button
+                  v-for="svc in detailHost.services.filter((s: any) => [80, 443, 8080, 8443, 81, 8000, 8888].includes(Number(s.port)))"
+                  :key="svc.port"
+                  variant="outline"
+                  size="sm"
+                  class="h-7 text-xs gap-1"
+                  :disabled="takingScreenshot"
+                  @click="takeScreenshot(detailHost.ip, Number(svc.port), `${Number(svc.port) === 443 ? 'https' : 'http'}://${detailHost.ip}:${svc.port}`)"
+                >
+                  <Camera :size="12" :class="{ 'animate-pulse': takingScreenshot }" />
+                  截图 {{ svc.port }}
+                </Button>
+              </div>
+            </div>
           </div>
         </ScrollArea>
 
@@ -473,6 +685,54 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             <Bot class="mr-2 h-4 w-4" /> AI 深度安全性分析
           </Button>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Screenshot Preview Dialog -->
+    <Dialog v-model:open="screenshotDlg">
+      <DialogContent class="sm:max-w-[900px] bg-background border-border text-foreground p-0 overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="p-4 bg-muted/50 border-b border-border/60 flex items-center justify-between">
+          <DialogTitle class="text-sm font-semibold text-muted-foreground truncate flex-1 mr-4">{{ screenshotTitle }}</DialogTitle>
+          <Button variant="ghost" size="icon" class="h-7 w-7 shrink-0" @click="screenshotDlg = false">
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea class="flex-1 bg-muted/10">
+          <img
+            v-if="screenshotImg"
+            :src="screenshotImg"
+            :alt="screenshotTitle"
+            class="w-full h-auto"
+          />
+          <div v-else class="flex items-center justify-center h-64 text-muted-foreground text-sm">
+            截图加载中...
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Gallery Preview Dialog -->
+    <Dialog v-model:open="galleryPreviewDlg">
+      <DialogContent class="sm:max-w-[1000px] bg-background border-border text-foreground p-0 overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="p-4 bg-muted/50 border-b border-border/60 flex items-center justify-between shrink-0">
+          <div class="min-w-0 flex-1 mr-4">
+            <p class="text-sm font-semibold truncate">{{ galleryPreviewTitle }}</p>
+          </div>
+          <Button variant="ghost" size="icon" class="h-7 w-7 shrink-0" @click="galleryPreviewDlg = false">
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea class="flex-1 bg-muted/10">
+          <img
+            v-if="galleryPreviewImg"
+            :src="galleryPreviewImg"
+            :alt="galleryPreviewTitle"
+            class="w-full h-auto"
+          />
+          <div v-else class="flex items-center justify-center h-64 text-muted-foreground text-sm">
+            截图加载中...
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   </div>

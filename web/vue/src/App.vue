@@ -61,18 +61,18 @@ onUnmounted(() => {
   </transition>
 
   <router-view v-slot="{ Component, route }">
-    <transition
-      :name="route.meta.public ? 'login-fade' : 'page-fade'"
-      mode="out-in"
-      appear
-    >
-      <Suspense>
+    <Suspense>
+      <transition
+        :name="route.meta.public ? 'login-fade' : 'page-fade'"
+        mode="out-in"
+        appear
+      >
         <component :is="Component" :key="route.meta.public ? route.fullPath : 'private-layout'" />
-        <template #fallback>
-          <RouteLoading />
-        </template>
-      </Suspense>
-    </transition>
+      </transition>
+      <template #fallback>
+        <RouteLoading />
+      </template>
+    </Suspense>
   </router-view>
   <!-- Global Error Toast -->
   <Transition

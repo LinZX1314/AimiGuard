@@ -31,10 +31,9 @@ _session_lock = threading.Lock()
 
 def _get_system_context() -> str:
     """获取实时系统摘要，作为 AI 的底座背景知识"""
-    from database.models import StatsModel, HFishModel, VulnModel
+    from database.models import StatsModel, HFishModel
     try:
         hfish_stats = HFishModel.get_stats()
-        vuln_stats = VulnModel.get_vuln_stats()
 
         hot_services = hfish_stats.get('service_stats', [])[:5]
         service_summary = [f"{svc['name']}({svc['count']}次)" for svc in hot_services]
@@ -57,7 +56,6 @@ def _get_system_context() -> str:
         ctx = [
             "### 当前系统态势摘要 ###",
             f"- DHCP在线设备数: {online_devices}",
-            f"- 存疑/有风险设备: {vuln_stats.get('vulnerable_devices', 0)}",
             f"- 24小时内遭受攻击次数: {hfish_stats.get('total', 0)}",
             "",
             "### 蜜罐态势统计 ###",

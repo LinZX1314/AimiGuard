@@ -28,7 +28,7 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
   return payload as T
 }
 
-function getToken() {
+export function getToken() {
   return localStorage.getItem('token')
 }
 

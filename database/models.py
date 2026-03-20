@@ -180,15 +180,16 @@ class ScannerModel:
     def save_host(scan_id, host, scan_time, open_ports_str, services_str):
         conn = get_connection()
         cursor = conn.cursor()
+        web_fingerprints = host.get('web_fingerprints', [])
         cursor.execute('''
             INSERT INTO hosts
-            (scan_id, ip, mac_address, vendor, hostname, state, os_type, os_accuracy, os_tags, open_ports, services, scan_time, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (scan_id, ip, mac_address, vendor, hostname, state, os_type, os_accuracy, os_tags, open_ports, services, web_fingerprints, scan_time, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             scan_id, host.get('ip'), host.get('mac_address'), host.get('vendor'),
             host.get('hostname'), host.get('state'), host.get('os_type'),
             host.get('os_accuracy'), host.get('os_tags'), open_ports_str,
-            services_str, scan_time, scan_time
+            services_str, json.dumps(web_fingerprints, ensure_ascii=False), scan_time, scan_time
         ))
         conn.commit()
         conn.close()
@@ -206,6 +207,7 @@ class ScannerModel:
         os_type = (host.get('os_type') or '').strip()
         os_accuracy = (host.get('os_accuracy') or '').strip()
         os_tags = (host.get('os_tags') or '').strip()
+        web_fingerprints = json.dumps(host.get('web_fingerprints', []), ensure_ascii=False)
 
         if not ip and not mac_address:
             conn.close()
@@ -224,16 +226,16 @@ class ScannerModel:
             cursor.execute('''
                 UPDATE assets
                 SET current_ip = ?, hostname = ?, vendor = ?, state = ?, os_type = ?, os_accuracy = ?, os_tags = ?,
-                    last_seen = ?, last_scan_id = ?
+                    web_fingerprints = ?, last_seen = ?, last_scan_id = ?
                 WHERE id = ?
-            ''', (ip, hostname, vendor, state, os_type, os_accuracy, os_tags, scan_time, scan_id, asset_id))
+            ''', (ip, hostname, vendor, state, os_type, os_accuracy, os_tags, web_fingerprints, scan_time, scan_id, asset_id))
         else:
             cursor.execute('''
                 INSERT INTO assets
-                (mac_address, current_ip, hostname, vendor, state, os_type, os_accuracy, os_tags, first_seen, last_seen, last_scan_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (mac_address, current_ip, hostname, vendor, state, os_type, os_accuracy, os_tags, web_fingerprints, first_seen, last_seen, last_scan_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (mac_address if mac_address else None, ip, hostname, vendor, state, os_type, os_accuracy, os_tags,
-                  scan_time, scan_time, scan_id))
+                  web_fingerprints, scan_time, scan_time, scan_id))
             asset_id = cursor.lastrowid
 
         if ip and old_ip != ip:
@@ -252,96 +254,6 @@ class ScannerModel:
         cursor.execute('UPDATE scans SET hosts_count = hosts_count + ? WHERE id = ?', (count, scan_id))
         conn.commit()
         conn.close()
-
-
-class VulnModel:
-    """漏洞扫描结果模型。"""
-
-    @staticmethod
-    def get_vuln_results(limit=1000, offset=0):
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT ip, mac_address, vuln_name, vuln_result, vuln_details, os_tags, scan_time
-            FROM vuln_scan_results
-            ORDER BY scan_time DESC
-            LIMIT ? OFFSET ?
-        """, (limit, offset))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-
-    @staticmethod
-    def get_vuln_stats():
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT vuln_result, COUNT(*) FROM vuln_scan_results GROUP BY vuln_result")
-        rows = cursor.fetchall()
-        stats = {
-            "vulnerable": 0,
-            "safe": 0,
-            "error": 0,
-            "vulnerable_devices": 0
-        }
-        for row in rows:
-            if row[0] == "vulnerable": stats['vulnerable'] = row[1]
-            elif row[0] == "safe": stats['safe'] = row[1]
-            elif row[0] == "error": stats['error'] = row[1]
-
-        cursor.execute("SELECT COUNT(DISTINCT mac_address) FROM vuln_scan_results WHERE vuln_result = 'vulnerable'")
-        vuln_devs = cursor.fetchone()
-        if vuln_devs:
-            stats['vulnerable_devices'] = vuln_devs[0]
-
-        conn.close()
-        return stats
-
-    @staticmethod
-    def mark_safe(mac_address, vuln_name):
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE vuln_scan_results 
-            SET vuln_result = 'safe' 
-            WHERE mac_address = ? AND vuln_name = ?
-        ''', (mac_address, vuln_name))
-        conn.commit()
-        success = cursor.rowcount > 0
-        conn.close()
-        return success
-
-    @staticmethod
-    def get_vuln_status(mac_address, vuln_name):
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT vuln_result FROM vuln_scan_results
-            WHERE mac_address = ? AND vuln_name = ?
-            ORDER BY scan_time DESC LIMIT 1
-        ''', (mac_address, vuln_name))
-        result = cursor.fetchone()
-        conn.close()
-        return dict(result)['vuln_result'] if result else None
-
-    @staticmethod
-    def save_vuln_result(mac_address, ip, vuln_name, vuln_result, vuln_details, os_tags, scan_time):
-        if not mac_address or not vuln_name:
-            return False
-        conn = get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('''
-                INSERT OR REPLACE INTO vuln_scan_results
-                (mac_address, ip, vuln_name, vuln_result, vuln_details, os_tags, scan_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (mac_address, ip, vuln_name, vuln_result, vuln_details, os_tags, scan_time))
-            conn.commit()
-            success = True
-        except Exception:
-            success = False
-        finally:
-            conn.close()
-        return success
 
 
 class HFishModel:
@@ -468,9 +380,6 @@ class StatsModel:
         cursor.execute("SELECT COUNT(*) FROM hosts WHERE state = 'up' AND scan_id = (SELECT id FROM scans ORDER BY id DESC LIMIT 1)")
         online_devices = cursor.fetchone()[0] or 0
 
-        cursor.execute("SELECT COUNT(DISTINCT mac_address) FROM vuln_scan_results WHERE vuln_result = 'vulnerable'")
-        vuln_devices = cursor.fetchone()[0] or 0
-
         cursor.execute("SELECT COUNT(*) FROM attack_logs WHERE create_time_str >= date('now', '-24 hours')")
         attacks_24h = cursor.fetchone()[0] or 0
 
@@ -481,7 +390,6 @@ class StatsModel:
 
         return {
             "online_devices": online_devices,
-            "vulnerable_devices": vuln_devices,
             "attacks_24h": attacks_24h,
             "last_scan": last_scan
         }
@@ -691,3 +599,55 @@ class SwitchAclModel:
         conn.commit()
         conn.close()
 
+
+class ScreenshotModel:
+    """Web 页面截图模型"""
+
+    @staticmethod
+    def save_screenshot(ip, port, url, screenshot_path, scan_time, scan_id=None):
+        """保存截图记录（存在则更新）"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO web_screenshots (ip, port, url, screenshot_path, scan_time, scan_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ip, port) DO UPDATE SET
+                url = excluded.url,
+                screenshot_path = excluded.screenshot_path,
+                scan_time = excluded.scan_time,
+                scan_id = COALESCE(excluded.scan_id, web_screenshots.scan_id)
+        ''', (ip, port, url, screenshot_path, scan_time, scan_id))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def get_screenshot(ip, port=None):
+        """获取指定 IP 的截图记录"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        if port:
+            cursor.execute('SELECT * FROM web_screenshots WHERE ip = ? AND port = ?', (ip, port))
+        else:
+            cursor.execute('SELECT * FROM web_screenshots WHERE ip = ?', (ip,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def get_all_screenshots(limit=100):
+        """获取所有截图记录"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM web_screenshots ORDER BY scan_time DESC LIMIT ?', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def delete_screenshot(ip, port):
+        """删除指定截图"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM web_screenshots WHERE ip = ? AND port = ?', (ip, port))
+        conn.commit()
+        conn.close()

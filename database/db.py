@@ -70,6 +70,7 @@ def init_db():
             os_tags TEXT,
             open_ports TEXT,
             services TEXT,
+            web_fingerprints TEXT,
             scan_time TEXT,
             last_seen TEXT,
             FOREIGN KEY (scan_id) REFERENCES scans(id)
@@ -87,6 +88,7 @@ def init_db():
             os_type TEXT,
             os_accuracy TEXT,
             os_tags TEXT,
+            web_fingerprints TEXT,
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
             last_scan_id INTEGER
@@ -113,21 +115,6 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)')
 
-    # ================= 漏洞扫描相关表 =================
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS vuln_scan_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mac_address TEXT NOT NULL,
-            ip TEXT NOT NULL,
-            vuln_name TEXT NOT NULL,
-            vuln_result TEXT,
-            vuln_details TEXT,
-            os_tags TEXT,
-            scan_time TEXT NOT NULL,
-            UNIQUE(mac_address, vuln_name)
-        )
-    ''')
-    
     # ================= HFish蜜罐攻击日志相关表 =================
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS attack_logs (
@@ -208,23 +195,49 @@ def init_db():
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_acl_switch ON switch_acl_rules(switch_ip, acl_number)')
 
-    # 尝试为旧表增加字段（平滑升级）
+    # ================= Web 指纹表（fscan SERVICE 条目） =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS web_fingerprints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            service TEXT,
+            title TEXT,
+            url TEXT,
+            status_code INTEGER,
+            server TEXT,
+            content_length INTEGER,
+            scan_time TEXT NOT NULL,
+            UNIQUE(ip, port)
+        )
+    ''')
+
+    # web_fingerprints 表索引
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_fp_ip ON web_fingerprints(ip)')
+
+    # ================= Web 页面截图表 =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS web_screenshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            url TEXT NOT NULL,
+            screenshot_path TEXT NOT NULL,
+            scan_time TEXT NOT NULL,
+            scan_id INTEGER,
+            UNIQUE(ip, port)
+        )
+    ''')
+
+    # 添加 scan_id 列（如果不存在）
     try:
-        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN session_id INTEGER')
-    except: pass
-    try:
-        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN role TEXT DEFAULT "user"')
-    except: pass
-    try:
-        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN content TEXT')
-    except: pass
-    try:
-        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN tool_calls TEXT')
-    except: pass
-    try:
-        cursor.execute('ALTER TABLE ai_chat_history ADD COLUMN tool_call_id TEXT')
-    except: pass
-    
+        cursor.execute('ALTER TABLE web_screenshots ADD COLUMN scan_id INTEGER')
+    except Exception:
+        pass  # 列已存在
+
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_ip ON web_screenshots(ip)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_scan_id ON web_screenshots(scan_id)')
+
     conn.commit()
     conn.close()
 

@@ -26,63 +26,11 @@
   ],
   "nmap": {
     "ip_ranges": [
-      "192.168.0.1/24"
+      "10.24.100.0/25"
     ],
     "fscan_timeout": 6000,
     "scan_interval": 604800,
-    "scan_enabled": true,
-    "vuln_scripts_by_tag": {
-      "Windows 10": [
-        "smb-vuln-ms17-010"
-      ],
-      "Windows 7": [
-        "smb-vuln-ms17-010",
-        "smb-vuln-ms08-067",
-        "rdp-vuln-ms19-0708"
-      ],
-      "Windows xp": [
-        "smb-vuln-ms17-010",
-        "smb-vuln-ms08-067",
-        "rdp-vuln-ms19-0708"
-      ],
-      "linux": [
-        "ftp-anon",
-        "ssh-vuln-openssh"
-      ],
-      "unknown": [
-        "ftp-anon"
-      ]
-    },
-    "vuln_scripts_by_service": {
-      "http": [
-        "http-vuln-cve2017-5638",
-        "http-vuln-cve2017-1000353",
-        "http-sql-injection",
-        "http-git"
-      ],
-      "ftp": [
-        "ftp-anon",
-        "ftp-vsftpd-backdoor"
-      ],
-      "ssh": [
-        "ssh-vuln-openssh",
-        "ssh-run"
-      ],
-      "smb": [
-        "smb-vuln-ms17-010",
-        "smb-vuln-ms08-067"
-      ],
-      "mysql": [
-        "mysql-vuln-cve2012-2122",
-        "mysql-empty-password"
-      ],
-      "redis": [
-        "redis-info"
-      ],
-      "ms-wbt-server": [
-        "rdp-vuln-ms19-0708"
-      ]
-    }
+    "scan_enabled": true
   },
   "server": {
     "host": "0.0.0.0",

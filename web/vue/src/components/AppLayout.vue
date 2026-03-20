@@ -25,7 +25,6 @@ import {
   ChevronDown,
   User,
   Menu,
-  Siren,
   Sun,
   Moon,
   Network,
@@ -62,12 +61,7 @@ const loadTopbarStatus = async () => {
     hfishConnected.value = status?.hfish_sync ?? false
     
     // 获取交换机配置数量（优先新接口，兼容旧接口）
-    let cfg: any = null
-    try {
-      cfg = await api.get('/api/v1/settings')
-    } catch {
-      cfg = await api.get('/api/settings')
-    }
+    const cfg: any = await api.get('/api/settings')
 
     const cfgData = cfg?.data ?? cfg
     const switches = cfgData?.switches || []
@@ -145,7 +139,6 @@ const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
   { title: 'HFish 蜜罐', icon: Bug,             to: '/hfish' },
   { title: '主机探测',  icon: Radar,           to: '/nmap' },
-  { title: '漏洞管理',   icon: Siren,           to: '/vuln' },
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
 ]
@@ -155,12 +148,17 @@ const currentNavItem = computed(() => {
     if (item.to === '/') {
       return route.path === '/'
     }
-
     return route.path === item.to || route.path.startsWith(`${item.to}/`)
   }) ?? null
 })
 
-const currentTitle = computed(() => currentNavItem.value?.title ?? '玄枢·AI攻防指挥官')
+// 主机探测菜单始终展开
+
+const currentTitle = computed(() => {
+  const parent = currentNavItem.value
+  if (!parent) return '玄枢·AI攻防指挥官'
+  return parent.title
+})
 
 function handleLogout() {
   auth.logout()
@@ -204,6 +202,11 @@ onUnmounted(() => {
       <!-- Navigation -->
       <ScrollArea class="flex-1 py-4">
         <nav class="flex flex-col gap-1 px-2">
+          <template v-for="item in navItems" :key="item.to">
+            <!-- Parent item (with children) -->
+          </template>
+
+          <!-- Regular item (no children) -->
           <router-link
             v-for="item in navItems"
             :key="item.to"
@@ -221,7 +224,6 @@ onUnmounted(() => {
                   : 'text-slate-400 hover:bg-white/5 hover:text-foreground'
               ]"
             >
-              <!-- Active indicator bar -->
               <div
                 class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-primary transition-all duration-300 ease-out"
                 :class="isExactActive || (item.to !== '/' && route.path.startsWith(item.to)) ? 'h-5 opacity-100' : 'h-0 opacity-0'"

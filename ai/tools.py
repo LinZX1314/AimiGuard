@@ -192,7 +192,7 @@ def _dhcp_query(args: dict, cfg: dict = None) -> dict:
     },
 )
 def _nmap_scan(args: dict, cfg: dict = None) -> dict:
-    """nmap扫描工具"""
+    """nmap扫描工具（使用 fscan）"""
     import sys
     import os
     from datetime import datetime
@@ -202,7 +202,7 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
         sys.path.insert(0, plugin_dir)
 
     try:
-        from network_scan import scan_hosts, parse_scan_results
+        from network_scan import run_fscan
         from database.models import ScannerModel
     except ImportError as e:
         return {'ok': False, 'error': f'无法导入模块: {e}'}
@@ -210,47 +210,37 @@ def _nmap_scan(args: dict, cfg: dict = None) -> dict:
     target = str(args.get('target', '')).strip()
     raw_args = args.get('arguments', '-sS -T5')
     nmap_args = str(raw_args).strip() or '-sS -T5'
+    timeout = 30000  # 30 秒超时
 
     if not target:
         return {'ok': False, 'error': '缺少 target 参数'}
 
-    # 执行扫描
-    nm = scan_hosts(target, nmap_args)
-    if not nm:
-        return {'ok': False, 'error': 'Nmap 执行失败'}
-
-    hosts = parse_scan_results(nm)
-    scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
-
-    # 保存结果到数据库
     try:
-        for host in hosts:
-            try:
-                open_ports = ','.join(map(str, host.get('open_ports', []) or []))
-                services = []
-                for svc in host.get('services', []) or []:
-                    svc_str = f"{svc.get('port','')}/{svc.get('service','')}"
-                    if svc.get('product'):
-                        svc_str += f" {svc['product']}"
-                    services.append(svc_str)
-                services_str = '; '.join(services)
-                ScannerModel.save_host(scan_id, host, scan_time, open_ports, services_str)
-                ScannerModel.upsert_asset(scan_id, host, scan_time)
-            except Exception:
-                pass
-        ScannerModel.increment_hosts_count(scan_id, len(hosts))
-    except Exception as e:
-        pass  # 忽略数据库写入错误
+        scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        scan_id = ScannerModel.create_scan([target], nmap_args, scan_time)
 
-    return {
-        'ok': True,
-        'scan_id': scan_id,
-        'target': target,
-        'arguments': nmap_args,
-        'host_count': len(hosts),
-        'hosts': hosts[:15],
-    }
+        # 使用 run_fscan 执行扫描（复用已有逻辑）
+        hosts = run_fscan(target, timeout=timeout)
+        if not hosts:
+            return {'ok': False, 'error': '扫描未发现存活主机'}
+
+        # 保存到数据库
+        try:
+            from network_scan import save_to_db
+            save_to_db(scan_id, hosts)
+        except Exception:
+            pass
+
+        return {
+            'ok': True,
+            'scan_id': scan_id,
+            'target': target,
+            'arguments': nmap_args,
+            'host_count': len(hosts),
+            'hosts': hosts[:15],
+        }
+    except Exception as e:
+        return {'ok': False, 'error': f'扫描失败: {e}'}
 
 
 @tool_registry.register(
@@ -606,16 +596,6 @@ def _run_fscan(args: dict, cfg: dict = None) -> dict:
         # 构建fscan命令: fscan -h <target> -t <threads> -p <ports> -nobr -nopoc -o <tmpfile> -f json
         cmd = [fscan_path, '-h', target, '-t', str(threads), '-p', port, '-nobr', '-nopoc', '-o', json_file, '-f', 'json']
 
-        # 执行扫描
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 最多等待5分钟
-            encoding='utf-8',
-            errors='ignore',
-        )
-
         # 先执行扫描（不等待完成）
         proc = subprocess.Popen(
             cmd,
@@ -724,6 +704,72 @@ def _run_fscan(args: dict, cfg: dict = None) -> dict:
         return {'ok': False, 'error': 'fscan扫描超时（超过5分钟）'}
     except Exception as e:
         return {'ok': False, 'error': f'fscan执行失败: {e}'}
+
+
+@tool_registry.register(
+    name='take_screenshot',
+    description='对指定 IP 的 Web 服务进行页面截图。当用户需要查看某个 IP 的 Web 界面、登录后台、查看设备管理页面时使用此工具。返回截图文件路径。',
+    parameters={
+        'type': 'object',
+        'properties': {
+            'url': {
+                'type': 'string',
+                'description': '要截图的完整 URL，如 http://192.168.0.1 或 https://example.com:8443',
+            },
+            'ip': {
+                'type': 'string',
+                'description': '目标 IP 地址（如 192.168.0.1）',
+            },
+            'port': {
+                'type': 'integer',
+                'description': '目标端口（如 80, 443, 8080）',
+            },
+        },
+        'required': ['url', 'ip', 'port'],
+    },
+)
+def _take_screenshot(args: dict, cfg: dict = None) -> dict:
+    """Web 页面截图工具"""
+    import os
+    import sys
+    import json as _json
+
+    url = str(args.get('url', '')).strip()
+    ip = str(args.get('ip', '')).strip()
+    port = int(args.get('port', 80))
+
+    if not url or not ip:
+        return {'ok': False, 'error': '缺少必要参数: url, ip'}
+
+    try:
+        plugin_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'plugin')
+        if plugin_dir not in sys.path:
+            sys.path.insert(0, plugin_dir)
+
+        from web_screenshot import take_screenshot
+        from database.models import ScreenshotModel
+
+        from datetime import datetime
+        scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        path = take_screenshot(url, ip, port)
+        if path and os.path.exists(path):
+            ScreenshotModel.save_screenshot(ip, port, url, path, scan_time)
+            return {
+                'ok': True,
+                'ip': ip,
+                'port': port,
+                'url': url,
+                'screenshot_path': path,
+                'screenshot_url': f'/api/nmap/screenshot/{ip}/{port}',
+                'message': '截图成功',
+            }
+        else:
+            return {'ok': False, 'error': '截图失败，请检查目标是否可访问'}
+    except ImportError as e:
+        return {'ok': False, 'error': f'缺少依赖: {e}，请安装 playwright'}
+    except Exception as e:
+        return {'ok': False, 'error': f'截图异常: {e}'}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

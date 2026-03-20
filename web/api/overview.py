@@ -1,8 +1,8 @@
 """
 Overview Module - Dashboard and metrics endpoints
 """
-from flask import Blueprint, request
-from database.models import NmapModel, VulnModel, HFishModel, AiModel
+from flask import Blueprint
+from database.models import NmapModel, HFishModel, AiModel
 from database.db import get_connection
 from .helpers import require_auth, ok, _load_cfg
 
@@ -15,16 +15,14 @@ def overview_metrics():
     """Dashboard metrics"""
     hfish = HFishModel.get_stats()
     nmap_stats = NmapModel.get_stats()
-    vuln = VulnModel.get_vuln_stats()
-
-    online = next((s['count'] for s in nmap_stats.get('state_stats', []) if s['state'] == 'up'), 0)
     ai_analyses = AiModel.get_all_analyses()
     blocked = sum(1 for a in ai_analyses.values() if a.get('decision') == 'true')
+
+    online = next((s['count'] for s in nmap_stats.get('state_stats', []) if s['state'] == 'up'), 0)
 
     return ok({
         'hfish_total': hfish.get('total', 0),
         'nmap_online': online,
-        'vuln_open': vuln.get('vulnerable', 0),
         'ai_decisions': len(ai_analyses),
         'blocked_ips': blocked,
     })
@@ -54,7 +52,6 @@ def overview_screen():
     """Big-screen aggregated payload for dashboard"""
     hfish = HFishModel.get_stats()
     nmap_stats = NmapModel.get_stats()
-    vuln = VulnModel.get_vuln_stats()
     ai_analyses = AiModel.get_all_analyses()
     cfg = _load_cfg()
 
@@ -64,7 +61,6 @@ def overview_screen():
     switches = cfg.get('switches', []) if isinstance(cfg.get('switches', []), list) else []
     active_switches = [sw for sw in switches if isinstance(sw, dict) and sw.get('host') and sw.get('enabled', True)]
 
-    # 最近攻击与防御事件（轻量聚合，避免前端多请求拼装）
     conn = get_connection()
     c = conn.cursor()
 
@@ -150,7 +146,6 @@ def overview_screen():
         'top_metrics': {
             'hfish_total': hfish.get('total', 0),
             'nmap_online': online,
-            'vuln_open': vuln.get('vulnerable', 0),
             'ai_decisions': len(ai_analyses),
             'blocked_ips': blocked,
         },

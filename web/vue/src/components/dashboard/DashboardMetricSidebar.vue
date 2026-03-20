@@ -36,7 +36,6 @@ const props = defineProps<{
       hfish_total: number
       hfish_high: number
       nmap_online: number
-      vuln_open: number
       ai_decisions: number
       blocked_ips: number
     }
@@ -51,7 +50,6 @@ const metricCards = computed(() => [
   { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-cyan-400' },
   { key: 'hfish_high', label: '高危攻击', value: props.payload.top_metrics.hfish_high, color: 'text-red-400' },
   { key: 'nmap_online', label: '在线主机', value: props.payload.top_metrics.nmap_online, color: 'text-emerald-400' },
-  { key: 'vuln_open', label: '待修漏洞', value: props.payload.top_metrics.vuln_open, color: 'text-amber-400' },
   { key: 'ai_decisions', label: 'AI 决策数', value: props.payload.top_metrics.ai_decisions, color: 'text-violet-400' },
   { key: 'blocked_ips', label: '已封禁 IP', value: props.payload.top_metrics.blocked_ips, color: 'text-slate-400' },
 ])

@@ -14,8 +14,7 @@ from datetime import datetime
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from database.db import get_connection
-from database.models import ScannerModel, VulnModel
+from database.models import ScannerModel, ScreenshotModel
 from utils.logger import log
 
 
@@ -58,15 +57,18 @@ def run_fscan(ip_range, timeout=6000):
 
     log("Fscan", f"执行命令: {' '.join(cmd)}")
 
+    proc = None
     try:
-        result = subprocess.run(
+        proc = subprocess.run(
             cmd,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             timeout=max(timeout / 1000 + 30, 300)
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         log("Fscan", "扫描超时", "ERROR")
+        if e.stderr:
+            log("Fscan", f"stderr: {e.stderr.decode('utf-8', errors='replace')}", "ERROR")
         return None
     except Exception as e:
         log("Fscan", f"扫描执行失败: {e}", "ERROR")
@@ -78,67 +80,98 @@ def run_fscan(ip_range, timeout=6000):
     try:
         if not os.path.exists(output_file):
             log("Fscan", f"输出文件不存在: {output_file}", "ERROR")
-            log("Fscan", f"stderr: {result.stderr}", "ERROR")
+            stderr_bytes = proc.stderr if proc and proc.stderr else b''
+            log("Fscan", f"stderr: {stderr_bytes.decode('utf-8', errors='replace')}", "ERROR")
             return None
 
         with open(output_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+            raw = f.read()
 
-                item_type = item.get('type', '')
-                target = item.get('target', '')
-                details = item.get('details', {})
+        # fscan -f json 输出为多行缩进格式：}\n{\n... 依次排列
+        # 用 }\n{ 作为精确分隔符，兼容所有情况
+        raw = raw.strip()
+        raw = raw.replace('\r\n', '\n').replace('\r', '\n')
+        # 在 }\n{ 之间插入分隔符，再按分隔符拆分
+        raw = raw.replace('}\n{', '}\n§{')
+        chunks = raw.split('§')
 
-                if not target:
-                    continue
+        for chunk in chunks:
+            chunk = chunk.strip().rstrip(',').rstrip(',')
+            if not chunk:
+                continue
+            try:
+                item = json.loads(chunk)
+            except json.JSONDecodeError:
+                continue
 
-                # 初始化主机
-                if target not in hosts:
-                    hosts[target] = {
-                        'ip': target,
-                        'mac_address': '',
-                        'vendor': '',
-                        'hostname': '',
-                        'state': 'alive',
-                        'os_type': '',
-                        'os_accuracy': '',
-                        'os_tags': 'unknown',
-                        'open_ports': [],
-                        'services': []
-                    }
+            # 跳过非字典类型的行（如纯字符串 banner）
+            if not isinstance(item, dict):
+                continue
 
-                if item_type == 'PORT' and item.get('status') == 'open':
-                    port = details.get('port')
+            # details 可能是字符串（如纯文本 banner），确保是字典
+            details = item.get('details', {})
+            if not isinstance(details, dict):
+                details = {}
+
+            item_type = item.get('type', '')
+            target = item.get('target', '')
+
+            if not target:
+                continue
+
+            # 初始化主机
+            if target not in hosts:
+                hosts[target] = {
+                    'ip': target,
+                    'mac_address': '',
+                    'vendor': '',
+                    'hostname': '',
+                    'state': 'alive',
+                    'os_type': '',
+                    'os_accuracy': '',
+                    'os_tags': 'unknown',
+                    'open_ports': [],
+                    'services': [],
+                    'web_fingerprints': []
+                }
+
+            if item_type == 'PORT':
+                port = details.get('port')
+                if port:
+                    port = int(port) if not isinstance(port, int) else port
+                    # PORT 条目只有 port，service/product 信息在后续 SERVICE 条目补充
+                    hosts[target]['open_ports'].append(port)
+                    hosts[target]['services'].append({
+                        'port': port,
+                        'service': '',
+                        'product': '',
+                        'version': '',
+                        'extrainfo': ''
+                    })
+
+            elif item_type == 'SERVICE':
+                if not isinstance(details, dict):
+                    details = {}
+                hostname = details.get('hostname')
+                if hostname:
+                    hosts[target]['hostname'] = hostname
+                port_raw = details.get('port')
+                service_name = details.get('service', '') or ''
+                # 调试：打印所有 SERVICE 条目
+                # log("Fscan", f"DEBUG SERVICE: target={target} service={service_name} port={port_raw} url={details.get('url')}", "INFO")
+                if port_raw and service_name:
+                    try:
+                        port = int(port_raw)
+                    except (TypeError, ValueError):
+                        port = None
                     if port:
-                        port = int(port)
-                        if port not in hosts[target]['open_ports']:
-                            hosts[target]['open_ports'].append(port)
-                            hosts[target]['services'].append({
-                                'port': port,
-                                'service': details.get('service', ''),
-                                'product': details.get('product', ''),
-                                'version': '',
-                                'extrainfo': ''
-                            })
-
-                elif item_type == 'SERVICE':
-                    hostname = details.get('hostname')
-                    if hostname:
-                        hosts[target]['hostname'] = hostname
-                    # SERVICE 可能带端口信息
-                    port = details.get('port')
-                    service_name = details.get('service', '')
-                    if port and service_name:
-                        port = int(port)
+                        # 查找是否已通过 PORT 条目添加过该端口，如有则补充信息
                         existing = next((s for s in hosts[target]['services'] if s['port'] == port), None)
                         if existing:
                             existing['service'] = service_name
+                            title = details.get('title', '')
+                            if title:
+                                existing['product'] = title
                         elif port not in hosts[target]['open_ports']:
                             title = details.get('title', '')
                             hosts[target]['open_ports'].append(port)
@@ -149,6 +182,31 @@ def run_fscan(ip_range, timeout=6000):
                                 'version': '',
                                 'extrainfo': ''
                             })
+                # 收集 Web 指纹信息（http/https 服务）
+                if port and service_name in ('http', 'https'):
+                    fp_url = details.get('url')
+                    if not fp_url:
+                        # fscan SERVICE 条目不包含 url 字段，根据 IP 和端口构造
+                        scheme = 'https' if port in (443, 8443) else 'http'
+                        fp_url = f"{scheme}://{target}:{port}"
+                    fp_status = details.get('status_code')
+                    fp_status = details.get('status_code')
+                    fp_title = details.get('title', '')
+                    server_info = details.get('server_info', {}) or {}
+                    fp_server = server_info.get('server', '') or server_info.get('Server', '') or ''
+                    fp_length = server_info.get('length')
+                    # 避免重复添加同一端口的指纹
+                    existing_fp = next((f for f in hosts[target]['web_fingerprints'] if f['port'] == port), None)
+                    if not existing_fp:
+                        hosts[target]['web_fingerprints'].append({
+                            'port': port,
+                            'service': service_name,
+                            'title': fp_title,
+                            'url': fp_url,
+                            'status_code': fp_status,
+                            'server': fp_server,
+                            'content_length': fp_length
+                        })
 
         # 删除临时文件
         try:
@@ -161,10 +219,6 @@ def run_fscan(ip_range, timeout=6000):
 
     except Exception as e:
         log("Fscan", f"解析 JSON 结果失败: {e}", "ERROR")
-        try:
-            os.remove(output_file)
-        except Exception:
-            pass
         return None
 
 
@@ -181,8 +235,6 @@ def get_fscan_config():
                     'timeout': nmap_cfg.get('fscan_timeout', 6000),
                     'scan_interval': nmap_cfg.get('scan_interval', 0),
                     'scan_enabled': nmap_cfg.get('scan_enabled', False),
-                    'vuln_scripts_by_tag': nmap_cfg.get('vuln_scripts_by_tag', {}),
-                    'vuln_scripts_by_service': nmap_cfg.get('vuln_scripts_by_service', {}),
                 }
     except Exception as e:
         log("Fscan", f"读取配置失败: {e}", "ERROR")
@@ -221,102 +273,40 @@ def save_to_db(scan_id, hosts_data):
     return count
 
 
-def run_vuln_scan(hosts_data):
-    """
-    对发现的主机执行漏洞扫描（基于 nmap 脚本，仍需 python-nmap）
-    fscan 本身不包含漏洞扫描脚本，此功能暂时保留 python-nmap
-    """
+def capture_web_screenshots(hosts_data, scan_time, scan_id=None):
+    """对扫描到的 Web 服务进行截图"""
     try:
-        import nmap
+        from web_screenshot import take_screenshot
+
+        web_targets = []
+        for host in hosts_data:
+            ip = host.get('ip', '')
+            web_fps = host.get('web_fingerprints', []) or []
+            for fp in web_fps:
+                url = fp.get('url')
+                port = fp.get('port')
+                if url and ip and port:
+                    web_targets.append({'url': url, 'ip': ip, 'port': port})
+
+        if not web_targets:
+            log("Screenshot", "未发现 Web 服务，跳过截图", "INFO")
+            return
+
+        log("Screenshot", f"开始截图 {len(web_targets)} 个 Web 页面...", "INFO")
+        captured = 0
+        for target in web_targets:
+            path = take_screenshot(target['url'], target['ip'], target['port'])
+            if path:
+                ScreenshotModel.save_screenshot(
+                    target['ip'], target['port'], target['url'], path, scan_time, scan_id
+                )
+                captured += 1
+
+        log("Screenshot", f"截图完成: 成功 {captured}/{len(web_targets)}", "INFO")
     except ImportError:
-        log("VulnScan", "python-nmap 未安装，跳过漏洞扫描", "WARNING")
-        return {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
-
-    stats = {'total': 0, 'skipped': 0, 'vulnerable': 0, 'safe': 0, 'error': 0}
-
-    # 复用原有漏洞扫描逻辑，读取配置中的 vuln_scripts_by_tag/service
-    vuln_map = get_fscan_config().get('vuln_scripts_by_tag', {})
-
-    for host in hosts_data:
-        mac_address = host.get('mac_address') or host.get('ip')
-        ip = host.get('ip')
-        os_tags = host.get('os_tags', '')
-
-        if not ip:
-            continue
-
-        if not mac_address:
-            mac_address = ip
-
-        # 根据 os_tags 查找对应脚本
-        tag_list = [tag.strip().lower() for tag in os_tags.split(',')]
-        vuln_scripts = set()
-        for tag in tag_list:
-            if tag in vuln_map:
-                vuln_scripts.update(vuln_map[tag])
-
-        if not vuln_scripts:
-            continue
-
-        stats['total'] += len(vuln_scripts)
-
-        nm = nmap.PortScanner()
-        for vuln_script in vuln_scripts:
-            if should_skip_vuln(mac_address, vuln_script):
-                stats['skipped'] += 1
-                log("VulnScan", f"[跳过] {ip} ({mac_address}): {vuln_script}", "DEBUG")
-                continue
-
-            prev_status = VulnModel.get_vuln_status(mac_address, vuln_script)
-            if prev_status == 'vulnerable':
-                log("VulnScan", f"[警告] {ip} ({mac_address}): {vuln_script} (历史发现漏洞)", "WARN")
-                stats['vulnerable'] += 1
-                continue
-
-            log("VulnScan", f"[扫描] {ip} ({mac_address}): {vuln_script}")
-            result, details = scan_vuln_impl(nm, ip, vuln_script)
-            VulnModel.save_vuln_result(mac_address, ip, vuln_script, result, details, os_tags, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
-            if result == 'vulnerable':
-                stats['vulnerable'] += 1
-            elif result == 'safe':
-                stats['safe'] += 1
-            else:
-                stats['error'] += 1
-
-            time.sleep(0.5)
-
-    return stats
-
-
-def should_skip_vuln(mac_address, vuln_name):
-    """判断是否跳过某漏洞的扫描"""
-    status = VulnModel.get_vuln_status(mac_address, vuln_name)
-    return status == 'safe'
-
-
-def scan_vuln_impl(nm, host_ip, vuln_script):
-    """对指定主机执行单个漏洞扫描"""
-    try:
-        nm.scan(hosts=host_ip, arguments=f'--script {vuln_script} -T5')
-        if host_ip in nm.all_hosts():
-            if 'script' in nm[host_ip]:
-                for script_id, script_output in nm[host_ip]['script'].items():
-                    if script_id == vuln_script:
-                        output = script_output.lower()
-                        if 'not vulnerable' in output or 'failed' in output:
-                            return 'safe', script_output
-                        elif 'vulnerable' in output or 'expl' in output:
-                            return 'vulnerable', script_output
-                        elif 'error' in output:
-                            return 'error', script_output
-                        else:
-                            return 'safe', script_output
-            return 'safe', 'No vulnerability detected'
-        else:
-            return 'error', 'Host not reachable'
+        log("Screenshot", "web_screenshot 模块未安装，跳过截图", "WARN")
     except Exception as e:
-        return 'error', str(e)
+        log("Screenshot", f"截图过程出错: {e}", "ERROR")
 
 
 def main(ip_ranges=None, timeout=6000, scan_interval=0):
@@ -356,6 +346,10 @@ def main(ip_ranges=None, timeout=6000, scan_interval=0):
 
                     count = save_to_db(scan_id, hosts_data)
                     total_hosts += len(hosts_data)
+
+            # 截图：所有网段扫描完成后统一截图
+            if all_hosts_data:
+                capture_web_screenshots(all_hosts_data, scan_time, scan_id)
 
             log("Fscan", f"扫描完成，发现 {total_hosts} 台主机")
 

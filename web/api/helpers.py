@@ -18,7 +18,7 @@ if WEB_DIR not in sys.path:
     sys.path.insert(0, WEB_DIR)
 
 from database.models import (
-    NmapModel, VulnModel, HFishModel, AiModel
+    NmapModel, HFishModel, AiModel
 )
 from utils.logger import log as unified_log
 
@@ -95,11 +95,14 @@ def _decode_token(token: str) -> dict | None:
 
 # ─── Auth Decorator ───────────────────────────────────────────────────────
 def require_auth(f):
-    """Simple Bearer auth decorator"""
+    """Simple Bearer auth decorator, also accepts token via query param for <img> tags"""
     @wraps(f)
     def wrapped(*args, **kwargs):
         header = request.headers.get('Authorization', '')
         token = header.removeprefix('Bearer ').strip()
+        # Allow token as query param for image endpoints
+        if not token:
+            token = request.args.get('token', '').strip()
 
         if request.path == '/api/v1/ai/chat':
             auth_header = request.headers.get('Authorization', '')

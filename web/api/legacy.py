@@ -2,14 +2,14 @@
 Legacy API Module - Old API compatibility layer
 """
 from flask import Blueprint, request, jsonify
-from database.models import NmapModel, VulnModel
+from database.models import NmapModel
 from .helpers import (
     require_auth, ok, err, _body, _load_cfg, _save_cfg,
     _parse_int_arg, _normalize_host_fields
 )
 from .runtime import (
-    get_runtime_scan_status, run_vuln_scan_task, run_nmap_scan,
-    _is_scanning, _is_vuln_scanning, _run_daemon
+    get_runtime_scan_status, run_nmap_scan,
+    _is_scanning, _run_daemon
 )
 
 legacy_bp = Blueprint('legacy_api', __name__, url_prefix='/api')
@@ -113,44 +113,6 @@ def legacy_nmap_host(ip: str):
     scan_id = request.args.get('scan_id')
     host = NmapModel.get_host_by_ip(ip, int(scan_id) if scan_id else None)
     return ok(_normalize_host_fields(host) or {})
-
-
-@legacy_bp.route('/nmap/vuln', methods=['GET'])
-@require_auth
-def legacy_nmap_vuln():
-    limit = _parse_int_arg('limit', 1000)
-    offset = _parse_int_arg('offset', 0)
-    return ok(VulnModel.get_vuln_results(limit, offset))
-
-
-@legacy_bp.route('/nmap/vuln/stats', methods=['GET'])
-@require_auth
-def legacy_nmap_vuln_stats():
-    return ok(VulnModel.get_vuln_stats())
-
-
-@legacy_bp.route('/nmap/vuln/mark_safe', methods=['POST'])
-@require_auth
-def legacy_nmap_mark_safe():
-    body = _body()
-    mac_address = body.get('mac_address')
-    vuln_name = body.get('vuln_name')
-    if not mac_address or not vuln_name:
-        return jsonify({'success': False, 'message': '参数不全'})
-    success = VulnModel.mark_safe(mac_address, vuln_name)
-    if success:
-        return jsonify({'success': True, 'message': '已手动标记为安全'})
-    return jsonify({'success': False, 'message': '未找到对应记录'})
-
-
-@legacy_bp.route('/nmap/vuln/scan', methods=['POST'])
-@require_auth
-def legacy_nmap_vuln_scan():
-    if _is_vuln_scanning:
-        return jsonify({'success': False, 'message': '漏洞扫描正在进行中，请稍后再试'})
-
-    _run_daemon(run_vuln_scan_task)
-    return jsonify({'success': True, 'message': '漏洞扫描任务已启动'})
 
 
 @legacy_bp.route('/nmap/scan', methods=['POST'])

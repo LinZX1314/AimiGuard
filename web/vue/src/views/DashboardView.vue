@@ -10,7 +10,6 @@ interface TopMetrics {
   hfish_total: number
   hfish_high: number
   nmap_online: number
-  vuln_open: number
   ai_decisions: number
   blocked_ips: number
 }
@@ -29,7 +28,7 @@ const loading = ref(true)
 const loadError = ref('')
 
 const payload = ref<ScreenPayload>({
-  top_metrics: { hfish_total: 0, hfish_high: 0, nmap_online: 0, vuln_open: 0, ai_decisions: 0, blocked_ips: 0 },
+  top_metrics: { hfish_total: 0, hfish_high: 0, nmap_online: 0, ai_decisions: 0, blocked_ips: 0 },
   chain_status: {},
   trends: { labels: [], counts: [] },
   threat_distribution: { levels: [], counts: [] },
