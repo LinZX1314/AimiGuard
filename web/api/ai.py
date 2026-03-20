@@ -270,12 +270,13 @@ def ai_chat_stream():
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
 
-        # 检查是否需要进入演练模式（AI 智能调用了 drill 工具）
+        # 检查是否需要进入演练模式（AI 智能调用了 drill 工具 或 用户上传了演练文档）
         has_drill_tools = any(tc['name'].startswith('drill_') for tc in tool_calls_received)
-        if has_drill_tools and not is_drill_mode:
+        if (has_drill_tools or is_drill_mode) and not drill_state:
             drill_state = DrillState()
             drill_state.document_content = message
-            yield f"data: {json.dumps({'drill_mode': True}, ensure_ascii=False)}\n\n"
+            if has_drill_tools and not is_drill_mode:
+                yield f"data: {json.dumps({'drill_mode': True}, ensure_ascii=False)}\n\n"
 
         # 执行工具并处理（支持多轮循环）
         for chunk in _run_agent_loop(history, all_tools_normal, cfg_now, sid, drill_state, has_drill_tools or is_drill_mode):
@@ -470,8 +471,8 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
         if not tool_calls:
             unified_log('AIChat', f'Agent循环结束（无更多工具调用）| 共 {step_count} 步', 'INFO')
 
-            # 演练模式：让 AI 生成丰富的 HTML 报告
-            if is_drill_mode and drill_state and step_count > 1 and not drill_state.is_complete:
+            # 演练模式：drill_state 存在且未完成就生成报告
+            if drill_state and not drill_state.is_complete:
                 # 先获取最新蜜罐数据（实时）
                 try:
                     from database.models import HFishModel
@@ -563,7 +564,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             history.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': res, 'ts': _now_iso()})
 
             # 演练模式：检查是否生成报告
-            if is_drill_mode and drill_state and tool_name == 'drill_generate_report':
+            if drill_state and tool_name == 'drill_generate_report':
                 try:
                     report_res = json.loads(res)
                     if report_res.get('ok'):
@@ -576,7 +577,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     pass
 
         # 检查演练是否已结束
-        if is_drill_mode and drill_state and drill_state.is_complete:
+        if drill_state and drill_state.is_complete:
             yield json.dumps({'drill_complete': {
                 'report': drill_state.report_content,
                 'summary': drill_state.get_exec_summary(),

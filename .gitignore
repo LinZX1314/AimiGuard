@@ -44,6 +44,10 @@ desktop.ini
 err.txt
 /lib/
 
+# ── 扫描结果 ──
+result.txt
+fscan_result_*.json
+
 # 资料/
 资料/
 .breezell
