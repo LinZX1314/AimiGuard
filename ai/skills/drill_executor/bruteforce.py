@@ -7,6 +7,28 @@ import shutil
 import subprocess
 import socket
 
+# ─── 常量定义 ────────────────────────────────────────────────────────────────
+BRUTEFORCE_TIMEOUT = 120   # fscan 执行超时（秒）
+SOCKET_TIMEOUT = 3         # 端口检测超时（秒）
+CONN_TIMEOUT = 5           # 服务连接超时（秒）
+MAX_OUTPUT_DISPLAY = 2000  # 返回结果截断长度（字符）
+
+COMMON_SSH_CREDS = [
+    ('root', 'root'), ('root', 'toor'), ('root', 'password'), ('root', '123456'),
+    ('admin', 'admin'), ('admin', 'password'), ('admin', '123456'),
+    ('administrator', 'administrator'), ('user', 'user'), ('test', 'test'),
+    ('guest', 'guest'), ('oracle', 'oracle'), ('mysql', 'mysql'),
+]
+
+COMMON_MYSQL_CREDS = [
+    ('root', ''), ('root', 'root'), ('root', 'mysql'), ('root', '123456'),
+    ('admin', 'admin'), ('admin', 'root'),
+]
+
+# 是否已导入可选依赖（避免重复尝试导入）
+_mysql_connector_available = None
+_paramiko_available = None
+
 
 # ─── fscan 内置弱口令检测 ───────────────────────────────────────────────────
 
@@ -56,7 +78,7 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
             encoding='utf-8',
             errors='ignore',
         )
-        stdout, stderr = proc.communicate(timeout=120)
+        stdout, stderr = proc.communicate(timeout=BRUTEFORCE_TIMEOUT)
         output = stdout + stderr
 
         # 解析 fscan 输出
@@ -86,7 +108,7 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
                 'vulnerable': True,
                 'vulnerable_creds': [{'credential': c} for c in vulnerable_creds],
                 'message': f'fscan 发现 {len(vulnerable_creds)} 组有效凭据！',
-                'raw_output': output[:2000],
+                'raw_output': output[:MAX_OUTPUT_DISPLAY],
             }
         elif service_found:
             return {
@@ -96,7 +118,7 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
                 'vulnerable': False,
                 'vulnerable_creds': [],
                 'message': 'fscan 检测完成，未发现常见弱口令',
-                'raw_output': output[:2000],
+                'raw_output': output[:MAX_OUTPUT_DISPLAY],
             }
         else:
             return {
@@ -106,13 +128,13 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
                 'vulnerable': False,
                 'vulnerable_creds': [],
                 'message': f'fscan 未检测到 {service_type.upper()} 服务或服务无响应',
-                'raw_output': output[:2000],
+                'raw_output': output[:MAX_OUTPUT_DISPLAY],
             }
 
     except subprocess.TimeoutExpired:
         return {
             'ok': False,
-            'error': 'fscan 弱口令检测超时（超过2分钟）',
+            'error': f'fscan 弱口令检测超时（超过{BRUTEFORCE_TIMEOUT}秒）',
             'vulnerable': False,
         }
     except Exception as e:
@@ -125,8 +147,9 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
 
 # ─── 端口检测辅助函数 ───────────────────────────────────────────────────────
 
-def _check_port_open(host: str, port: int, timeout: int = 3) -> bool:
+def _check_port_open(host: str, port: int, timeout: int = None) -> bool:
     """检测端口是否开放"""
+    timeout = timeout or SOCKET_TIMEOUT
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
@@ -139,36 +162,38 @@ def _check_port_open(host: str, port: int, timeout: int = 3) -> bool:
 
 # ─── Python 原生弱口令检测（备选方案）────────────────────────────────────────
 
-def check_ssh_weak_passwords(host: str, port: int = 22, timeout: int = 5) -> dict:
+def check_ssh_weak_passwords(host: str, port: int = 22, timeout: int = None) -> dict:
     """Python SSH 弱口令检测（当 fscan 不可用时）"""
-    try:
-        import paramiko
-    except ImportError:
+    global _paramiko_available
+    timeout = timeout or CONN_TIMEOUT
+
+    if _paramiko_available is None:
+        try:
+            import paramiko as _p
+            paramiko = _p
+            _paramiko_available = True
+        except ImportError:
+            _paramiko_available = False
+
+    if not _paramiko_available:
         return {
             'ok': False,
             'error': '缺少 paramiko 库（fscan 方案不可用时需要）',
             'vulnerable': False,
         }
 
-    common_creds = [
-        ('root', 'root'), ('root', 'toor'), ('root', 'password'), ('root', '123456'),
-        ('admin', 'admin'), ('admin', 'password'), ('admin', '123456'),
-        ('administrator', 'administrator'), ('user', 'user'), ('test', 'test'),
-        ('guest', 'guest'), ('oracle', 'oracle'), ('mysql', 'mysql'),
-    ]
-
     vulnerable_creds = []
     try:
         sock = socket.create_connection((host, port), timeout=timeout)
         sock.close()
-    except Exception:
+    except (socket.timeout, OSError):
         return {
             'ok': False,
             'error': f'SSH 端口 {port} 无法连接',
             'vulnerable': False,
         }
 
-    for username, password in common_creds:
+    for username, password in COMMON_SSH_CREDS:
         try:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -178,6 +203,8 @@ def check_ssh_weak_passwords(host: str, port: int = 22, timeout: int = 5) -> dic
             client.close()
             vulnerable_creds.append({'username': username, 'password': password})
             break
+        except (paramiko.AuthenticationException, socket.timeout, OSError):
+            continue
         except Exception:
             continue
 
@@ -192,26 +219,40 @@ def check_ssh_weak_passwords(host: str, port: int = 22, timeout: int = 5) -> dic
     }
 
 
-def check_mysql_weak_passwords(host: str, port: int = 3306, timeout: int = 5) -> dict:
+def check_mysql_weak_passwords(host: str, port: int = 3306, timeout: int = None) -> dict:
     """Python MySQL 弱口令检测"""
-    common_creds = [
-        ('root', ''), ('root', 'root'), ('root', 'mysql'), ('root', '123456'),
-        ('admin', 'admin'), ('admin', 'root'),
-    ]
+    global _mysql_connector_available
+    timeout = timeout or CONN_TIMEOUT
+
+    if _mysql_connector_available is None:
+        try:
+            import mysql.connector as _mc
+            mysql.connector = _mc
+            _mysql_connector_available = True
+        except ImportError:
+            _mysql_connector_available = False
+
+    if not _mysql_connector_available:
+        return {
+            'ok': False,
+            'error': '缺少 mysql-connector-python 库（fscan 方案不可用时需要）',
+            'vulnerable': False,
+        }
 
     vulnerable_creds = []
-    if not _check_port_open(host, port, timeout):
+    if not _check_port_open(host, port, SOCKET_TIMEOUT):
         return {'ok': False, 'error': f'MySQL 端口 {port} 无法连接', 'vulnerable': False}
 
-    for username, password in common_creds:
+    for username, password in COMMON_MYSQL_CREDS:
         try:
-            import mysql.connector
             conn = mysql.connector.connect(
                 host=host, port=port, user=username, password=password, connect_timeout=timeout,
             )
             conn.close()
             vulnerable_creds.append({'username': username, 'password': password or '(空密码)'})
             break
+        except mysql.connector.Error:
+            continue
         except Exception:
             continue
 

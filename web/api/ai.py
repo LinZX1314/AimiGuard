@@ -154,7 +154,7 @@ def ai_chat_stream():
 
     # 检查是否进入演练模式（用户上传了文档）
     is_drill_mode = body.get('drill_mode', False) or ('【演练文档】' in message)
-    drill_state: DrillState | None = DrillState()  # 始终创建，由后续条件决定是否进入演练模式
+    drill_state: DrillState | None = None
 
     if is_drill_mode:
         drill_state = DrillState()
@@ -277,8 +277,12 @@ def ai_chat_stream():
 
         # 检查是否需要进入演练模式（AI 智能调用了 drill 工具 或 用户上传了演练文档）
         has_drill_tools = any(tc['name'].startswith('drill_') for tc in tool_calls_received)
-        if (has_drill_tools or is_drill_mode) and drill_state.document_content == '':
-            drill_state.document_content = message
+        if has_drill_tools or is_drill_mode:
+            # 确保 drill_state 已初始化（is_drill_mode=False 但 AI 首次调用 drill 工具时走此分支）
+            if not drill_state:
+                drill_state = DrillState()
+            if drill_state.document_content == '':
+                drill_state.document_content = message
             if has_drill_tools and not is_drill_mode:
                 yield f"data: {json.dumps({'drill_mode': True}, ensure_ascii=False)}\n\n"
 
