@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 220 20% 96%; /* 偏灰的主冷色调背景，不像纯白那么刺眼 */
-    --foreground: 240 10% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
-    --primary: 240 5.9% 10%;
+    --background: 218 22% 92%; /* 进一步压低亮度，减少大面积高亮造成的眩光 */
+    --foreground: 228 15% 15%;
+    --card: 220 18% 96%;
+    --card-foreground: 228 15% 15%;
+    --popover: 220 18% 96%;
+    --popover-foreground: 228 15% 15%;
+    --primary: 220 28% 22%;
     --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --secondary: 220 16% 89%;
+    --secondary-foreground: 225 18% 20%;
+    --muted: 220 16% 89%;
+    --muted-foreground: 224 10% 40%;
+    --accent: 220 16% 89%;
+    --accent-foreground: 225 18% 20%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --border: 220 14% 80%;
+    --input: 220 14% 82%;
+    --ring: 210 70% 45%;
     --radius: 0.5rem;
   }
 
@@ -66,8 +66,8 @@ body::after {
   inset: 0;
   pointer-events: none;
   z-index: -2;
-  /* 亮色模式：微微的蓝紫色光晕 */
-  background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+  /* 亮色模式：减弱光晕强度，避免中心区域发白 */
+  background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 72%);
   animation: ambient-glow 8s ease-in-out infinite alternate;
 }
 
@@ -90,9 +90,9 @@ body::before {
   z-index: -1;
   /* 基础网格大小 */
   background-size: 50px 50px;
-  /* 亮色模式网格颜色：更明显的黑灰线条 */
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.1) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  /* 亮色模式网格颜色：降低线条对比度，减少视觉噪声 */
+  background-image: linear-gradient(to right, rgba(51, 65, 85, 0.06) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(51, 65, 85, 0.06) 1px, transparent 1px);
   /* 中心辐射渐变遮罩，边缘模糊消失 */
   mask-image: radial-gradient(circle at center, black 60%, transparent 95%);
   -webkit-mask-image: radial-gradient(circle at center, black 60%, transparent 95%);

@@ -2,9 +2,8 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/api/index'
 import DashboardMetricSidebar from '@/components/dashboard/DashboardMetricSidebar.vue'
-import DashboardAttackRecord from '@/components/dashboard/DashboardAttackRecord.vue'
 import DashboardAiSidebar from '@/components/dashboard/DashboardAiSidebar.vue'
-import DashboardDefenseQueue from '@/components/dashboard/DashboardDefenseQueue.vue'
+import DashboardCenterPanel from '@/components/dashboard/DashboardCenterPanel.vue'
 
 interface TopMetrics {
   hfish_total: number
@@ -12,6 +11,19 @@ interface TopMetrics {
   nmap_online: number
   ai_decisions: number
   blocked_ips: number
+}
+
+interface TopologyNode {
+  id: string
+  label: string
+  type: string
+  status: string
+}
+
+interface TopologyLink {
+  source: string
+  target: string
+  type: string
 }
 
 interface ScreenPayload {
@@ -22,6 +34,10 @@ interface ScreenPayload {
   hot_services: Array<{ name: string; count: number }>
   recent_attacks: Array<{ attack_ip: string; ip_location?: string; service_name?: string; threat_level?: string; create_time_str?: string }>
   defense_events: Array<{ attack_ip: string; ip_location?: string; attack_count: number; latest_time?: string; ai_status?: string; ai_decision?: string }>
+  topology: {
+    nodes: TopologyNode[]
+    links: TopologyLink[]
+  }
 }
 
 const loading = ref(true)
@@ -35,6 +51,7 @@ const payload = ref<ScreenPayload>({
   hot_services: [],
   recent_attacks: [],
   defense_events: [],
+  topology: { nodes: [], links: [] },
 })
 
 async function loadScreen() {
@@ -68,14 +85,11 @@ onUnmounted(() => {
       <!-- 左栏：态势摘要 -->
       <DashboardMetricSidebar :payload="payload" :loading="loading" />
 
-      <!-- 中栏：AI 指挥侧边栏 -->
-      <DashboardAiSidebar />
+      <!-- 中栏：主显示区域 -->
+      <DashboardCenterPanel :payload="payload" :loading="loading" :load-error="loadError" />
 
-      <!-- 右栏：最近攻击记录 + 防御队列 -->
-      <aside class="min-h-0 overflow-hidden space-y-4 pl-1 flex flex-col">
-        <DashboardAttackRecord :recent-attacks="payload.recent_attacks" :loading="loading" :load-error="loadError" />
-        <DashboardDefenseQueue :defense-events="payload.defense_events" :loading="loading" />
-      </aside>
+      <!-- 右栏：AI 指挥侧边栏 -->
+      <DashboardAiSidebar />
     </div>
   </div>
 </template>

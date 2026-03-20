@@ -19,10 +19,10 @@ interface Particle {
 }
 
 const config = {
-  particleCount: 70,
-  particleSpeed: 0.25,
-  lineDistance: 130,
-  particleRadius: 1.5
+  particleCount: 50,
+  particleSpeed: 0.3,
+  lineDistance: 120,
+  particleRadius: 1.2
 }
 
 function initCanvas() {
@@ -50,8 +50,8 @@ function animate() {
   const isDark = document.documentElement.classList.contains('dark')
   
   // 暗黑模式下用极客蓝/青，明亮模式下用清新蓝
-  const particleColor = isDark ? 'rgba(0, 229, 255, 0.5)' : 'rgba(59, 130, 246, 0.4)'
-  const lineColor = isDark ? 'rgba(0, 229, 255, 0.15)' : 'rgba(59, 130, 246, 0.15)'
+  const particleColor = isDark ? 'rgba(0, 212, 255, 0.6)' : 'rgba(59, 130, 246, 0.5)'
+  const lineColor = isDark ? 'rgba(0, 212, 255, 0.2)' : 'rgba(59, 130, 246, 0.2)'
 
   particles.forEach((p, i) => {
     p.x += p.vx

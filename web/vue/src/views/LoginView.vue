@@ -249,7 +249,7 @@ function triggerShake() {
           class="relative rounded-xl backdrop-blur-2xl overflow-hidden border transition-colors duration-300"
           :class="isDark
             ? 'bg-[#0c1222]/88 border-white/[0.05] shadow-[0_20px_60px_rgba(0,0,0,0.5)]'
-            : 'bg-white/78 border-slate-200/80 shadow-[0_14px_45px_rgba(15,23,42,0.14)]'"
+            : 'bg-slate-100/72 border-slate-300/55 shadow-[0_14px_45px_rgba(15,23,42,0.10)]'"
         >
           <!-- Top accent line -->
           <div class="h-[1px] w-full bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent"></div>

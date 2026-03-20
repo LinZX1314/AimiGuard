@@ -17,6 +17,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Activity } from 'lucide-vue-next'
+import TechCard from './shared/TechCard.vue'
 
 ChartJS.register(
   Title,
@@ -47,11 +48,11 @@ const props = defineProps<{
 }>()
 
 const metricCards = computed(() => [
-  { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-cyan-400' },
-  { key: 'hfish_high', label: '高危攻击', value: props.payload.top_metrics.hfish_high, color: 'text-red-400' },
-  { key: 'nmap_online', label: '在线主机', value: props.payload.top_metrics.nmap_online, color: 'text-emerald-400' },
-  { key: 'ai_decisions', label: 'AI 决策数', value: props.payload.top_metrics.ai_decisions, color: 'text-violet-400' },
-  { key: 'blocked_ips', label: '已封禁 IP', value: props.payload.top_metrics.blocked_ips, color: 'text-slate-400' },
+  { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-cyan-400', glowColor: 'cyan' as const },
+  { key: 'hfish_high', label: '高危攻击', value: props.payload.top_metrics.hfish_high, color: 'text-red-400', glowColor: 'red' as const },
+  { key: 'nmap_online', label: '在线主机', value: props.payload.top_metrics.nmap_online, color: 'text-emerald-400', glowColor: 'green' as const },
+  { key: 'ai_decisions', label: 'AI 决策数', value: props.payload.top_metrics.ai_decisions, color: 'text-violet-400', glowColor: 'cyan' as const },
+  { key: 'blocked_ips', label: '已封禁 IP', value: props.payload.top_metrics.blocked_ips, color: 'text-slate-400', glowColor: 'orange' as const },
 ])
 
 const chainItems = [
@@ -104,73 +105,55 @@ function getChainStatus(key: string): boolean {
   <aside class="min-h-0 overflow-hidden pr-1">
     <ScrollArea class="h-full">
       <div class="space-y-4 pr-2">
-        <Card>
-          <CardHeader class="pb-3">
-            <CardTitle class="text-sm flex items-center gap-2">
-              <Activity class="h-4 w-4 text-primary" /> 态势摘要
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-2">
+        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan">
+          <div class="space-y-2">
             <div class="grid grid-cols-2 gap-2">
               <div v-for="item in metricCards" :key="item.key" class="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
                 <p class="text-[10px] tracking-wide text-muted-foreground">{{ item.label }}</p>
                 <p class="text-base font-semibold leading-5" :class="item.color">{{ item.value || 0 }}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TechCard>
 
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm">实时攻击趋势</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="h-44">
-              <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
-              <Skeleton v-else-if="loading" class="h-full w-full" />
-              <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
-            </div>
-          </CardContent>
-        </Card>
+        <TechCard title="实时攻击趋势" glow-color="cyan">
+          <div class="h-44">
+            <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
+            <Skeleton v-else-if="loading" class="h-full w-full" />
+            <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
+          </div>
+        </TechCard>
 
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm">热门攻击服务</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="h-44">
-              <Bar
-                v-if="payload.hot_services.length"
-                :data="serviceData"
-                :options="{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  indexAxis: 'y',
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { display: false }, ticks: { color: '#94a3b8' } }
-                  }
-                }"
-              />
-              <Skeleton v-else-if="loading" class="h-full w-full" />
-              <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
-            </div>
-          </CardContent>
-        </Card>
+        <TechCard title="热门攻击服务" glow-color="orange">
+          <div class="h-44">
+            <Bar
+              v-if="payload.hot_services.length"
+              :data="serviceData"
+              :options="{
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                  y: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+              }"
+            />
+            <Skeleton v-else-if="loading" class="h-full w-full" />
+            <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
+          </div>
+        </TechCard>
 
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm">防御链路状态</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-2">
+        <TechCard title="防御链路状态" glow-color="green">
+          <div class="space-y-2">
             <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
               <span class="text-sm text-muted-foreground">{{ item.label }}</span>
               <span v-if="getChainStatus(item.key)" class="text-xs text-emerald-400">运行中</span>
               <span v-else class="text-xs text-slate-500">未启用</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TechCard>
       </div>
     </ScrollArea>
   </aside>

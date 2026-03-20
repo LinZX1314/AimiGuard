@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeUnmount } from 'vue'
+import { ref, reactive, onBeforeUnmount, computed } from 'vue'
 import { api } from '@/api/index'
 import AiMessageList from '@/components/ai/AiMessageList.vue'
 import AiChatInput from '@/components/ai/AiChatInput.vue'
-import { Bot } from 'lucide-vue-next'
+import { Bot, History, Settings, Zap, Shield, Search, AlertTriangle, X } from 'lucide-vue-next'
 
 interface ToolCall {
   id: string
@@ -32,17 +32,42 @@ interface Message {
   tool_results?: ToolResult[]
 }
 
+interface Session {
+  id: number
+  title: string
+  created_at: string
+}
+
+// 快捷输入选项
+const quickPrompts = [
+  { icon: Shield, label: '安全态势分析', text: '分析当前整体安全态势' },
+  { icon: Search, label: '威胁情报查询', text: '查询最新威胁情报' },
+  { icon: AlertTriangle, label: '高危IP处置', text: '列出需要处置的高危IP' },
+  { icon: Zap, label: '一键应急响应', text: '启动应急响应流程' },
+]
+
 const messages = ref<Message[]>([])
+const sessions = ref<Session[]>([])
 const sending = ref(false)
 const ttsEnabled = ref(true)
 const activeChatController = ref<AbortController | null>(null)
+const showHistory = ref(false)
+const showSettings = ref(false)
+const showQuickPrompts = ref(true)
+
+// TTS设置
+const settings = reactive({
+  ttsEnabled: true,
+  voiceSpeed: 1.0,
+  autoAnalysis: false,
+})
 
 function speak(text: string) {
-  if (!ttsEnabled.value || !window.speechSynthesis) return
+  if (!settings.ttsEnabled || !window.speechSynthesis) return
   const stripped = text.replace(/[#*`>~_\[\]()!]/g, ' ').replace(/\s+/g, ' ').trim()
   const utt = new SpeechSynthesisUtterance(stripped.slice(0, 400))
   utt.lang = 'zh-CN'
-  utt.rate = 1.1
+  utt.rate = settings.voiceSpeed
   window.speechSynthesis.speak(utt)
 }
 
@@ -51,10 +76,46 @@ function stopGenerating() {
 }
 
 function toggleTts() {
-  if (ttsEnabled.value && window.speechSynthesis) {
+  if (settings.ttsEnabled && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
-  ttsEnabled.value = !ttsEnabled.value
+  settings.ttsEnabled = !settings.ttsEnabled
+  ttsEnabled.value = settings.ttsEnabled
+}
+
+// 快捷输入选择
+function selectQuickPrompt(text: string) {
+  showQuickPrompts.value = false
+  send(text)
+}
+
+// 历史记录
+async function loadSessions() {
+  try {
+    const d = await api.get<any>('/api/v1/ai/sessions')
+    sessions.value = d.data ?? d
+  } catch (e) { console.error(e) }
+}
+
+async function loadHistorySession(sid: number) {
+  if (sid < 0) {
+    messages.value = []
+    showHistory.value = false
+    return
+  }
+  try {
+    const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
+    messages.value = (d.data ?? d).map((m: any) => ({
+      role: m.role === 'tool' ? 'assistant' : m.role,
+      content: m.content || '',
+      created_at: m.created_at,
+    }))
+    showHistory.value = false
+  } catch (e) { console.error(e) }
+}
+
+async function clearHistory() {
+  messages.value = []
 }
 
 async function send(text: string) {
@@ -154,10 +215,131 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="h-full flex flex-col bg-card/30 border border-border/60 rounded-xl overflow-hidden relative backdrop-blur-2xl">
-    <!-- Header -->
-    <div class="flex items-center gap-2 px-4 py-3 border-b border-border/40">
-      <Bot class="h-4 w-4 text-primary" />
-      <span class="text-sm font-semibold">AI 指挥中心</span>
+    <!-- Header - 科技风设计 + 历史记录/设置按钮 -->
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-cyan-500/5">
+      <div class="relative">
+        <div class="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+          <Bot class="h-4 w-4 text-cyan-400" />
+        </div>
+        <div class="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-background animate-pulse" />
+      </div>
+      <div class="flex-1 min-w-0">
+        <h3 class="text-sm font-semibold text-foreground">AI 指挥中心</h3>
+        <p class="text-[10px] text-cyan-400/70 font-mono">STATUS: ONLINE</p>
+      </div>
+      <!-- 历史记录和设置按钮 -->
+      <div class="flex items-center gap-1">
+        <button
+          @click="showHistory = !showHistory; showSettings = false"
+          class="w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
+          title="历史记录"
+        >
+          <History class="w-4 h-4 text-cyan-400" />
+        </button>
+        <button
+          @click="showSettings = !showSettings; showHistory = false"
+          class="w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
+          title="设置"
+        >
+          <Settings class="w-4 h-4 text-cyan-400" />
+        </button>
+      </div>
+    </div>
+
+    <!-- 快捷输入选项 -->
+    <div v-if="showQuickPrompts && messages.length === 0" class="px-4 py-3 border-b border-border/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
+      <p class="text-xs text-muted-foreground mb-2 font-medium">💡 快捷指令</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button
+          v-for="prompt in quickPrompts"
+          :key="prompt.label"
+          @click="selectQuickPrompt(prompt.text)"
+          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/60 border border-border/40 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-200 text-left group"
+        >
+          <component :is="prompt.icon" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <span class="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{{ prompt.label }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 历史记录面板 -->
+    <div v-if="showHistory" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
+        <h3 class="text-sm font-semibold text-foreground">历史记录</h3>
+        <button @click="showHistory = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
+          <X class="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 space-y-2">
+        <button
+          @click="loadHistorySession(-1)"
+          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+        >
+          + 新对话
+        </button>
+        <button
+          v-for="session in sessions"
+          :key="session.id"
+          @click="loadHistorySession(session.id)"
+          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-muted/30 border border-border/40 hover:bg-muted/50 hover:border-cyan-500/30 transition-colors"
+        >
+          <p class="text-foreground truncate">{{ session.title || '新对话' }}</p>
+          <p class="text-[10px] text-muted-foreground mt-0.5">{{ session.created_at }}</p>
+        </button>
+      </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div v-if="showSettings" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
+        <h3 class="text-sm font-semibold text-foreground">设置</h3>
+        <button @click="showSettings = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
+          <X class="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- TTS开关 -->
+        <div class="flex items-center justify-between py-2 border-b border-border/40">
+          <div>
+            <p class="text-sm font-medium">语音播报 (TTS)</p>
+            <p class="text-xs text-muted-foreground">自动朗读AI回复</p>
+          </div>
+          <button
+            @click="settings.ttsEnabled = !settings.ttsEnabled; ttsEnabled = settings.ttsEnabled"
+            class="relative w-12 h-6 rounded-full transition-colors duration-200"
+            :class="settings.ttsEnabled ? 'bg-cyan-500' : 'bg-muted'"
+          >
+            <span
+              class="absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+              :class="settings.ttsEnabled ? 'translate-x-7' : 'translate-x-1'"
+            />
+          </button>
+        </div>
+        <!-- 语速 -->
+        <div class="py-2 border-b border-border/40">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-medium">语速</p>
+            <span class="text-xs text-cyan-400">{{ settings.voiceSpeed.toFixed(1) }}x</span>
+          </div>
+          <input
+            type="range"
+            v-model.number="settings.voiceSpeed"
+            min="0.5"
+            max="2"
+            step="0.1"
+            class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+          />
+        </div>
+        <!-- 清空对话 -->
+        <div class="pt-2">
+          <button
+            @click="clearHistory"
+            class="w-full px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors text-sm"
+          >
+            清空当前对话
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Message List -->
@@ -175,3 +357,13 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style scoped>
+@keyframes animate-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-in {
+  animation: animate-in 0.3s ease-out;
+}
+</style>

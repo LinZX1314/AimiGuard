@@ -65,7 +65,7 @@ def overview_screen():
     c = conn.cursor()
 
     c.execute("""
-        SELECT attack_ip, ip_location, service_name, create_time_str
+        SELECT attack_ip, ip_location, service_name, threat_level, create_time_str
         FROM attack_logs
         ORDER BY create_time_timestamp DESC
         LIMIT 10
@@ -77,6 +77,7 @@ def overview_screen():
             'attack_ip': row.get('attack_ip') or '-',
             'ip_location': row.get('ip_location') or '未知地区',
             'service_name': row.get('service_name') or '未知服务',
+            'threat_level': row.get('threat_level') or '未分级',
             'create_time_str': row.get('create_time_str') or '-',
         })
 
@@ -105,6 +106,10 @@ def overview_screen():
             'ai_status': row.get('ai_status') or 'pending',
             'ai_decision': row.get('ai_decision') if row.get('ai_decision') is not None else 'pending',
         })
+    # 统计高危攻击数量，必须在关闭连接前执行。
+    c.execute("SELECT COUNT(*) FROM attack_logs WHERE threat_level IN ('high', '高危', 'critical', '严重')")
+    hfish_high = c.fetchone()[0]
+
     conn.close()
 
     hosts = NmapModel.get_hosts(limit=10, offset=0)
@@ -145,6 +150,7 @@ def overview_screen():
     payload = {
         'top_metrics': {
             'hfish_total': hfish.get('total', 0),
+            'hfish_high': hfish_high,
             'nmap_online': online,
             'ai_decisions': len(ai_analyses),
             'blocked_ips': blocked,

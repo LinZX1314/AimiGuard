@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { computed } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Shield, Ban, Clock3, CheckCircle2, ShieldAlert } from 'lucide-vue-next'
+import TechCard from './shared/TechCard.vue'
 
 const props = defineProps<{
   defenseEvents: Array<{
@@ -14,31 +16,93 @@ const props = defineProps<{
   }>
   loading: boolean
 }>()
+
+const queueSummary = computed(() => {
+  let block = 0
+  let pending = 0
+  let safe = 0
+
+  for (const item of props.defenseEvents) {
+    if (item.ai_decision === 'true') {
+      block += 1
+    } else if (item.ai_decision === 'pending') {
+      pending += 1
+    } else {
+      safe += 1
+    }
+  }
+
+  return { block, pending, safe }
+})
+
+function getDecisionIcon(decision?: string) {
+  if (decision === 'true') return Ban
+  if (decision === 'pending') return Clock3
+  return CheckCircle2
+}
+
+function getDecisionColor(decision?: string) {
+  if (decision === 'true') return 'text-rose-300 border-rose-400/35 bg-rose-500/15'
+  if (decision === 'pending') return 'text-amber-300 border-amber-400/35 bg-amber-500/15'
+  return 'text-emerald-300 border-emerald-400/35 bg-emerald-500/15'
+}
+
+function getDecisionText(decision?: string) {
+  if (decision === 'true') return '建议封禁'
+  if (decision === 'pending') return '分析中'
+  return '安全'
+}
 </script>
 
 <template>
-  <Card>
-    <CardHeader class="pb-2">
-      <CardTitle class="text-sm">防御处置队列</CardTitle>
-    </CardHeader>
-    <CardContent class="p-0">
-      <ScrollArea class="h-56 px-6 py-3">
-        <div class="space-y-2">
-          <div v-for="item in defenseEvents" :key="item.attack_ip" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-            <div class="flex items-center justify-between">
-              <p class="font-mono text-sm">{{ item.attack_ip }}</p>
-              <Badge variant="outline">{{ item.attack_count }} 次</Badge>
+  <TechCard title="防御处置队列" :icon="Shield" glow-color="green" class="bg-slate-900/30">
+    <div class="mb-3 grid grid-cols-3 gap-2">
+      <div class="rounded-lg border border-rose-400/25 bg-rose-500/10 px-2 py-1.5 text-center">
+        <p class="text-[10px] text-rose-200/70">建议封禁</p>
+        <p class="text-sm font-semibold text-rose-300 tabular-nums">{{ queueSummary.block }}</p>
+      </div>
+      <div class="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1.5 text-center">
+        <p class="text-[10px] text-amber-200/70">分析中</p>
+        <p class="text-sm font-semibold text-amber-300 tabular-nums">{{ queueSummary.pending }}</p>
+      </div>
+      <div class="rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2 py-1.5 text-center">
+        <p class="text-[10px] text-emerald-200/70">已放行</p>
+        <p class="text-sm font-semibold text-emerald-300 tabular-nums">{{ queueSummary.safe }}</p>
+      </div>
+    </div>
+
+    <ScrollArea class="h-[calc(100%-88px)]">
+      <div class="space-y-2 pr-2">
+        <div
+          v-for="item in defenseEvents"
+          :key="item.attack_ip"
+          class="group rounded-lg border border-border/45 bg-gradient-to-r from-slate-900/45 to-slate-800/20 px-3 py-2.5 transition-all duration-300 hover:border-cyan-400/35 hover:shadow-[0_0_14px_rgba(34,211,238,0.08)]"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <component :is="getDecisionIcon(item.ai_decision)" class="h-3.5 w-3.5 shrink-0" :class="getDecisionColor(item.ai_decision).split(' ')[0]" />
+              <p class="font-mono text-sm tracking-wide truncate">{{ item.attack_ip }}</p>
             </div>
-            <p class="text-xs text-muted-foreground mt-1">{{ item.ip_location || '未知地区' }} · {{ item.latest_time || '-' }}</p>
-            <p class="text-xs mt-1" :class="item.ai_decision === 'true' ? 'text-red-400' : 'text-muted-foreground'">
-              AI 决策: {{ item.ai_decision === 'true' ? '建议封禁' : '待分析' }}
-            </p>
+            <Badge variant="outline" class="text-xs shrink-0 border-cyan-400/30 bg-cyan-500/10 text-cyan-200">{{ item.attack_count }} 次</Badge>
           </div>
-          <div v-if="!defenseEvents.length && !loading" class="text-sm text-muted-foreground">
-            暂无待处置事件
+          <p class="mt-1 pl-6 text-[11px] text-muted-foreground/80">{{ item.ip_location || '未知地区' }} · {{ item.latest_time || '-' }}</p>
+          <div class="mt-2 pl-6">
+            <Badge
+              variant="outline"
+              class="text-xs"
+              :class="getDecisionColor(item.ai_decision)"
+            >
+              AI 判定: {{ getDecisionText(item.ai_decision) }}
+            </Badge>
           </div>
         </div>
-      </ScrollArea>
-    </CardContent>
-  </Card>
+        <div v-if="!defenseEvents.length && !loading" class="py-8 text-center text-sm text-muted-foreground">
+          <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-emerald-400/25 bg-emerald-500/10">
+            <ShieldAlert class="h-4 w-4 text-emerald-300" />
+          </div>
+          暂无待处置事件
+        </div>
+      </div>
+    </ScrollArea>
+  </TechCard>
 </template>
