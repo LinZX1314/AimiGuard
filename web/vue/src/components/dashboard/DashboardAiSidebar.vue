@@ -3,7 +3,7 @@ import { ref, reactive, onBeforeUnmount, computed } from 'vue'
 import { api } from '@/api/index'
 import AiMessageList from '@/components/ai/AiMessageList.vue'
 import AiChatInput from '@/components/ai/AiChatInput.vue'
-import { Bot, History, Settings, Zap, Shield, Search, AlertTriangle, X } from 'lucide-vue-next'
+import { Bot, Zap, Shield, Search, AlertTriangle, X } from 'lucide-vue-next'
 
 interface ToolCall {
   id: string
@@ -226,23 +226,6 @@ onBeforeUnmount(() => {
       <div class="flex-1 min-w-0">
         <h3 class="text-sm font-semibold text-foreground">AI 指挥中心</h3>
         <p class="text-[10px] text-cyan-400/70 font-mono">STATUS: ONLINE</p>
-      </div>
-      <!-- 历史记录和设置按钮 -->
-      <div class="flex items-center gap-1">
-        <button
-          @click="showHistory = !showHistory; showSettings = false"
-          class="w-7 h-7 rounded-md flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
-          title="历史记录"
-        >
-          <History class="w-4 h-4 text-cyan-400" />
-        </button>
-        <button
-          @click="showSettings = !showSettings; showHistory = false"
-          class="w-7 h-7 rounded-md flex items-center justify-center bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all duration-200"
-          title="设置"
-        >
-          <Settings class="w-4 h-4 text-cyan-400" />
-        </button>
       </div>
     </div>
 

@@ -8,8 +8,6 @@ import {
   Send,
   Square,
   X,
-  History,
-  Settings,
   FileUp,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
@@ -364,8 +362,6 @@ defineExpose({
                 <TooltipContent>上传演练文档</TooltipContent>
               </Tooltip>
               <input ref="fileInputRef" type="file" accept=".txt,.md,.doc,.docx,.pdf" class="hidden" @change="handleFileChange" />
-              <Button variant="ghost" size="icon" class="h-9 w-9 rounded-full text-muted-foreground"><History :size="18" /></Button>
-              <Button variant="ghost" size="icon" class="h-9 w-9 rounded-full text-muted-foreground"><Settings :size="18" /></Button>
             </TooltipProvider>
           </div>
 

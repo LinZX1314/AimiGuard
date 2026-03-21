@@ -1,3 +1,7 @@
+<script lang="ts">
+let hasTopologyLoadedOnce = false
+</script>
+
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
@@ -33,6 +37,7 @@ const draggingNodeId = ref<string | null>(null)
 const isPanningBoard = ref(false)
 const panStartClient = ref({ x: 0, y: 0 })
 const panStartScroll = ref({ left: 0, top: 0 })
+const isDataLoading = ref(!hasTopologyLoadedOnce)
 
 const nodeLabels: Record<TopologyNodeType, string> = {
   edge: 'ED',
@@ -43,10 +48,10 @@ const nodeLabels: Record<TopologyNodeType, string> = {
   honeypot: 'HP',
 }
 
-// 与参考版本保持一致，明确“核心数据中心节点”命名
+// 明确“核心数据中心节点”命名
 const coreNode = topologyState.value.nodes.find((item) => item.id === 'core-switch')
 if (coreNode) {
-  coreNode.label = '核心数据中心节点'
+  coreNode.label = '核心数据中心交换机 - SW-Core-01'
 }
 
 const summary = computed(() => getTopologySummary(topologyState.value))
@@ -130,6 +135,13 @@ function handleGlobalPointerUp() {
 onMounted(() => {
   window.addEventListener('pointermove', handleGlobalPointerMove)
   window.addEventListener('pointerup', handleGlobalPointerUp)
+  
+  if (!hasTopologyLoadedOnce) {
+    setTimeout(() => {
+      isDataLoading.value = false
+      hasTopologyLoadedOnce = true
+    }, 2000)
+  }
 })
 
 onUnmounted(() => {
@@ -140,21 +152,20 @@ onUnmounted(() => {
 
 <template>
   <div class="topology-stage-shell" aria-label="网络拓扑视图">
-    <div class="topology-stat-cards">
-      <article v-for="card in statCards" :key="card.label" class="topology-stat-card">
-        <span>{{ card.label }}</span>
-        <strong>{{ card.value }}</strong>
-      </article>
+    <div v-if="isDataLoading" class="topology-loading-view">
+      <div class="topology-loading-spinner"></div>
+      <p class="topology-loading-text">正在扫描网络拓扑图并获取节点状态...</p>
     </div>
 
-    <div class="topology-stage-grid">
-      <div
-        ref="boardRef"
-        class="topology-stage-board"
-        :class="{ 'topology-stage-board--panning': isPanningBoard }"
-        aria-label="内网信任链路与告警链路拓扑图"
-        @pointerdown="handleBoardPointerDown"
-      >
+    <template v-else>
+      <div class="topology-stage-grid">
+        <div
+          ref="boardRef"
+          class="topology-stage-board"
+          :class="{ 'topology-stage-board--panning': isPanningBoard }"
+          aria-label="内网信任链路与告警链路拓扑图"
+          @pointerdown="handleBoardPointerDown"
+        >
         <div class="topology-stage-board__canvas">
           <div class="topology-stage-board__grid" aria-hidden="true"></div>
           <svg class="topology-stage-board__svg" viewBox="0 0 920 420" preserveAspectRatio="none">
@@ -222,12 +233,43 @@ onUnmounted(() => {
           <span><i style="background: rgba(0, 255, 136, 0.8)"></i>阻断联动</span>
           <span><i style="background: rgba(255, 68, 68, 0.82)"></i>攻击链路</span>
         </div>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
+.topology-loading-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  gap: 20px;
+}
+.topology-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(6, 182, 212, 0.2);
+  border-top-color: rgb(6, 182, 212);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+.topology-loading-text {
+  font-size: 14px;
+  color: rgb(6, 182, 212);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .topology-stage-shell {
   display: flex;
   flex: 1;
@@ -235,31 +277,6 @@ onUnmounted(() => {
   gap: 12px;
   min-height: 0;
   height: 100%;
-}
-
-.topology-stat-cards {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.topology-stat-card {
-  border-radius: 12px;
-  border: 1px solid rgb(56 189 248 / 0.25);
-  background: linear-gradient(155deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.75));
-  padding: 10px 12px;
-  display: grid;
-  gap: 5px;
-}
-
-.topology-stat-card span {
-  font-size: 11px;
-  color: rgb(125 211 252 / 0.86);
-}
-
-.topology-stat-card strong {
-  font-size: 18px;
-  color: rgb(103 232 249);
 }
 
 .topology-stage-grid {
@@ -427,9 +444,4 @@ onUnmounted(() => {
   display: inline-block;
 }
 
-@media (max-width: 860px) {
-  .topology-stat-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 </style>

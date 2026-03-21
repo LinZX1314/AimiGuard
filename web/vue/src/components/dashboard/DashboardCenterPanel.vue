@@ -110,6 +110,40 @@ const honeypotLevelText = (level: string) => {
   return '低危'
 }
 
+const topologySummaryCards = computed(() => {
+  const nodes = props.payload.topology?.nodes || []
+  const links = props.payload.topology?.links || []
+  const onlineStatuses = new Set(['online', 'normal', 'active'])
+  const warningStatuses = new Set(['warning', 'alert', 'attack', 'offline'])
+
+  const onlineCount = nodes.filter((n) => onlineStatuses.has((n.status || '').toLowerCase())).length
+  const warningCount = nodes.filter((n) => warningStatuses.has((n.status || '').toLowerCase())).length
+
+  return [
+    { label: '节点总数', value: nodes.length || 0 },
+    { label: '在线节点', value: onlineCount },
+    { label: '告警节点', value: warningCount },
+    { label: '链路总数', value: links.length || 0 },
+  ]
+})
+
+const deviceHeaderData = computed(() => {
+  const nodes = props.payload.topology?.nodes || []
+  const links = props.payload.topology?.links || []
+  const coreNode = nodes.find((node) => node.id === 'core-switch') || nodes.find((node) => node.type === 'switch')
+  const honeypotNode = nodes.find((node) => node.type === 'honeypot')
+  const warningStatuses = new Set(['warning', 'alert', 'attack', 'offline'])
+  const warningCount = nodes.filter((n) => warningStatuses.has((n.status || '').toLowerCase())).length
+
+  return {
+    title: coreNode?.label || '核心数据中心交换机',
+    status: `switch · ${(coreNode?.status || 'online').toLowerCase()}`,
+    linkCount: `${links.length || 0} 条链路`,
+    honeypot: honeypotNode?.label || '境外攻击源 (Botnet)',
+    warningCount: `${warningCount} 项`,
+  }
+})
+
 onMounted(() => {
   // 启动入场动画序列
   setTimeout(() => { animationState.value.welcome = true }, 200)
@@ -171,54 +205,87 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 总览视图 -->
-      <div v-if="activeView === 'overview'" class="h-full space-y-3">
-        <!-- 欢迎横幅 -->
-        <div
-          class="transition-all duration-700 ease-out"
-          :class="animationState.welcome ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'"
-        >
-          <DashboardWelcomeBanner :top-metrics="payload.top_metrics" :loading="loading" />
-        </div>
+      <!-- 主内容区域切换 -->
+      <transition name="view-fade" mode="out-in">
+        <div class="h-full space-y-3">
+          <!-- 三个标签统一动画，但顶部信息按各自页面内容显示 -->
+          <div
+            class="transition-all duration-700 ease-out"
+            :class="animationState.welcome ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'"
+          >
+            <DashboardWelcomeBanner v-if="activeView === 'overview'" :top-metrics="payload.top_metrics" :loading="loading" />
 
-        <!-- 总览主视图（地图 + 攻击记录） -->
-        <div
-          class="h-[calc(100%-132px)] flex flex-col gap-3 transition-all duration-700 ease-out"
-          :class="animationState.overviewMap ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'"
-        >
-          <div class="map-card h-[520px] shrink-0">
-            <DashboardWorldMap
-              :recent-attacks="payload.recent_attacks"
-              :loading="loading"
-              :load-error="loadError"
-            />
-          </div>
+            <div v-else-if="activeView === 'topology'" class="topology-detail-cards" aria-label="拓扑统计卡片">
+              <article v-for="card in topologySummaryCards" :key="card.label" class="topology-detail-card">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+              </article>
+            </div>
 
-          <div class="honeypot-feed-card" v-if="honeypotFeedItems.length">
-            <div class="honeypot-feed__title">最新蜜罐捕获</div>
-            <TransitionGroup name="honeypot-list" tag="div" class="honeypot-feed__list">
-              <div class="honeypot-feed__item" v-for="item in honeypotFeedItems" :key="item.id">
-                <span class="honeypot-feed__level" :class="`level-${item.level.toLowerCase()}`">
-                  {{ honeypotLevelText(item.level) }}
-                </span>
-                <span class="honeypot-feed__ip">{{ item.ip }}</span>
-                <span class="honeypot-feed__service">{{ item.service }}</span>
-                <span class="honeypot-feed__location">{{ item.location }}</span>
-                <span class="honeypot-feed__time">{{ item.time }}</span>
+            <div v-else class="device-detail-strip" aria-label="设备面板详情卡片">
+              <div class="device-detail-strip__main">
+                <span class="device-detail-strip__eyebrow">SELECTED NODE</span>
+                <strong>{{ deviceHeaderData.title }}</strong>
+                <p>{{ deviceHeaderData.status }}</p>
               </div>
-            </TransitionGroup>
+
+              <ul class="device-detail-strip__list">
+                <li><span>核心骨干</span><strong>{{ deviceHeaderData.linkCount }}</strong></li>
+                <li><span>边界隔离</span><strong>1 条阻断</strong></li>
+                <li><span>蜜罐联动</span><strong>{{ deviceHeaderData.honeypot }}</strong></li>
+                <li><span>异常侦测</span><strong>{{ deviceHeaderData.warningCount }}</strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div
+            class="view-stage-shell transition-all duration-700 ease-out"
+            :class="animationState.overviewMap ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'"
+          >
+            <!-- 总览视图 -->
+            <template v-if="activeView === 'overview'">
+              <div class="map-card view-main-card">
+                <DashboardWorldMap
+                  :recent-attacks="payload.recent_attacks"
+                  :loading="loading"
+                  :load-error="loadError"
+                />
+              </div>
+
+              <div class="honeypot-feed-card" v-if="honeypotFeedItems.length">
+                <div class="honeypot-feed__title">最新蜜罐捕获</div>
+                <TransitionGroup name="honeypot-list" tag="div" class="honeypot-feed__list">
+                  <div class="honeypot-feed__item" v-for="item in honeypotFeedItems" :key="item.id">
+                    <span class="honeypot-feed__level" :class="`level-${item.level.toLowerCase()}`">
+                      {{ honeypotLevelText(item.level) }}
+                    </span>
+                    <span class="honeypot-feed__ip">{{ item.ip }}</span>
+                    <span class="honeypot-feed__service">{{ item.service }}</span>
+                    <span class="honeypot-feed__location">{{ item.location }}</span>
+                    <span class="honeypot-feed__time">{{ item.time }}</span>
+                  </div>
+                </TransitionGroup>
+              </div>
+            </template>
+
+            <!-- 拓扑视图：与总览保持相同主体高度，下方无内容时保留空白区 -->
+            <template v-else-if="activeView === 'topology'">
+              <div class="map-card view-main-card">
+                <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
+              </div>
+              <div class="view-empty-pad" aria-hidden="true"></div>
+            </template>
+
+            <!-- 设备视图：与总览保持相同主体高度，下方无内容时保留空白区 -->
+            <template v-else>
+              <div class="map-card view-main-card">
+                <DashboardDevicePanel :hide-summary-card="true" />
+              </div>
+              <div class="view-empty-pad" aria-hidden="true"></div>
+            </template>
           </div>
         </div>
-      </div>
-
-      <!-- 拓扑视图 -->
-      <div v-else-if="activeView === 'topology'" class="h-full">
-        <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
-      </div>
-
-      <div v-else class="h-full">
-        <DashboardDevicePanel />
-      </div>
+      </transition>
     </div>
   </div>
 </template>
@@ -229,6 +296,132 @@ onUnmounted(() => {
   border: 1px solid hsl(var(--border) / 0.45);
   background: linear-gradient(160deg, hsl(var(--card) / 0.78), hsl(var(--card) / 0.58));
   padding: 8px;
+}
+
+.view-stage-shell {
+  height: calc(100% - 132px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.view-main-card {
+  height: 520px;
+  flex-shrink: 0;
+}
+
+.view-empty-pad {
+  flex: 1;
+  min-height: 0;
+}
+
+.topology-detail-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.topology-detail-card {
+  border-radius: 12px;
+  border: 1px solid rgb(56 189 248 / 0.25);
+  background: linear-gradient(155deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.75));
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.topology-detail-card span {
+  font-size: 11px;
+  color: rgb(125 211 252 / 0.86);
+}
+
+.topology-detail-card strong {
+  font-size: 18px;
+  color: rgb(103 232 249);
+}
+
+.device-detail-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-radius: 12px;
+  border: 1px solid rgb(56 189 248 / 0.22);
+  background: linear-gradient(160deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.7));
+  padding: 10px 12px;
+}
+
+.device-detail-strip__main {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.device-detail-strip__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(56 189 248 / 0.3);
+  background: rgb(14 116 144 / 0.22);
+  color: rgb(125 211 252);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.device-detail-strip__main strong {
+  color: rgb(224 242 254);
+  font-size: 14px;
+}
+
+.device-detail-strip__main p {
+  color: rgb(148 163 184);
+  font-size: 12px;
+}
+
+.device-detail-strip__list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device-detail-strip__list li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.device-detail-strip__list span {
+  color: rgb(148 163 184);
+  font-size: 11px;
+}
+
+.device-detail-strip__list strong {
+  color: rgb(165 243 252);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .topology-detail-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .device-detail-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .device-detail-strip__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .honeypot-feed-card {
@@ -374,5 +567,18 @@ onUnmounted(() => {
   .honeypot-feed__time {
     display: none;
   }
+}
+
+.view-fade-enter-active,
+.view-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.view-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.view-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>

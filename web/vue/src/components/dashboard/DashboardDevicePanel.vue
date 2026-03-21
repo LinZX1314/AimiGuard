@@ -3,6 +3,12 @@ import { computed, ref } from 'vue'
 import DashboardSwitchManager from './DashboardSwitchManager.vue'
 import { createTopologyFixture, getTopologySummary } from '@/lib/topology-state'
 
+const props = withDefaults(defineProps<{
+  hideSummaryCard?: boolean
+}>(), {
+  hideSummaryCard: false,
+})
+
 const topologyState = ref(createTopologyFixture())
 const summary = computed(() => getTopologySummary(topologyState.value))
 const coreNode = computed(() => topologyState.value.nodes.find((node) => node.id === 'core-switch'))
@@ -11,8 +17,8 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
 
 <template>
   <div class="device-panel-shell" aria-label="设备面板视图">
-    <div class="device-panel-grid">
-      <div class="device-panel-card">
+    <div class="device-panel-grid" :class="{ 'device-panel-grid--single': props.hideSummaryCard }">
+      <div v-if="!props.hideSummaryCard" class="device-panel-card">
         <span class="device-panel-card__eyebrow">SELECTED NODE</span>
         <strong>{{ coreNode?.label || '核心数据中心节点' }}</strong>
         <p>switch · {{ coreNode?.status || 'online' }}</p>
@@ -43,6 +49,10 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
   gap: 12px;
   width: 100%;
   min-height: 0;
+}
+
+.device-panel-grid--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .device-panel-card {

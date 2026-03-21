@@ -1,3 +1,7 @@
+<script lang="ts">
+let hasWorldMapLoadedOnce = false
+</script>
+
 <script setup lang="ts">
 import type { FeatureCollection, Geometry } from 'geojson'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -51,7 +55,7 @@ const props = defineProps<{
 }>()
 
 const mapShellRef = ref<HTMLElement>()
-const mapReady = ref(false)
+const mapReady = ref(hasWorldMapLoadedOnce)
 
 const COUNTRY_TRANSLATIONS: Record<string, string> = {
   China: '中国',
@@ -239,9 +243,14 @@ const handleGeoEnter = (event: MouseEvent, name?: string) => {
 }
 
 onMounted(() => {
-  mapLoaderTimer = window.setTimeout(() => {
+  if (!hasWorldMapLoadedOnce) {
+    mapLoaderTimer = window.setTimeout(() => {
+      mapReady.value = true
+      hasWorldMapLoadedOnce = true
+    }, 900)
+  } else {
     mapReady.value = true
-  }, 900)
+  }
 
   if (props.recentAttacks.length > 0) {
     const first = props.recentAttacks[0]
@@ -262,6 +271,12 @@ onMounted(() => {
 watch(
   () => props.loading,
   (isLoading) => {
+    // 地图只在首屏第一次加载时展示 loading，后续切换页面不再重复出现
+    if (hasWorldMapLoadedOnce) {
+      mapReady.value = true
+      return
+    }
+
     if (mapLoaderTimer) {
       window.clearTimeout(mapLoaderTimer)
     }
@@ -271,6 +286,7 @@ watch(
     }
     mapLoaderTimer = window.setTimeout(() => {
       mapReady.value = true
+      hasWorldMapLoadedOnce = true
     }, 700)
   },
 )

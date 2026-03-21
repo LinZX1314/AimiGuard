@@ -18,6 +18,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Activity } from 'lucide-vue-next'
 import TechCard from './shared/TechCard.vue'
 
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { TooltipComponent } from 'echarts/components'
+import 'echarts-wordcloud'
+import VChart from 'vue-echarts'
+
+use([CanvasRenderer, TooltipComponent])
+
 ChartJS.register(
   Title,
   Tooltip,
@@ -121,29 +129,45 @@ const attackTypeWords = computed(() => {
   ] as Array<[string, number]>
 })
 
-const cloudWords = computed(() => {
-  const slots = [
-    { left: '6%', top: '14%' },
-    { left: '40%', top: '6%' },
-    { left: '67%', top: '18%' },
-    { left: '14%', top: '42%' },
-    { left: '50%', top: '40%' },
-    { left: '25%', top: '66%' },
-    { left: '73%', top: '62%' },
-    { left: '9%', top: '74%' },
-    { left: '56%', top: '76%' },
-    { left: '34%', top: '26%' },
+const wordCloudOption = computed(() => {
+  // 定义一组柔和的颜色，符合暗色主题
+  const colors = [
+    '#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb923c',
+    '#fbbf24', '#a3e635', '#2dd4bf', '#22d3ee', '#8b5cf6'
   ]
-  const max = Math.max(...attackTypeWords.value.map((item) => item[1]), 1)
-
-  return attackTypeWords.value.map(([label, count], idx) => ({
-    label,
-    size: 12 + Math.round((count / max) * 12),
-    weight: 520 + Math.round((count / max) * 260),
-    left: slots[idx]?.left || `${10 + (idx * 7) % 80}%`,
-    top: slots[idx]?.top || `${8 + (idx * 12) % 75}%`,
-    rotate: idx % 3 === 0 ? -9 : idx % 3 === 1 ? 0 : 9,
-  }))
+  return {
+    tooltip: { show: true },
+    series: [
+      {
+        type: 'wordCloud',
+        shape: 'circle',
+        keepAspect: false,
+        left: 'center',
+        top: 'center',
+        width: '100%',
+        height: '100%',
+        right: null,
+        bottom: null,
+        sizeRange: [12, 32],
+        rotationRange: [0, 0], // 不旋转，正常的水平显示
+        rotationStep: 45,
+        gridSize: 8,
+        drawOutOfBound: false,
+        layoutAnimation: true,
+        textStyle: {
+          fontWeight: 'bold',
+          color: function () {
+            // 随机选取颜色
+            return colors[Math.floor(Math.random() * colors.length)]
+          }
+        },
+        data: attackTypeWords.value.map(([name, value]) => ({
+          name,
+          value,
+        }))
+      }
+    ]
+  }
 })
 
 function getChainStatus(key: string): boolean {
@@ -194,21 +218,8 @@ function getChainStatus(key: string): boolean {
             <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
           </div>
 
-          <div class="attack-cloud mt-2" aria-label="攻击类型词云">
-            <span
-              v-for="word in cloudWords"
-              :key="word.label"
-              class="attack-cloud__item"
-              :style="{
-                left: word.left,
-                top: word.top,
-                fontSize: `${word.size}px`,
-                fontWeight: `${word.weight}`,
-                transform: `rotate(${word.rotate}deg)`,
-              }"
-            >
-              {{ word.label }}
-            </span>
+          <div class="h-40 mt-3 rounded-lg border border-border/60 bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
+            <v-chart class="h-full w-full" :option="wordCloudOption" autoresize />
           </div>
         </TechCard>
 
@@ -227,19 +238,4 @@ function getChainStatus(key: string): boolean {
 </template>
 
 <style scoped>
-.attack-cloud {
-  position: relative;
-  height: 130px;
-  border-radius: 10px;
-  border: 1px solid rgb(34 211 238 / 0.2);
-  background: radial-gradient(circle at 45% 45%, rgb(8 145 178 / 0.2), transparent 62%);
-  overflow: hidden;
-}
-
-.attack-cloud__item {
-  position: absolute;
-  color: rgb(125 211 252 / 0.95);
-  text-shadow: 0 0 10px rgb(8 145 178 / 0.35);
-  white-space: nowrap;
-}
 </style>

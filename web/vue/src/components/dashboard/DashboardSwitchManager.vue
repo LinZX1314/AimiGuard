@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { applySwitchPortConfig, chunkPortsForDisplay, createDefaultSwitchPorts, type SwitchPort } from '@/lib/centerPanelState'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 interface SwitchStatusItem {
   host: string
@@ -201,32 +202,74 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="selectedPort" class="switch-modal">
-      <div class="switch-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="switch-port-title">
-        <div class="switch-modal__head">
-          <h4 id="switch-port-title">{{ selectedPort.name }} 配置</h4>
-          <button type="button" class="switch-modal__close" @click="closeModal">关闭</button>
-        </div>
-        <div class="switch-modal__body">
-          <label class="switch-modal__field">
-            <span>Port Status (Admin)</span>
-            <div class="switch-toggle-group">
-              <button type="button" class="switch-toggle" :class="{ 'switch-toggle--active': editStatus === 'up' }" @click="editStatus = 'up'">UP (Enable)</button>
-              <button type="button" class="switch-toggle switch-toggle--danger" :class="{ 'switch-toggle--active': editStatus === 'admin-down' }" @click="editStatus = 'admin-down'">DOWN (Shutdown)</button>
+    <!-- replace switch-modal with Dialog from UI -->
+    <Dialog :open="!!selectedPort" @update:open="(val) => { if (!val) closeModal() }">
+      <DialogContent class="sm:max-w-[425px] border-cyan-500/30 bg-slate-950/95 backdrop-blur-xl text-cyan-50">
+        <DialogHeader>
+          <DialogTitle>{{ selectedPort?.name }} 配置</DialogTitle>
+          <DialogDescription class="text-cyan-200/60">
+            修改当前物理端口的状态和 VLAN 划分。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="grid gap-6 py-4" v-if="selectedPort">
+          <label class="grid gap-2">
+            <span class="text-sm font-medium text-cyan-200">Port Status (Admin)</span>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="flex-1 py-2 px-3 rounded-md transition-all duration-200 text-sm font-medium border"
+                :class="editStatus === 'up' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'"
+                @click="editStatus = 'up'"
+              >
+                UP (Enable)
+              </button>
+              <button
+                type="button"
+                class="flex-1 py-2 px-3 rounded-md transition-all duration-200 text-sm font-medium border"
+                :class="editStatus === 'admin-down' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'"
+                @click="editStatus = 'admin-down'"
+              >
+                DOWN (Shutdown)
+              </button>
             </div>
           </label>
-          <label class="switch-modal__field">
-            <span>Access VLAN</span>
-            <input v-model.number="editVlan" type="number" min="1" max="4094" />
+
+          <label class="grid gap-2">
+            <span class="text-sm font-medium text-cyan-200">Access VLAN</span>
+            <input
+              v-model.number="editVlan"
+              type="number"
+              min="1"
+              max="4094"
+              class="w-full rounded-md border border-cyan-500/30 bg-slate-900/80 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all font-mono"
+            />
           </label>
-          <div class="switch-modal__stats">
-            <div><span>Speed</span><strong>{{ selectedPort.speed }}</strong></div>
-            <div><span>Inbound / Outbound</span><strong>{{ selectedPort.tx }} Mbps / {{ selectedPort.rx }} Mbps</strong></div>
+
+          <div class="grid grid-cols-2 gap-3 p-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20">
+            <div class="flex flex-col gap-1">
+              <span class="text-[10px] text-cyan-200/60 uppercase tracking-wider">Speed</span>
+              <strong class="text-sm text-cyan-400 font-mono">{{ selectedPort.speed }}</strong>
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="text-[10px] text-cyan-200/60 uppercase tracking-wider">Inbound / Outbound</span>
+              <strong class="text-sm text-cyan-400 font-mono">{{ selectedPort.tx }} M / {{ selectedPort.rx }} M</strong>
+            </div>
           </div>
-          <button type="button" class="switch-modal__save" :disabled="isSaving" @click="saveConfig">{{ isSaving ? '正在写入 Running-Config...' : '应用并保存配置' }}</button>
         </div>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <button
+            type="button"
+            class="w-full justify-center rounded-md bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 hover:text-cyan-300 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="isSaving"
+            @click="saveConfig"
+          >
+            {{ isSaving ? '正在写入 Running-Config...' : '应用并保存配置' }}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
