@@ -183,7 +183,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="flex-1 relative overflow-hidden bg-gradient-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm rounded-lg border border-border/20">
+  <div ref="containerRef" class="flex-1 relative overflow-hidden rounded-lg border border-border/20">
     <!-- 主内容区域 -->
     <div class="h-full p-3 md:p-3.5">
       <!-- Topbar: 仅保留当前页面视图切换 -->
@@ -252,10 +252,15 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div class="honeypot-feed-card" v-if="honeypotFeedItems.length">
+              <div class="honeypot-feed-card">
                 <div class="honeypot-feed__title">最新蜜罐捕获</div>
                 <TransitionGroup name="honeypot-list" tag="div" class="honeypot-feed__list">
-                  <div class="honeypot-feed__item" v-for="item in honeypotFeedItems" :key="item.id">
+                  <div
+                    class="honeypot-feed__item"
+                    v-for="(item, idx) in honeypotFeedItems"
+                    :key="item.id"
+                    :style="{ animationDelay: `${idx * 120}ms` }"
+                  >
                     <span class="honeypot-feed__level" :class="`level-${item.level.toLowerCase()}`">
                       {{ honeypotLevelText(item.level) }}
                     </span>
@@ -265,6 +270,10 @@ onUnmounted(() => {
                     <span class="honeypot-feed__time">{{ item.time }}</span>
                   </div>
                 </TransitionGroup>
+                <!-- 无数据时的占位 -->
+                <div v-if="!honeypotFeedItems.length" class="honeypot-feed__empty">
+                  等待捕获数据…
+                </div>
               </div>
             </template>
 
@@ -294,7 +303,7 @@ onUnmounted(() => {
 .map-card {
   border-radius: 12px;
   border: 1px solid hsl(var(--border) / 0.45);
-  background: linear-gradient(160deg, hsl(var(--card) / 0.78), hsl(var(--card) / 0.58));
+  background: transparent;
   padding: 8px;
 }
 
@@ -478,6 +487,29 @@ onUnmounted(() => {
   color: rgb(224 242 254);
   padding: 7px 10px;
   box-shadow: 0 10px 28px rgb(2 6 23 / 0.45);
+  /* 逐条弹入动画 */
+  animation: honeypot-item-pop 0.4s ease both;
+}
+
+@keyframes honeypot-item-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.honeypot-feed__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  font-size: 11px;
+  color: rgb(125 211 252 / 0.5);
+  letter-spacing: 1px;
 }
 
 .honeypot-feed__level {

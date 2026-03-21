@@ -66,12 +66,23 @@ body::after {
   inset: 0;
   pointer-events: none;
   z-index: -2;
+  opacity: 0;
   /* 亮色模式：减弱光晕强度，避免中心区域发白 */
   background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 72%);
+  animation: none;
+}
+
+html.dashboard-route-active body::after {
+  opacity: 1;
   animation: ambient-glow 8s ease-in-out infinite alternate;
 }
 
-.dark body::after {
+html.ai-chat-background-disabled body::after {
+  opacity: 0;
+  animation: none;
+}
+
+html.dashboard-route-active.dark body::after {
   /* 暗色模式：赛博朋克深邃青蓝光晕，扩大范围，增强可见度 */
   background: radial-gradient(circle at 50% 50%, rgba(0, 229, 255, 0.25) 0%, transparent 80%);
 }
@@ -81,34 +92,65 @@ body::after {
   100% { transform: scale(1.2); opacity: 1; }
 }
 
-/* 全局网格背景 - 优雅的空间感 */
-body::before {
-  content: '';
+/* 3D 透视网格地板 - 科幻虚拟地台效果 */
+.perspective-floor {
   position: fixed;
-  inset: -100px; /* 多预留空间给平移动画 */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50vh;
+  perspective: 1000px;
+  z-index: 0;
   pointer-events: none;
-  z-index: -1;
-  /* 基础网格大小 */
-  background-size: 50px 50px;
-  /* 亮色模式网格颜色：降低线条对比度，减少视觉噪声 */
-  background-image: linear-gradient(to right, rgba(51, 65, 85, 0.06) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(51, 65, 85, 0.06) 1px, transparent 1px);
-  /* 中心辐射渐变遮罩，边缘模糊消失 */
-  mask-image: radial-gradient(circle at center, black 60%, transparent 95%);
-  -webkit-mask-image: radial-gradient(circle at center, black 60%, transparent 95%);
-  transition: background-image 0.5s ease;
-  animation: grid-pan 20s linear infinite;
+  overflow: hidden;
+  /* 默认隐藏，通过动画渐入 */
+  opacity: 0;
+  animation: floor-fade-in 1.5s ease-out forwards;
+  mask-image: linear-gradient(to top, black 10%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to top, black 10%, transparent 95%);
 }
 
-.dark body::before {
-  /* 暗色模式网格颜色：黑灰色的暗纹网格，交织青色微光，增加透明度使其更加明显 */
-  background-image: linear-gradient(to right, rgba(0, 229, 255, 0.2) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 229, 255, 0.2) 1px, transparent 1px);
+html.dashboard-route-active .perspective-floor {
+  animation: floor-fade-in 1.2s ease-out forwards;
 }
 
-@keyframes grid-pan {
-  from { transform: translateY(0); }
-  to { transform: translateY(50px); }
+/* 网格渐入动画 - 平滑不透明度过渡 */
+@keyframes floor-fade-in {
+  from { opacity: 0; }
+  to { opacity: 0.92; }
+}
+
+.perspective-floor__grid {
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-size: 60px 60px;
+  background-position: 0 0;
+  /* 亮色模式：低对比度网格线 */
+  background-image:
+    linear-gradient(to right, rgba(51, 65, 85, 0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(51, 65, 85, 0.18) 1px, transparent 1px);
+  /* 提高模糊，禁用炫光(drop-shadow) */
+  filter: blur(1.2px);
+  /* 使用 background-position 动画代替 transform 位移，彻底消除接缝 */
+  transform: rotateX(60deg);
+  animation: grid-scroll 4s linear infinite;
+}
+
+.dark .perspective-floor__grid {
+  /* 暗色模式：赛博青色网格线 */
+  background-image:
+    linear-gradient(to right, rgba(0, 212, 255, 0.30) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 212, 255, 0.30) 1px, transparent 1px);
+  filter: blur(1.2px);
+}
+
+/* 用 background-position 实现完美无缝循环：每帧移动整个网格单元 */
+@keyframes grid-scroll {
+  from { background-position: 0 0; }
+  to { background-position: 0 60px; }
 }
 
 /* -------------------------------------------------------------------------- */

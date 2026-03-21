@@ -525,11 +525,13 @@ onMounted(async () => {
   else if (context_type && context_id) await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
 })
 
-onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel() })
+onBeforeUnmount(() => {
+  stopGenerating(); stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel()
+})
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-64px)] bg-background/60 backdrop-blur-sm text-foreground overflow-hidden">
+  <div class="flex h-[calc(100vh-64px)] bg-transparent text-foreground overflow-hidden">
     <AiSessionSidebar
       :sessions="sessions"
       :current-session="currentSession"

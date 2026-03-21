@@ -179,7 +179,7 @@ function getChainStatus(key: string): boolean {
   <aside class="min-h-0 overflow-hidden pr-1">
     <ScrollArea class="h-full">
       <div class="space-y-3 pr-2">
-        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan">
+        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan" class="tech-card-dashboard-clear">
           <div class="space-y-1.5">
             <div class="grid grid-cols-2 gap-1.5">
               <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
@@ -190,7 +190,7 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="实时攻击趋势" glow-color="cyan">
+        <TechCard title="实时攻击趋势" glow-color="cyan" class="tech-card-dashboard-clear">
           <div class="h-36">
             <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
             <Skeleton v-else-if="loading" class="h-full w-full" />
@@ -198,7 +198,7 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="热门攻击服务" glow-color="orange">
+        <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear">
           <div class="h-36">
             <Bar
               v-if="payload.hot_services.length"
@@ -223,7 +223,7 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="防御链路状态" glow-color="green">
+        <TechCard title="防御链路状态" glow-color="green" class="tech-card-dashboard-clear">
           <div class="space-y-1.5">
             <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
               <span class="text-sm text-muted-foreground">{{ item.label }}</span>

@@ -80,7 +80,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full w-full overflow-hidden p-2 md:p-3">
+  <div class="dashboard-screen h-full w-full overflow-hidden p-2 md:p-3">
     <div class="grid h-full grid-cols-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)_330px]">
       <!-- 左栏：态势摘要 -->
       <DashboardMetricSidebar :payload="payload" :loading="loading" />
@@ -93,3 +93,46 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.dashboard-screen :deep(.tech-card-dashboard-clear) {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.dashboard-screen :deep(.tech-card-dashboard-clear)::before {
+  opacity: 0.1;
+}
+
+.dashboard-screen :deep(.dashboard-kpi-shell),
+.dashboard-screen :deep(.world-map-shell),
+.dashboard-screen :deep(.topology-stage-board),
+.dashboard-screen :deep(.device-panel-card),
+.dashboard-screen :deep(.topology-detail-card),
+.dashboard-screen :deep(.device-detail-strip) {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.dashboard-screen :deep(.dashboard-kpi-shell::before) {
+  opacity: 0.08;
+}
+
+.dashboard-screen :deep(.kpi-chip),
+.dashboard-screen :deep(.topology-stage-board__legend),
+.dashboard-screen :deep(.world-map-shell__status),
+.dashboard-screen :deep(.device-panel-card__eyebrow),
+.dashboard-screen :deep(.device-detail-strip__eyebrow),
+.dashboard-screen :deep(.topology-stage-board__grid),
+.dashboard-screen :deep(.world-map-shell__loading) {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.dashboard-screen :deep(.map-card),
+.dashboard-screen :deep(.view-main-card) {
+  border-color: hsl(var(--border) / 0.3);
+}
+</style>

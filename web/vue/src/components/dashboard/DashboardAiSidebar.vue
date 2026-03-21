@@ -270,7 +270,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-card/30 border border-border/60 rounded-lg overflow-hidden relative backdrop-blur-2xl">
+  <div class="h-full flex flex-col bg-transparent border border-border/60 rounded-lg overflow-hidden relative">
     <!-- Header - 科技风设计 + 历史记录/设置按钮 -->
     <div class="flex items-center gap-3 px-3 py-2.5 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-cyan-500/5">
       <div class="relative">
