@@ -41,6 +41,7 @@ interface Message {
 const props = defineProps<{
   messages: Message[]
   loading: boolean
+  sending?: boolean
 }>()
 
 const chatEnd = ref<HTMLElement | null>(null)
@@ -89,7 +90,7 @@ function messageKey(message: Message, index: number): string {
   <ScrollArea ref="scrollAreaRef" class="flex-1 w-full pb-36 h-full">
     <div class="max-w-4xl w-full mx-auto flex flex-col px-4 pt-6 pb-5">
       <!-- Loading State -->
-      <div v-if="loading" class="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-4 py-20">
+      <div v-if="loading && !messages.length" class="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-4 py-20">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <span>加载对话中...</span>
       </div>
@@ -192,7 +193,51 @@ function messageKey(message: Message, index: number): string {
           </div>
         </div>
         <div ref="chatEnd" class="h-1" />
+
+        <div v-if="sending" class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300">
+          <Avatar class="mt-1 shadow-md border border-border/50 shrink-0">
+            <AvatarImage src="" />
+            <AvatarFallback class="bg-primary/10 text-primary">
+              <Bot :size="18" />
+            </AvatarFallback>
+          </Avatar>
+          <div class="px-4 py-3 rounded-2xl bg-muted/40 border border-border/50 shadow-sm inline-flex items-center gap-1.5">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="ml-1 text-xs text-muted-foreground">AI 正在回复...</span>
+          </div>
+        </div>
       </div>
     </div>
   </ScrollArea>
 </template>
+
+<style scoped>
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(56 189 248 / 0.8);
+  animation: typing-bounce 1s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+</style>

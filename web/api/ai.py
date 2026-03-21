@@ -2,6 +2,7 @@
 AI Module - AI Chat endpoints（含上下文/会话持久化与 Tool Use 支持）
 """
 import json
+import base64
 import re
 import threading
 from flask import Blueprint, request, g, Response, stream_with_context
@@ -35,6 +36,96 @@ from collections import OrderedDict
 _MAX_SESSIONS = 100  # 最大缓存的会话数
 _chat_sessions: OrderedDict[int, list] = OrderedDict()
 _session_lock = threading.Lock()
+
+_TEXT_EXTENSIONS = {
+    '.txt', '.md', '.json', '.log', '.csv', '.yaml', '.yml', '.xml', '.html', '.js', '.ts', '.py', '.java', '.sh', '.bat'
+}
+
+
+def _is_text_like_file(filename: str, mimetype: str) -> bool:
+    if (mimetype or '').startswith('text/'):
+        return True
+    lower = (filename or '').lower()
+    return any(lower.endswith(ext) for ext in _TEXT_EXTENSIONS)
+
+
+def _parse_chat_payload():
+    """兼容 JSON 与 multipart/form-data（原生文件上传）请求。"""
+    content_type = (request.content_type or '').lower()
+    if 'multipart/form-data' in content_type:
+        body = {
+            'message': (request.form.get('message') or '').strip(),
+            'session_id': request.form.get('session_id'),
+            'context_type': request.form.get('context_type'),
+            'context_id': request.form.get('context_id'),
+            'drill_mode': str(request.form.get('drill_mode', '')).strip().lower() in ('1', 'true', 'yes', 'on'),
+        }
+        files = request.files.getlist('files')
+        return body, files
+
+    return _body(), []
+
+
+def _normalize_uploaded_files(message: str, files: list):
+    """将上传文件整理成：1) 持久化文本 2) OpenAI 多模态内容。"""
+    if not files:
+        return message, None
+
+    safe_message = (message or '').strip() or '请分析我上传的文件/图片。'
+    openai_content = [
+        {'type': 'text', 'text': safe_message}
+    ]
+
+    file_summaries = []
+    text_blocks = []
+
+    for storage in files[:6]:
+        if not storage:
+            continue
+
+        filename = (getattr(storage, 'filename', None) or 'unnamed').strip()
+        mimetype = (getattr(storage, 'mimetype', None) or 'application/octet-stream').strip()
+        raw = storage.read() or b''
+        storage.stream.seek(0)
+
+        if not raw:
+            file_summaries.append(f'- {filename}: 空文件')
+            continue
+
+        size_kb = max(1, len(raw) // 1024)
+        file_summaries.append(f'- {filename} ({mimetype}, {size_kb}KB)')
+
+        if mimetype.startswith('image/'):
+            # 后端原生接收文件，并在服务端转换为模型可读的 image_url
+            b64 = base64.b64encode(raw).decode('utf-8')
+            openai_content.append({
+                'type': 'image_url',
+                'image_url': {
+                    'url': f'data:{mimetype};base64,{b64}'
+                }
+            })
+            continue
+
+        if _is_text_like_file(filename, mimetype):
+            try:
+                decoded = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                decoded = raw.decode('gbk', errors='ignore')
+
+            clipped = decoded[:80_000]
+            if len(decoded) > 80_000:
+                clipped += '\n\n...[文件内容过长，已截断]'
+            text_blocks.append(f'【文件内容：{filename}】\n{clipped}')
+            continue
+
+    summary_text = '[已上传文件]\n' + '\n'.join(file_summaries)
+    openai_content.append({'type': 'text', 'text': summary_text})
+
+    if text_blocks:
+        openai_content.append({'type': 'text', 'text': '\n\n'.join(text_blocks)})
+
+    persisted_message = f"{safe_message}\n\n{summary_text}"
+    return persisted_message, openai_content
 
 
 def _get_system_context() -> str:
@@ -137,11 +228,13 @@ def ai_chat_stream():
     """
     AI 聊天流式接口（增加持久化深度和上下文感知）
     """
-    body         = _body()
+    body, uploaded_files = _parse_chat_payload()
     message      = body.get('message', '').strip()
     session_id   = body.get('session_id')
     context_type = body.get('context_type')
     context_id   = body.get('context_id')
+
+    message, openai_content = _normalize_uploaded_files(message, uploaded_files)
 
     # 检查 AI 是否启用
     cfg_now = _load_cfg()
@@ -185,7 +278,12 @@ def ai_chat_stream():
             _chat_sessions[sid] = history
 
     # 2. 保存并追加用户消息
-    history.append({'role': 'user', 'content': message, 'ts': _now_iso()})
+    history.append({
+        'role': 'user',
+        'content': message,
+        'openai_content': openai_content,
+        'ts': _now_iso()
+    })
     AiModel.save_message(sid, 'user', message)
 
     def generate():

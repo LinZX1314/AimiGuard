@@ -59,6 +59,14 @@ interface Message {
 
 interface Session { id: number; title: string; created_at: string }
 
+interface ChatAttachmentPayload {
+  name: string
+  type: string
+  size: number
+  isImage: boolean
+  textContent?: string
+}
+
 // ─── 通用状态 ────────────────────────────────────────────────────────────────
 const sessions = ref<Session[]>([])
 const messages = ref<Message[]>([])
@@ -277,12 +285,46 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
   return normalized
 }
 
+function composeTextWithAttachments(text: string, attachments: ChatAttachmentPayload[] = []): string {
+  if (!attachments.length) return text
+
+  const header = attachments
+    .map((item, index) => `${index + 1}. ${item.name} (${item.type || 'unknown'}, ${Math.max(1, Math.ceil(item.size / 1024))}KB)`)
+    .join('\n')
+
+  const textParts = attachments
+    .filter((item) => !item.isImage && item.textContent)
+    .map((item) => `【文件内容：${item.name}】\n${item.textContent}`)
+    .join('\n\n')
+
+  const imageTips = attachments
+    .filter((item) => item.isImage)
+    .map((item) => `- ${item.name}`)
+    .join('\n')
+
+  const blocks = [
+    text,
+    `\n\n[已附加文件]\n${header}`,
+  ]
+
+  if (textParts) {
+    blocks.push(`\n\n${textParts}`)
+  }
+
+  if (imageTips) {
+    blocks.push(`\n\n[已附加图片]\n${imageTips}\n请基于对话上下文给出处理建议。`)
+  }
+
+  return blocks.join('')
+}
+
 // Send
 async function send(text: string, extraParams: any = {}, documentContent?: string) {
   if (!text && !documentContent) return
   if (sending.value) return
 
   const isDrill = !!documentContent
+  const attachmentFiles = (extraParams?.files || []) as File[]
   if (isDrill) {
     drillLog.value = []; drillReport.value = ''; drillMode.value = true; drillPanelOpen.value = true
     drillStep.value = 0; drillFindingCount.value = 0; drillElapsed.value = 0
@@ -290,7 +332,10 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     startDrillTimer()
   }
 
-  const displayText = isDrill ? `【演练文档】\n${documentContent}` : text
+  const attachments = (extraParams?.attachments || []) as ChatAttachmentPayload[]
+  const baseText = (text || '').trim() || (attachmentFiles.length ? '请分析我上传的文件/图片。' : '')
+  const composedText = isDrill ? text : composeTextWithAttachments(baseText, attachments)
+  const displayText = isDrill ? `【演练文档】\n${documentContent}` : composedText
   messages.value.push({ role: 'user', content: displayText })
   sending.value = true
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
@@ -300,16 +345,40 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   activeChatController.value = controller
 
   try {
-    const body: any = { message: isDrill ? `【演练文档】${documentContent}` : text, drill_mode: isDrill, ...extraParams }
-    if (currentSession.value && currentSession.value !== -1) body.session_id = currentSession.value
-
+    const requestText = isDrill ? `【演练文档】${documentContent}` : baseText
     const token = localStorage.getItem('token')
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const response = await fetch('/api/v1/ai/chat/stream', {
-      method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', signal: controller.signal
-    })
+    let response: Response
+    if (!isDrill && attachmentFiles.length) {
+      const form = new FormData()
+      form.append('message', requestText)
+      form.append('drill_mode', 'false')
+      if (currentSession.value && currentSession.value !== -1) {
+        form.append('session_id', String(currentSession.value))
+      }
+      if (extraParams?.context_type) form.append('context_type', String(extraParams.context_type))
+      if (extraParams?.context_id) form.append('context_id', String(extraParams.context_id))
+      attachmentFiles.forEach((file) => form.append('files', file))
+
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST',
+        headers,
+        body: form,
+        credentials: 'include',
+        signal: controller.signal,
+      })
+    } else {
+      headers['Content-Type'] = 'application/json'
+      const body: any = { message: requestText, drill_mode: isDrill, ...extraParams }
+      delete body.attachments
+      delete body.files
+      if (currentSession.value && currentSession.value !== -1) body.session_id = currentSession.value
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', signal: controller.signal
+      })
+    }
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
     const reader = response.body.getReader()
@@ -438,14 +507,6 @@ function handleNewChat() {
   messages.value = []; currentSession.value = -1; drillMode.value = false
   drillLog.value = []; drillReport.value = ''; stopDrillTimer()
   sessions.value = [{ id: -1, title: '新对话', created_at: new Date().toLocaleString() }, ...sessions.value.filter(s => s.id !== -1)]
-}
-
-async function handleFileUpload(file: File) {
-  if (!file) return
-  try {
-    const text = await file.text()
-    await send(`请分析并执行以下安全演练文档：\n${file.name}`, {}, text)
-  } catch(e: any) { console.error('文件读取失败:', e) }
 }
 
 function openReportWindow() {
@@ -759,14 +820,13 @@ onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSyn
         </div>
       </div>
 
-      <AiMessageList :messages="messages" :loading="loading" />
+      <AiMessageList :messages="messages" :loading="loading" :sending="sending" />
       <AiChatInput
         :sending="sending"
         :tts-enabled="ttsEnabled"
         @send="send"
         @stop="stopGenerating"
         @toggle-tts="toggleTts"
-        @upload="handleFileUpload"
       />
     </main>
   </div>

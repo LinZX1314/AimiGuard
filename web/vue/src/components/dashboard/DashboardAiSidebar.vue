@@ -38,6 +38,14 @@ interface Session {
   created_at: string
 }
 
+interface ChatAttachmentPayload {
+  name: string
+  type: string
+  size: number
+  isImage: boolean
+  textContent?: string
+}
+
 // 快捷输入选项
 const quickPrompts = [
   { icon: Shield, label: '安全态势分析', text: '分析当前整体安全态势' },
@@ -118,9 +126,41 @@ async function clearHistory() {
   messages.value = []
 }
 
-async function send(text: string) {
-  if (!text || sending.value) return
-  messages.value.push({ role: 'user', content: text })
+function composeTextWithAttachments(text: string, attachments: ChatAttachmentPayload[] = []): string {
+  if (!attachments.length) return text
+
+  const header = attachments
+    .map((item, index) => `${index + 1}. ${item.name} (${item.type || 'unknown'}, ${Math.max(1, Math.ceil(item.size / 1024))}KB)`)
+    .join('\n')
+
+  const textParts = attachments
+    .filter((item) => !item.isImage && item.textContent)
+    .map((item) => `【文件内容：${item.name}】\n${item.textContent}`)
+    .join('\n\n')
+
+  const imageTips = attachments
+    .filter((item) => item.isImage)
+    .map((item) => `- ${item.name}`)
+    .join('\n')
+
+  const blocks = [
+    text,
+    `\n\n[已附加文件]\n${header}`,
+  ]
+
+  if (textParts) blocks.push(`\n\n${textParts}`)
+  if (imageTips) blocks.push(`\n\n[已附加图片]\n${imageTips}\n请基于对话上下文给出处理建议。`)
+
+  return blocks.join('')
+}
+
+async function send(text: string, extra: any = {}) {
+  const attachmentFiles = (extra?.files || []) as File[]
+  const attachments = (extra?.attachments || []) as ChatAttachmentPayload[]
+  const baseText = (text || '').trim() || (attachmentFiles.length ? '请分析我上传的文件/图片。' : '')
+  const composedText = composeTextWithAttachments(baseText, attachments)
+  if (!composedText || sending.value) return
+  messages.value.push({ role: 'user', content: composedText })
   sending.value = true
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
   messages.value.push(assistantMsg as any)
@@ -130,19 +170,35 @@ async function send(text: string) {
 
   try {
     const token = localStorage.getItem('token')
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const response = await fetch('/api/v1/ai/chat/stream', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        message: text,
-        context_type: 'dashboard',
-        context_id: 'map',
-      }),
-      signal: controller.signal,
-    })
+    let response: Response
+    if (attachmentFiles.length) {
+      const form = new FormData()
+      form.append('message', baseText)
+      form.append('context_type', 'dashboard')
+      form.append('context_id', 'map')
+      attachmentFiles.forEach((file) => form.append('files', file))
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST',
+        headers,
+        body: form,
+        signal: controller.signal,
+      })
+    } else {
+      headers['Content-Type'] = 'application/json'
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: baseText,
+          context_type: 'dashboard',
+          context_id: 'map',
+        }),
+        signal: controller.signal,
+      })
+    }
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
     const reader = response.body.getReader()
@@ -327,7 +383,7 @@ onBeforeUnmount(() => {
 
     <!-- Message List -->
     <div class="flex-1 min-h-0 overflow-hidden">
-      <AiMessageList :messages="messages" :loading="false" />
+      <AiMessageList :messages="messages" :loading="false" :sending="sending" />
     </div>
 
     <!-- Input -->

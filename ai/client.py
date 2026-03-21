@@ -13,7 +13,9 @@ def build_openai_messages(history: list[dict]) -> list[dict]:
     for item in history:
         role = item.get('role')
         if role in ('system', 'user', 'tool'):
-            msg: dict = {'role': role, 'content': item.get('content') or ''}
+            # user 消息支持结构化多模态内容（text + image_url）
+            content = item.get('openai_content') if role == 'user' and item.get('openai_content') else (item.get('content') or '')
+            msg: dict = {'role': role, 'content': content}
             # tool 消息需要附带 tool_call_id
             if role == 'tool' and item.get('tool_call_id'):
                 msg['tool_call_id'] = item['tool_call_id']
