@@ -633,6 +633,23 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 'function': {'name': tc['name'], 'arguments': json.dumps(tc['arguments'], ensure_ascii=False)},
             } for tc in tool_calls]
         })
+        # 持久化 assistant tool_call 消息，避免前端断开后工具链记录丢失
+        try:
+            AiModel.save_message(
+                sid,
+                'assistant',
+                response_text or '',
+                tool_calls=[{
+                    'id': tc['id'],
+                    'type': 'function',
+                    'function': {
+                        'name': tc['name'],
+                        'arguments': json.dumps(tc['arguments'], ensure_ascii=False),
+                    },
+                } for tc in tool_calls],
+            )
+        except Exception:
+            pass
 
         # ─── 执行工具 ────────────────────────────────────────────────────────
         for tc in tool_calls:
@@ -667,6 +684,16 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
 
             # 保存工具结果
             history.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': res, 'ts': _now_iso()})
+            # 持久化 tool 结果，支持切页后历史恢复
+            try:
+                AiModel.save_message(
+                    sid,
+                    'tool',
+                    res,
+                    tool_call_id=tc['id'],
+                )
+            except Exception:
+                pass
 
             # 演练模式：检查是否生成报告
             if drill_state and tool_name == 'drill_generate_report':

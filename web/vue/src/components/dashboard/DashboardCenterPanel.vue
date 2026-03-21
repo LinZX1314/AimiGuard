@@ -183,9 +183,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="flex-1 relative overflow-hidden rounded-lg border border-border/20">
+  <div ref="containerRef" class="dashboard-center-panel flex-1 min-h-0 relative rounded-lg border border-border/20">
     <!-- 主内容区域 -->
-    <div class="h-full p-3 md:p-3.5">
+    <div class="dashboard-center-panel__inner h-full p-3 md:p-3.5">
       <!-- Topbar: 仅保留当前页面视图切换 -->
       <div class="mb-2.5 flex items-start justify-start">
         <div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-cyan-500/20 shadow-lg shadow-cyan-500/5">
@@ -305,6 +305,18 @@ onUnmounted(() => {
   border: 1px solid hsl(var(--border) / 0.45);
   background: transparent;
   padding: 8px;
+}
+
+.dashboard-center-panel {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.dashboard-center-panel__inner {
+  min-height: 100%;
 }
 
 .view-stage-shell {
@@ -612,5 +624,55 @@ onUnmounted(() => {
 .view-fade-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+@media (max-width: 1279px) {
+  .dashboard-center-panel {
+    /* 小屏时固定中栏可视高度，让滚动条稳定出现在中间面板内部 */
+    height: calc(100svh - 132px);
+  }
+
+  .dashboard-center-panel__inner {
+    height: auto;
+  }
+
+  .view-stage-shell {
+    height: auto;
+    min-height: initial;
+  }
+
+  .view-main-card {
+    height: clamp(320px, 56vh, 520px);
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-center-panel {
+    height: calc(100svh - 110px);
+  }
+
+  .view-main-card {
+    height: clamp(300px, 52vh, 460px);
+  }
+}
+
+@media (max-width: 1279px) and (max-height: 860px) {
+  .dashboard-center-panel {
+    height: calc(100svh - 120px);
+  }
+}
+
+.dashboard-center-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dashboard-center-panel::-webkit-scrollbar-track {
+  background: rgb(15 23 42 / 0.35);
+  border-radius: 999px;
+}
+
+.dashboard-center-panel::-webkit-scrollbar-thumb {
+  background: rgb(34 211 238 / 0.4);
+  border-radius: 999px;
 }
 </style>

@@ -34,7 +34,9 @@ interface ToolCall {
 
 interface ApiMessage {
   role: 'user' | 'assistant' | 'tool'
-  content: string
+  content?: string
+  openai_content?: string | null
+  ts?: string
   created_at?: string
   name?: string
   tool_call_id?: string
@@ -75,7 +77,63 @@ const sending = ref(false)
 const currentSession = ref<number | null>(null)
 const activeChatController = ref<AbortController | null>(null)
 const ttsEnabled = ref(true)
+const inFlightSessionId = ref<number | null>(null)
+const pendingSessionMessages = reactive<Record<number, Message[]>>({})
 const route = useRoute()
+const TTS_STORAGE_KEY = 'aimiguard.ai.tts-enabled'
+
+function cloneMessages(source: Message[]): Message[] {
+  return source.map((msg) => ({
+    ...msg,
+    tool_calls: msg.tool_calls ? msg.tool_calls.map((tc) => ({ ...tc, function: tc.function ? { ...tc.function } : undefined })) : undefined,
+    tool_results: msg.tool_results ? msg.tool_results.map((tr) => ({ ...tr })) : undefined,
+  }))
+}
+
+function setPendingMessages(sessionId: number, source: Message[]) {
+  pendingSessionMessages[sessionId] = source
+}
+
+function getPendingMessages(sessionId: number): Message[] | null {
+  const pending = pendingSessionMessages[sessionId]
+  return pending ? cloneMessages(pending) : null
+}
+
+function mergeServerWithPending(sessionId: number, serverMessages: Message[]): Message[] {
+  const pending = pendingSessionMessages[sessionId]
+  if (!pending) return serverMessages
+
+  if (inFlightSessionId.value === sessionId) {
+    return cloneMessages(pending)
+  }
+
+  if (pending.length > serverMessages.length) {
+    return cloneMessages(pending)
+  }
+
+  delete pendingSessionMessages[sessionId]
+  return serverMessages
+}
+
+function loadTtsPreference() {
+  if (typeof window === 'undefined') return true
+  try {
+    const saved = window.localStorage.getItem(TTS_STORAGE_KEY)
+    if (saved === null) return true
+    return saved === '1' || saved === 'true'
+  } catch {
+    return true
+  }
+}
+
+function persistTtsPreference(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TTS_STORAGE_KEY, enabled ? '1' : '0')
+  } catch {
+    // 本地存储不可用时静默降级
+  }
+}
 
 // ─── 演练模式状态 ────────────────────────────────────────────────────────────
 const drillMode = ref(false)
@@ -211,6 +269,7 @@ function speak(text: string) {
 function toggleTts() {
   if (ttsEnabled.value && window.speechSynthesis) window.speechSynthesis.cancel()
   ttsEnabled.value = !ttsEnabled.value
+  persistTtsPreference(ttsEnabled.value)
 }
 
 function stopGenerating() { activeChatController.value?.abort() }
@@ -226,9 +285,18 @@ async function loadSessions() {
 async function loadMessages(sid: number) {
   if (sid === -1) { currentSession.value = -1; messages.value = []; loading.value = false; return }
   loading.value = true; currentSession.value = sid
+
+  const pending = getPendingMessages(sid)
+  if (inFlightSessionId.value === sid && pending) {
+    messages.value = pending
+    loading.value = false
+    return
+  }
+
   try {
     const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
-    messages.value = normalizeMessages((d.data ?? d) as ApiMessage[])
+    const normalized = normalizeMessages((d.data ?? d) as ApiMessage[])
+    messages.value = mergeServerWithPending(sid, normalized)
   } catch(e) { console.error(e) }
   loading.value = false
 }
@@ -236,25 +304,33 @@ async function loadMessages(sid: number) {
 async function deleteSession(sid: number) {
   try {
     await api.delete(`/api/v1/ai/sessions/${sid}`)
+    delete pendingSessionMessages[sid]
     if (currentSession.value === sid) { messages.value = []; currentSession.value = null }
     await loadSessions()
   } catch {}
 }
 
 function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] {
+  const resolveContent = (msg: ApiMessage) => {
+    return (msg.content ?? msg.openai_content ?? '').toString()
+  }
+  const resolveTime = (msg: ApiMessage) => {
+    return msg.created_at || msg.ts
+  }
+
   const normalized: Message[] = []
   let index = 0
   while (index < source.length) {
     const current = source[index]
     if (current.role === 'user') {
-      normalized.push({ role: 'user', content: current.content || '', created_at: current.created_at })
+      normalized.push({ role: 'user', content: resolveContent(current), created_at: resolveTime(current) })
       index += 1; continue
     }
     if (current.role === 'assistant' && current.tool_calls?.length) {
       const toolResults: ToolResult[] = []
-      let content = current.content || ''
+      let content = resolveContent(current)
       let postContent = ''
-      let createdAt = current.created_at
+      let createdAt = resolveTime(current)
       let cursor = index + 1
       let seqIndex = 0
       while (cursor < source.length) {
@@ -263,11 +339,11 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
           let matchedCall = current.tool_calls?.find(tc => tc.id === next.tool_call_id)
           if (!matchedCall && seqIndex < current.tool_calls.length) matchedCall = current.tool_calls[seqIndex]
           const toolName = next.name || matchedCall?.name || (matchedCall as any)?.function?.name || 'unknown_tool'
-          toolResults.push({ content: next.content || '', created_at: next.created_at, name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
+          toolResults.push({ content: resolveContent(next), created_at: resolveTime(next), name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
           seqIndex++; cursor += 1; continue
         }
         if (next.role === 'assistant' && !next.tool_calls?.length) {
-          postContent = next.content || ''; createdAt = next.created_at || createdAt; cursor += 1
+          postContent = resolveContent(next); createdAt = resolveTime(next) || createdAt; cursor += 1
         }
         break
       }
@@ -275,10 +351,11 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
       index = cursor; continue
     }
     if (current.role === 'assistant') {
-      normalized.push({ role: 'assistant', content: current.content || fallbackReply, created_at: current.created_at })
+      const assistantContent = resolveContent(current)
+      normalized.push({ role: 'assistant', content: assistantContent || fallbackReply, created_at: resolveTime(current) })
       index += 1; continue
     }
-    normalized.push({ role: 'assistant', content: '', created_at: current.created_at, tool_results: [{ content: current.content || '', created_at: current.created_at, name: current.name, tool_call_id: current.tool_call_id }] })
+    normalized.push({ role: 'assistant', content: '', created_at: resolveTime(current), tool_results: [{ content: resolveContent(current), created_at: resolveTime(current), name: current.name, tool_call_id: current.tool_call_id }] })
     index += 1
   }
   if (!normalized.length && fallbackReply) normalized.push({ role: 'assistant', content: fallbackReply })
@@ -318,6 +395,16 @@ function composeTextWithAttachments(text: string, attachments: ChatAttachmentPay
   return blocks.join('')
 }
 
+function isEmptyAssistantMessage(msg?: Message): boolean {
+  if (!msg || msg.role !== 'assistant') return false
+  return !(
+    msg.content?.trim() ||
+    msg.post_content?.trim() ||
+    msg.tool_calls?.length ||
+    msg.tool_results?.length
+  )
+}
+
 // Send
 async function send(text: string, extraParams: any = {}, documentContent?: string) {
   if (!text && !documentContent) return
@@ -338,8 +425,19 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   const displayText = isDrill ? `【演练文档】\n${documentContent}` : composedText
   messages.value.push({ role: 'user', content: displayText })
   sending.value = true
+  const requestMessages = messages.value
+  const requestSessionId = currentSession.value && currentSession.value > 0 ? currentSession.value : null
+  let resolvedSessionId: number | null = requestSessionId
+
+  if (requestSessionId) {
+    inFlightSessionId.value = requestSessionId
+    setPendingMessages(requestSessionId, requestMessages)
+  } else {
+    inFlightSessionId.value = null
+  }
+
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
-  messages.value.push(assistantMsg as any)
+  requestMessages.push(assistantMsg as any)
 
   const controller = new AbortController()
   activeChatController.value = controller
@@ -486,8 +584,14 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             }
           }
 
-          if (parsed.session_id && (!currentSession.value || currentSession.value === -1)) {
-            currentSession.value = parsed.session_id; await loadSessions()
+          if (parsed.session_id && !resolvedSessionId) {
+            resolvedSessionId = Number(parsed.session_id)
+            inFlightSessionId.value = resolvedSessionId
+            setPendingMessages(resolvedSessionId, requestMessages)
+            await loadSessions()
+            if (!currentSession.value || currentSession.value === -1) {
+              currentSession.value = resolvedSessionId
+            }
           }
         } catch {}
       }
@@ -499,6 +603,16 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     if (drillMode.value) drillAdd('warning', '❌ 请求失败', e.message || '', 'alert-triangle', 'text-red-400')
   } finally {
     stopDrillTimer(); sending.value = false; activeChatController.value = null
+    const lastMsg = requestMessages[requestMessages.length - 1]
+    if (isEmptyAssistantMessage(lastMsg)) {
+      requestMessages.pop()
+    }
+
+    if (resolvedSessionId) {
+      setPendingMessages(resolvedSessionId, requestMessages)
+    }
+
+    inFlightSessionId.value = null
     if (drillMode.value && !sending.value) setTimeout(() => { if (!sending.value) drillMode.value = false }, 500)
   }
 }
@@ -519,6 +633,7 @@ function openReportWindow() {
 }
 
 onMounted(async () => {
+  ttsEnabled.value = loadTtsPreference()
   await loadSessions()
   const { context_type, context_id, prompt } = route.query as any
   if (prompt) await send(String(prompt), { context_type, context_id })
@@ -526,7 +641,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  stopGenerating(); stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel()
+  // 切换页面时不主动中断请求，允许后台继续执行并在会话历史中恢复结果
+  stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel()
 })
 </script>
 

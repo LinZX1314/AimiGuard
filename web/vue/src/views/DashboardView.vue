@@ -81,7 +81,7 @@ onUnmounted(() => {
 
 <template>
   <div class="dashboard-screen h-full w-full overflow-hidden p-2 md:p-3">
-    <div class="grid h-full grid-cols-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)_330px]">
+    <div class="dashboard-screen__grid grid h-full grid-cols-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)_330px]">
       <!-- 左栏：态势摘要 -->
       <DashboardMetricSidebar :payload="payload" :loading="loading" />
 
@@ -134,5 +134,22 @@ onUnmounted(() => {
 .dashboard-screen :deep(.map-card),
 .dashboard-screen :deep(.view-main-card) {
   border-color: hsl(var(--border) / 0.3);
+}
+
+.dashboard-screen__grid > * {
+  min-height: 0;
+}
+
+@media (max-width: 1279px) {
+  .dashboard-screen {
+    height: auto;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-screen__grid {
+    height: auto;
+    align-content: start;
+  }
 }
 </style>

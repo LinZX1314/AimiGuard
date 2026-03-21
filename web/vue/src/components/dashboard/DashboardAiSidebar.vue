@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeUnmount, computed } from 'vue'
+import { ref, reactive, onBeforeUnmount, onMounted, computed } from 'vue'
 import { api } from '@/api/index'
 import AiMessageList from '@/components/ai/AiMessageList.vue'
 import AiChatInput from '@/components/ai/AiChatInput.vue'
@@ -32,6 +32,17 @@ interface Message {
   tool_results?: ToolResult[]
 }
 
+interface ApiMessage {
+  role: 'user' | 'assistant' | 'tool'
+  content?: string
+  openai_content?: string | null
+  created_at?: string
+  ts?: string
+  name?: string
+  tool_call_id?: string
+  tool_calls?: ToolCall[]
+}
+
 interface Session {
   id: number
   title: string
@@ -59,9 +70,46 @@ const sessions = ref<Session[]>([])
 const sending = ref(false)
 const ttsEnabled = ref(true)
 const activeChatController = ref<AbortController | null>(null)
+const currentSession = ref<number | null>(-1)
+const inFlightSessionId = ref<number | null>(null)
+const pendingSessionMessages = reactive<Record<number, Message[]>>({})
 const showHistory = ref(false)
 const showSettings = ref(false)
 const showQuickPrompts = ref(true)
+const TTS_STORAGE_KEY = 'aimiguard.dashboard-ai.tts-enabled'
+
+function cloneMessages(source: Message[]): Message[] {
+  return source.map((msg) => ({
+    ...msg,
+    tool_calls: msg.tool_calls ? msg.tool_calls.map((tc) => ({ ...tc, function: tc.function ? { ...tc.function } : undefined })) : undefined,
+    tool_results: msg.tool_results ? msg.tool_results.map((tr) => ({ ...tr })) : undefined,
+  }))
+}
+
+function setPendingMessages(sessionId: number, source: Message[]) {
+  pendingSessionMessages[sessionId] = source
+}
+
+function getPendingMessages(sessionId: number): Message[] | null {
+  const pending = pendingSessionMessages[sessionId]
+  return pending ? cloneMessages(pending) : null
+}
+
+function mergeServerWithPending(sessionId: number, serverMessages: Message[]): Message[] {
+  const pending = pendingSessionMessages[sessionId]
+  if (!pending) return serverMessages
+
+  if (inFlightSessionId.value === sessionId) {
+    return cloneMessages(pending)
+  }
+
+  if (pending.length > serverMessages.length) {
+    return cloneMessages(pending)
+  }
+
+  delete pendingSessionMessages[sessionId]
+  return serverMessages
+}
 
 // TTS设置
 const settings = reactive({
@@ -79,6 +127,26 @@ function speak(text: string) {
   window.speechSynthesis.speak(utt)
 }
 
+function loadTtsPreference() {
+  if (typeof window === 'undefined') return true
+  try {
+    const saved = window.localStorage.getItem(TTS_STORAGE_KEY)
+    if (saved === null) return true
+    return saved === '1' || saved === 'true'
+  } catch {
+    return true
+  }
+}
+
+function persistTtsPreference(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TTS_STORAGE_KEY, enabled ? '1' : '0')
+  } catch {
+    // 本地存储不可用时静默降级
+  }
+}
+
 function stopGenerating() {
   activeChatController.value?.abort()
 }
@@ -89,6 +157,7 @@ function toggleTts() {
   }
   settings.ttsEnabled = !settings.ttsEnabled
   ttsEnabled.value = settings.ttsEnabled
+  persistTtsPreference(settings.ttsEnabled)
 }
 
 // 快捷输入选择
@@ -108,21 +177,32 @@ async function loadSessions() {
 async function loadHistorySession(sid: number) {
   if (sid < 0) {
     messages.value = []
+    currentSession.value = -1
     showHistory.value = false
     return
   }
+
+  currentSession.value = sid
+
+  const pending = getPendingMessages(sid)
+  if (inFlightSessionId.value === sid && pending) {
+    messages.value = pending
+    showHistory.value = false
+    return
+  }
+
   try {
     const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
-    messages.value = (d.data ?? d).map((m: any) => ({
-      role: m.role === 'tool' ? 'assistant' : m.role,
-      content: m.content || '',
-      created_at: m.created_at,
-    }))
+    const normalized = normalizeMessages((d.data ?? d) as ApiMessage[])
+    messages.value = mergeServerWithPending(sid, normalized)
     showHistory.value = false
   } catch (e) { console.error(e) }
 }
 
 async function clearHistory() {
+  if (currentSession.value && currentSession.value > 0) {
+    delete pendingSessionMessages[currentSession.value]
+  }
   messages.value = []
 }
 
@@ -154,6 +234,82 @@ function composeTextWithAttachments(text: string, attachments: ChatAttachmentPay
   return blocks.join('')
 }
 
+function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] {
+  const resolveContent = (msg: ApiMessage) => {
+    return (msg.content ?? msg.openai_content ?? '').toString()
+  }
+  const resolveTime = (msg: ApiMessage) => {
+    return msg.created_at || msg.ts
+  }
+
+  const normalized: Message[] = []
+  let index = 0
+  while (index < source.length) {
+    const current = source[index]
+    if (current.role === 'user') {
+      normalized.push({ role: 'user', content: resolveContent(current), created_at: resolveTime(current) })
+      index += 1
+      continue
+    }
+
+    if (current.role === 'assistant' && current.tool_calls?.length) {
+      const toolResults: ToolResult[] = []
+      const content = resolveContent(current)
+      let postContent = ''
+      let createdAt = resolveTime(current)
+      let cursor = index + 1
+      let seqIndex = 0
+
+      while (cursor < source.length) {
+        const next = source[cursor]
+        if (next.role === 'tool') {
+          let matchedCall = current.tool_calls?.find(tc => tc.id === next.tool_call_id)
+          if (!matchedCall && seqIndex < current.tool_calls.length) matchedCall = current.tool_calls[seqIndex]
+          const toolName = next.name || matchedCall?.name || (matchedCall as any)?.function?.name || 'unknown_tool'
+          toolResults.push({ content: resolveContent(next), created_at: resolveTime(next), name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
+          seqIndex += 1
+          cursor += 1
+          continue
+        }
+
+        if (next.role === 'assistant' && !next.tool_calls?.length) {
+          postContent = resolveContent(next)
+          createdAt = resolveTime(next) || createdAt
+          cursor += 1
+        }
+        break
+      }
+
+      normalized.push({ role: 'assistant', content, post_content: postContent, created_at: createdAt, tool_calls: current.tool_calls, tool_results: toolResults })
+      index = cursor
+      continue
+    }
+
+    if (current.role === 'assistant') {
+      const assistantContent = resolveContent(current)
+      normalized.push({ role: 'assistant', content: assistantContent || fallbackReply, created_at: resolveTime(current) })
+      index += 1
+      continue
+    }
+
+    normalized.push({ role: 'assistant', content: '', created_at: resolveTime(current), tool_results: [{ content: resolveContent(current), created_at: resolveTime(current), name: current.name, tool_call_id: current.tool_call_id }] })
+    index += 1
+  }
+
+  if (!normalized.length && fallbackReply) normalized.push({ role: 'assistant', content: fallbackReply })
+  return normalized
+}
+
+function isEmptyAssistantMessage(msg?: Message): boolean {
+  if (!msg || msg.role !== 'assistant') return false
+  return !(
+    msg.content?.trim() ||
+    msg.post_content?.trim() ||
+    msg.tool_calls?.length ||
+    msg.tool_results?.length
+  )
+}
+
 async function send(text: string, extra: any = {}) {
   const attachmentFiles = (extra?.files || []) as File[]
   const attachments = (extra?.attachments || []) as ChatAttachmentPayload[]
@@ -162,8 +318,19 @@ async function send(text: string, extra: any = {}) {
   if (!composedText || sending.value) return
   messages.value.push({ role: 'user', content: composedText })
   sending.value = true
+  const requestMessages = messages.value
+  const requestSessionId = currentSession.value && currentSession.value > 0 ? currentSession.value : null
+  let resolvedSessionId: number | null = requestSessionId
+
+  if (requestSessionId) {
+    inFlightSessionId.value = requestSessionId
+    setPendingMessages(requestSessionId, requestMessages)
+  } else {
+    inFlightSessionId.value = null
+  }
+
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
-  messages.value.push(assistantMsg as any)
+  requestMessages.push(assistantMsg as any)
 
   const controller = new AbortController()
   activeChatController.value = controller
@@ -179,6 +346,9 @@ async function send(text: string, extra: any = {}) {
       form.append('message', baseText)
       form.append('context_type', 'dashboard')
       form.append('context_id', 'map')
+      if (requestSessionId) {
+        form.append('session_id', String(requestSessionId))
+      }
       attachmentFiles.forEach((file) => form.append('files', file))
       response = await fetch('/api/v1/ai/chat/stream', {
         method: 'POST',
@@ -195,6 +365,7 @@ async function send(text: string, extra: any = {}) {
           message: baseText,
           context_type: 'dashboard',
           context_id: 'map',
+          ...(requestSessionId ? { session_id: requestSessionId } : {}),
         }),
         signal: controller.signal,
       })
@@ -235,6 +406,16 @@ async function send(text: string, extra: any = {}) {
         if (data === '[DONE]') continue
         try {
           const parsed = JSON.parse(data)
+          if (parsed.session_id && !resolvedSessionId) {
+            resolvedSessionId = Number(parsed.session_id)
+            inFlightSessionId.value = resolvedSessionId
+            setPendingMessages(resolvedSessionId, requestMessages)
+            await loadSessions()
+            if (currentSession.value === -1 || currentSession.value === null) {
+              currentSession.value = resolvedSessionId
+            }
+          }
+
           if (parsed.content) { typeQueue += parsed.content; startTypewriter() }
           if (parsed.tool_call) {
              if (typeQueue) {
@@ -250,7 +431,8 @@ async function send(text: string, extra: any = {}) {
             if (typeQueue) { assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue; typeQueue = '' }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
             const matchedToolCall = parsed.tool_call_id ? (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === parsed.tool_call_id) : (assistantMsg as any).tool_calls?.slice(-1)[0]
-            ;(assistantMsg as any).tool_results.push({ name: matchedToolCall?.name || 'tool', tool_call_id: parsed.tool_call_id || matchedToolCall?.id, content: parsed.tool_result })
+            const toolResultText = typeof parsed.tool_result === 'string' ? parsed.tool_result : JSON.stringify(parsed.tool_result, null, 2)
+            ;(assistantMsg as any).tool_results.push({ name: matchedToolCall?.name || 'tool', tool_call_id: parsed.tool_call_id || matchedToolCall?.id, content: toolResultText })
           }
         } catch {}
       }
@@ -259,12 +441,29 @@ async function send(text: string, extra: any = {}) {
   } catch(e: any) {
     if (e.name !== 'AbortError') assistantMsg.content = `错误：${e.message || '请求失败'}`
   } finally {
+    const lastMsg = requestMessages[requestMessages.length - 1]
+    if (isEmptyAssistantMessage(lastMsg)) {
+      requestMessages.pop()
+    }
+
+    if (resolvedSessionId) {
+      setPendingMessages(resolvedSessionId, requestMessages)
+    }
+
+    inFlightSessionId.value = null
     sending.value = false; activeChatController.value = null
   }
 }
 
+onMounted(() => {
+  const pref = loadTtsPreference()
+  settings.ttsEnabled = pref
+  ttsEnabled.value = pref
+  loadSessions()
+})
+
 onBeforeUnmount(() => {
-  stopGenerating()
+  // 切换页面时不主动中断请求，允许后台继续执行并在会话历史中恢复结果
   if (window.speechSynthesis) window.speechSynthesis.cancel()
 })
 </script>
@@ -344,7 +543,7 @@ onBeforeUnmount(() => {
             <p class="text-xs text-muted-foreground">自动朗读AI回复</p>
           </div>
           <button
-            @click="settings.ttsEnabled = !settings.ttsEnabled; ttsEnabled = settings.ttsEnabled"
+            @click="toggleTts"
             class="relative w-12 h-6 rounded-full transition-colors duration-200"
             :class="settings.ttsEnabled ? 'bg-cyan-500' : 'bg-muted'"
           >

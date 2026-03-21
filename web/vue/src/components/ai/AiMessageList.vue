@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import {
@@ -43,6 +43,31 @@ const props = defineProps<{
   loading: boolean
   sending?: boolean
 }>()
+
+const renderMessages = computed(() =>
+  props.messages.filter((msg) => {
+    if (msg.role === 'user') return true
+    return Boolean(
+      msg.content?.trim() ||
+      msg.post_content?.trim() ||
+      msg.tool_calls?.length ||
+      msg.tool_results?.length,
+    )
+  }),
+)
+
+const showSendingIndicator = computed(() => {
+  if (!props.sending) return false
+  const last = props.messages[props.messages.length - 1]
+  if (!last || last.role !== 'assistant') return true
+  const hasStarted = Boolean(
+    last.content?.trim() ||
+    last.post_content?.trim() ||
+    last.tool_calls?.length ||
+    last.tool_results?.length,
+  )
+  return !hasStarted
+})
 
 const chatEnd = ref<HTMLElement | null>(null)
 const scrollAreaRef = ref<any>(null)
@@ -96,7 +121,7 @@ function messageKey(message: Message, index: number): string {
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="!messages.length" class="m-auto text-center animate-in fade-in py-32">
+      <div v-else-if="!renderMessages.length" class="m-auto text-center animate-in fade-in py-32">
         <div class="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-full flex items-center justify-center text-muted-foreground shadow-2xl">
           <Bot :size="40" class="text-primary/80" />
         </div>
@@ -107,7 +132,7 @@ function messageKey(message: Message, index: number): string {
       <!-- Message List -->
       <div v-else class="space-y-8">
         <div
-          v-for="(msg, idx) in messages"
+          v-for="(msg, idx) in renderMessages"
           :key="messageKey(msg, idx)"
           class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300"
           :class="[msg.role === 'user' ? 'flex-row-reverse' : '']"
@@ -144,7 +169,7 @@ function messageKey(message: Message, index: number): string {
               <!-- Content Part 1: Before Tools -->
               <div
                 v-if="msg.content"
-                class="px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
+                class="ai-markdown px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
                 v-html="renderMd(msg.content)"
               ></div>
 
@@ -186,7 +211,7 @@ function messageKey(message: Message, index: number): string {
               <!-- Content Part 2: After Tools -->
               <div
                 v-if="msg.post_content"
-                class="px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
+                class="ai-markdown px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
                 v-html="renderMd(msg.post_content)"
               ></div>
             </template>
@@ -194,7 +219,7 @@ function messageKey(message: Message, index: number): string {
         </div>
         <div ref="chatEnd" class="h-1" />
 
-        <div v-if="sending" class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300">
+        <div v-if="showSendingIndicator" class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300">
           <Avatar class="mt-1 shadow-md border border-border/50 shrink-0">
             <AvatarImage src="" />
             <AvatarFallback class="bg-primary/10 text-primary">
@@ -239,5 +264,33 @@ function messageKey(message: Message, index: number): string {
     transform: translateY(-4px);
     opacity: 1;
   }
+}
+
+.ai-markdown :deep(table) {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  border: 1px solid hsl(var(--border) / 0.7);
+  border-radius: 0.5rem;
+}
+
+.ai-markdown :deep(thead) {
+  background: hsl(var(--muted) / 0.45);
+}
+
+.ai-markdown :deep(th),
+.ai-markdown :deep(td) {
+  padding: 0.5rem 0.625rem;
+  border: 1px solid hsl(var(--border) / 0.55);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.ai-markdown :deep(ul),
+.ai-markdown :deep(ol) {
+  padding-left: 1.25rem;
 }
 </style>
