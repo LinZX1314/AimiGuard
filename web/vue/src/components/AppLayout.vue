@@ -30,7 +30,8 @@ import {
   Network,
   Zap,
   Settings,
-  Image as ImageIcon,
+  ImageIcon,
+  ClipboardList,
 } from 'lucide-vue-next'
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
@@ -143,6 +144,7 @@ const navItems = [
   { title: '主机探测',  icon: Radar,           to: '/nmap' },
   { title: '截图画廊',  icon: ImageIcon,       to: '/screenshots' },
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
+  { title: '演练报告',   icon: ClipboardList,   to: '/reports' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
 ]
 
@@ -184,11 +186,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen w-full bg-transparent text-foreground overflow-hidden font-sans relative" :class="{ 'dashboard-immersive-shell': isDashboardRoute }">
+  <div class="flex h-screen w-full immersive-background text-foreground overflow-hidden font-sans relative">
     <!-- Sidebar -->
-    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10" :class="isDashboardRoute ? 'bg-transparent' : 'bg-secondary/80'">
+    <aside class="w-48 flex-shrink-0 border-r border-border/50 flex flex-col hidden md:flex relative z-10 bg-transparent">
       <!-- Logo -->
-      <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
+      <div class="h-16 flex items-center px-4 border-b border-border/50">
         <Avatar class="h-8 w-8 mr-3 shadow-[0_0_6px_hsl(var(--primary)/0.35)] bg-transparent">
           <AvatarImage :src="logoUrl" />
           <AvatarFallback class="bg-primary/20 text-primary uppercase text-xs">AG</AvatarFallback>
@@ -246,7 +248,7 @@ onUnmounted(() => {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Top Header -->
-      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] flex items-center justify-between px-4 sm:px-6 relative z-10" :class="isDashboardRoute ? 'bg-transparent' : 'bg-secondary/80'">
+      <header class="h-16 flex-shrink-0 border-b border-border/50 flex items-center justify-between px-4 sm:px-6 relative z-10 bg-transparent">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
           <Button variant="ghost" size="icon" class="md:hidden mr-2">
@@ -414,7 +416,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.dashboard-immersive-shell {
-  background: transparent;
+.immersive-background {
+  position: relative;
+}
+
+.immersive-background::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 30%),
+    radial-gradient(circle at top right, hsl(var(--primary) / 0.08), transparent 28%),
+    linear-gradient(180deg, hsl(var(--background) / 0.88), hsl(var(--secondary) / 0.22));
+  pointer-events: none;
+  z-index: 0;
 }
 </style>

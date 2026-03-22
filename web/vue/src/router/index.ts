@@ -29,6 +29,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'screenshots', name: 'NmapScreenshots', component: lazyWithMinDelay(() => import('../views/NmapScreenshotsView.vue')) },
       { path: 'defense',   name: 'Defense',      component: lazyWithMinDelay(() => import('../views/DefenseView.vue')) },
       { path: 'ai',        name: 'AiChat',       component: lazyWithMinDelay(() => import('../views/AiChatView.vue')) },
+      { path: 'reports',   name: 'Reports',      component: lazyWithMinDelay(() => import('../views/ReportsView.vue')) },
       { path: 'settings',  name: 'Settings',     component: lazyWithMinDelay(() => import('../views/SettingsView.vue')) },
     ]
   },

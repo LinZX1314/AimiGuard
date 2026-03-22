@@ -141,18 +141,6 @@ onUnmounted(() => {
   position: relative;
 }
 
-.dashboard-screen::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 30%),
-    radial-gradient(circle at top right, hsl(var(--primary) / 0.08), transparent 28%),
-    linear-gradient(180deg, hsl(var(--background) / 0.88), hsl(var(--secondary) / 0.22));
-  pointer-events: none;
-}
-
 .dashboard-screen__grid {
   position: relative;
   z-index: 1;

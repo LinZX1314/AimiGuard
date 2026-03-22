@@ -176,7 +176,7 @@ function getChainStatus(key: string): boolean {
 
 <template>
   <aside class="h-full flex flex-col gap-3 min-h-0 overflow-hidden pr-2">
-        <TechCard title="态势摘要" :icon="Activity" glow-color="blue" class="tech-card-dashboard-clear shrink-0">
+        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan" class="tech-card-dashboard-clear shrink-0">
           <div class="space-y-1.5">
             <div class="grid grid-cols-2 gap-1.5">
               <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-secondary/30 px-2 py-1.5 dark:bg-muted/20">
@@ -187,7 +187,7 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="实时攻击趋势" glow-color="blue" class="tech-card-dashboard-clear flex-adaptive-card flex-[0.9] shrink-0 min-h-0">
+        <TechCard title="实时攻击趋势" glow-color="cyan" class="tech-card-dashboard-clear flex-adaptive-card flex-[0.9] shrink-0 min-h-0">
           <div class="flex-1 min-h-0 relative w-full h-full">
             <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
             <Skeleton v-else-if="loading" class="h-full w-full" />
@@ -195,7 +195,7 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
+        <TechCard title="热门攻击蜜罐" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
           <div class="flex flex-col gap-2 flex-1 min-h-0 h-full">
             <div class="flex-1 min-h-0 relative w-full h-full">
             <Bar

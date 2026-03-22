@@ -157,10 +157,17 @@ def init_db():
             title TEXT,
             context_type TEXT,
             context_id TEXT,
+            is_drill_mode INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
     ''')
+
+    # 迁移：给已有会话添加 is_drill_mode 列（若无此列则忽略）
+    try:
+        cursor.execute('ALTER TABLE ai_chat_sessions ADD COLUMN is_drill_mode INTEGER DEFAULT 0')
+    except Exception:
+        pass
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ai_chat_history (

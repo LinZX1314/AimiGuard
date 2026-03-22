@@ -436,14 +436,14 @@ class AiModel:
     # --- 会话持久化管理 ---
 
     @staticmethod
-    def create_session(title="新对话", context_type=None, context_id=None):
+    def create_session(title="新对话", context_type=None, context_id=None, is_drill_mode=0):
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO ai_chat_sessions (title, context_type, context_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (title, context_type, context_id, now, now))
+            INSERT INTO ai_chat_sessions (title, context_type, context_id, is_drill_mode, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (title, context_type, context_id, is_drill_mode, now, now))
         sid = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -457,6 +457,14 @@ class AiModel:
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    @staticmethod
+    def update_session_drill_mode(session_id, is_drill_mode=1):
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE ai_chat_sessions SET is_drill_mode = ? WHERE id = ?', (is_drill_mode, session_id))
+        conn.commit()
+        conn.close()
 
     @staticmethod
     def delete_session(session_id):
@@ -530,6 +538,62 @@ class AiModel:
                 msg['tool_call_id'] = d['tool_call_id']
             history.append(msg)
         return history
+
+    @staticmethod
+    def get_reports(limit=50):
+        """获取所有演练报告（来源于 is_drill_mode=1 的会话）"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        # 查询演练模式的会话
+        cursor.execute('''
+            SELECT * FROM ai_chat_sessions 
+            WHERE is_drill_mode = 1 
+            ORDER BY updated_at DESC LIMIT ?
+        ''', (limit,))
+        sessions = [dict(r) for r in cursor.fetchall()]
+        
+        reports = []
+        for s in sessions:
+            # 为每个会话寻找报告内容（通常在 tool 消息中，或者寻找包含 "report" 的 JSON）
+            cursor.execute('''
+                SELECT content, create_time FROM ai_chat_history 
+                WHERE session_id = ? AND role = 'tool' 
+                AND (content LIKE '%"report":%' OR content LIKE '%{"ok":true,"report":%')
+                ORDER BY id DESC LIMIT 1
+            ''', (s['id'],))
+            row = cursor.fetchone()
+            if row:
+                try:
+                    data = json.loads(row['content'])
+                    # 获取该会话的第一条用户消息作为“原始输入”
+                    cursor.execute('''
+                        SELECT content FROM ai_chat_history 
+                        WHERE session_id = ? AND role = 'user' 
+                        ORDER BY id ASC LIMIT 1
+                    ''', (s['id'],))
+                    user_row = cursor.fetchone()
+                    
+                    report_content = data.get('report', '')
+                    original_input = user_row['content'] if user_row else None
+                    
+                    # 将原始输入集成到 MD 内容中（如果是 HTML 则不强行修改）
+                    if original_input and not data.get('is_html', False):
+                        report_content = f"> **原始演练输入**: {original_input}\n\n---\n\n" + report_content
+                    
+                    reports.append({
+                        'session_id': s['id'],
+                        'title': s['title'],
+                        'created_at': s['created_at'],
+                        'updated_at': s['updated_at'],
+                        'report': report_content,
+                        'summary': data.get('summary'),
+                        'is_html': data.get('is_html', False),
+                        'original_input': original_input
+                    })
+                except:
+                    pass
+        conn.close()
+        return reports
 
     # 为兼容旧版保留的 save_chat_history
     @staticmethod

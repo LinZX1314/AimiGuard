@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -73,7 +73,7 @@ body::after {
   animation: none;
 }
 
-html.dashboard-route-active body::after {
+html.app-immersive-active body::after {
   opacity: 1;
   animation: ambient-glow 8s ease-in-out infinite alternate;
 }
@@ -83,7 +83,7 @@ html.ai-chat-background-disabled body::after {
   animation: none;
 }
 
-html.dashboard-route-active.dark body::after {
+html.app-immersive-active.dark body::after {
   /* 暗色模式：赛博朋克深邃青蓝光晕，扩大范围，增强可见度 */
 background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, transparent 80%);
 }
@@ -111,7 +111,7 @@ background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, tra
   -webkit-mask-image: linear-gradient(to top, black 10%, transparent 95%);
 }
 
-html.dashboard-route-active .perspective-floor {
+html.app-immersive-active .perspective-floor {
   animation: floor-fade-in 1.2s ease-out forwards;
 }
 

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/index'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import AiSessionSidebar from '@/components/ai/AiSessionSidebar.vue'
 import AiMessageList from '@/components/ai/AiMessageList.vue'
 import AiChatInput from '@/components/ai/AiChatInput.vue'
@@ -162,6 +164,12 @@ const drillScreenshotsTaken = ref(0)
 let drillLogId = 0
 let drillTimer: ReturnType<typeof setInterval> | null = null
 
+const parsedReportHtml = computed(() => {
+  const raw = drillReport.value || drillSummary.value
+  if (!raw) return ''
+  return DOMPurify.sanitize(marked.parse(raw) as string)
+})
+
 const toolIconMap: Record<string, string> = {
   search: 'search',
   network_scan: 'search',
@@ -256,7 +264,16 @@ function formatToolResult(result: string): string {
   } catch { return result }
 }
 
-function toggleDrillPanel() { drillPanelOpen.value = !drillPanelOpen.value }
+function toggleDrillPanel() {
+  drillPanelOpen.value = !drillPanelOpen.value
+  // 持久化面板开关状态（按会话区分），切换回来时恢复
+  const sid = currentSession.value
+  if (drillPanelOpen.value && sid && sid > 0) {
+    sessionStorage.setItem('drill_panel_' + sid, 'true')
+  } else if (sid && sid > 0) {
+    sessionStorage.removeItem('drill_panel_' + sid)
+  }
+}
 
 function startDrillTimer() {
   drillElapsed.value = 0
@@ -311,7 +328,67 @@ async function loadMessages(sid: number) {
 
   try {
     const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
-    const normalized = normalizeMessages((d.data ?? d) as ApiMessage[])
+    const rawMessages = (d.data ?? d) as ApiMessage[]
+    
+    // 自动判定是否为 Drill 会话，实现切页后视图状态恢复
+    const isDrill = rawMessages.some(m => 
+      (m.role === 'user' && m.content?.includes('【演练文档】')) || 
+      (m.role === 'assistant' && m.tool_calls?.some(tc => tc.function?.name?.startsWith('drill_') || (tc as any).name?.startsWith('drill_')))
+    )
+
+    if (isDrill) {
+      drillMode.value = true
+      // 恢复该会话上次的面板开关状态（sessionStorage 中保存的值）
+      if (sessionStorage.getItem('drill_panel_' + sid) === 'true') {
+        drillPanelOpen.value = true
+      }
+      drillLog.value = []
+      drillStep.value = 0
+      drillFindingCount.value = 0
+      drillHostsFound.value = 0
+      drillScreenshotsTaken.value = 0
+      drillElapsed.value = 0
+      drillReport.value = ''
+      
+      rawMessages.forEach((msg, idx) => {
+        if (msg.role === 'user') {
+          // drillAdd('text', '👤 指挥官', msg.content || '', 'user', 'text-green-400', 'user')
+        } else if (msg.role === 'assistant') {
+          // if (msg.content) drillAdd('text', '🧠 协同思考', msg.content, 'cpu', 'text-blue-400', 'cpu')
+          if (msg.tool_calls?.length) {
+            msg.tool_calls.forEach(tc => {
+              drillStep.value++
+              const tName = tc.function?.name || (tc as any).name || ''
+              if (!tName) return
+              const toolArgs = typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments || (tc as any).arguments || {})
+              const tIcon = getToolIcon(tName)
+              const toolLabel = tName.replace('drill_', '').replace(/_/g, ' ').toUpperCase()
+              drillAdd('tool_call', `🔧 ${toolLabel}`, toolArgs, 'terminal', 'text-purple-400', tIcon)
+            })
+          }
+        } else if (msg.role === 'tool') {
+            const raw = typeof msg.content === 'object' ? JSON.stringify(msg.content) : (msg.content || '')
+            // 追加为独立的 tool_result 行，让 UI 可以折叠呈现，避免覆盖工具参数
+            drillAdd('tool_result', `↪ 结果反馈`, formatToolResult(raw), 'check-square', 'text-emerald-400')
+            try {
+              const r = JSON.parse(raw)
+              if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
+              if (r.发现主机 !== undefined) drillHostsFound.value = Math.max(drillHostsFound.value, r.发现主机)
+              if (r.screenshot_url) drillScreenshotsTaken.value++
+              if (r.report) {
+                drillReport.value = r.report
+                drillReportHtml.value = !!r.is_html
+              }
+            } catch (e) {}
+        }
+      })
+      if (drillReport.value) drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题`, 'check-circle', 'text-emerald-400')
+    } else {
+      drillMode.value = false
+      drillPanelOpen.value = false
+    }
+
+    const normalized = normalizeMessages(rawMessages)
     messages.value = mergeServerWithPending(sid, normalized)
   } catch(e) { console.error(e) }
   loading.value = false
@@ -423,7 +500,8 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   if (!text && !documentContent) return
   if (sending.value) return
 
-  const isDrill = !!documentContent
+  const wasDrillSession = currentSession.value && currentSession.value > 0 && sessionStorage.getItem('drill_session') === String(currentSession.value)
+  const isDrill = !!documentContent || wasDrillSession
   const attachmentFiles = (extraParams?.files || []) as File[]
   if (isDrill) {
     drillLog.value = []; drillReport.value = ''; drillMode.value = true; drillPanelOpen.value = true
@@ -532,6 +610,10 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             drillMode.value = true; drillLog.value = []; drillReport.value = ''
             drillFindingCount.value = 0; drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
             startDrillTimer()
+            // 标记该会话为演练模式，后续发消息自动进入演练
+            if (currentSession.value && currentSession.value > 0) {
+              sessionStorage.setItem('drill_session', String(currentSession.value))
+            }
 drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行动计划...', 'zap', 'text-primary')
             continue
           }
@@ -584,18 +666,27 @@ drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行�
           if (parsed.tool_result) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
-            const tcId = parsed.tool_call_id || (assistantMsg as any).tool_calls?.slice(-1)[0]?.id || ''
-            const result = typeof parsed.tool_result === 'string' ? parsed.tool_result : JSON.stringify(parsed.tool_result, null, 2)
-            ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: result })
+            
+            // 后端返回的是: { id: "...", result: "{\"ok\":true,...}", ... }
+            // 提取真正的内层工具执行结果
+            const innerResult = (typeof parsed.tool_result === 'object' && parsed.tool_result.result !== undefined)
+              ? parsed.tool_result.result
+              : parsed.tool_result
+
+            const tcId = (typeof parsed.tool_result === 'object' && (parsed.tool_result.tool_call_id || parsed.tool_result.id)) 
+              || parsed.tool_call_id 
+              || (assistantMsg as any).tool_calls?.slice(-1)[0]?.id 
+              || ''
+
+            const resultStr = typeof innerResult === 'string' ? innerResult : JSON.stringify(innerResult, null, 2)
+            ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: resultStr })
+
             if (drillMode.value) {
-              const lastLog = (() => { for (let i = drillLog.value.length - 1; i >= 0; i--) { if (drillLog.value[i].type === 'tool_call') return drillLog.value[i] } return null })()
-              if (lastLog) {
-                lastLog.content = formatToolResult(result)
-                try {
-                  const r = JSON.parse(result)
-                  if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
-                } catch (e) { console.warn('工具结果解析异常:', e) }
-              }
+              drillAdd('tool_result', `↪ 结果反馈`, formatToolResult(resultStr), 'check-square', 'text-emerald-400')
+              try {
+                const r = JSON.parse(resultStr)
+                if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
+              } catch (e) { console.warn('工具结果解析异常:', e) }
             }
           }
 
@@ -606,6 +697,10 @@ drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行�
             await loadSessions()
             if (!currentSession.value || currentSession.value === -1) {
               currentSession.value = resolvedSessionId
+            }
+            // 若已进入演练模式，补上 sessionStorage 标记（新会话场景 drill_mode 帧先于 session_id 帧到达）
+            if (drillMode.value) {
+              sessionStorage.setItem('drill_session', String(resolvedSessionId))
             }
           }
         } catch (e) { console.error('SSE解析错误:', e) }
@@ -649,9 +744,14 @@ function openReportWindow() {
 onMounted(async () => {
   ttsEnabled.value = loadTtsPreference()
   await loadSessions()
-  const { context_type, context_id, prompt } = route.query as any
-  if (prompt) await send(String(prompt), { context_type, context_id })
-  else if (context_type && context_id) await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
+  const { context_type, context_id, prompt, session_id } = route.query as any
+  if (session_id) {
+    await loadMessages(Number(session_id))
+  } else if (prompt) {
+    await send(String(prompt), { context_type, context_id })
+  } else if (context_type && context_id) {
+    await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
+  }
 })
 
 onBeforeUnmount(() => {
@@ -816,8 +916,8 @@ onBeforeUnmount(() => {
                         'text-primary': entry.type === 'text',
                       }"
                     >[{{ entry.label }}]</span>
-                    <span v-if="entry.type === 'tool_call'" class="text-[10px] text-muted-foreground/60 font-mono">
-                      {{ entry.content.split('\n')[0].slice(0, 80) }}{{ entry.content.length > 80 ? '...' : '' }}
+                    <span v-if="entry.type === 'tool_call'" class="text-[10px] text-muted-foreground/60 font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]">
+                      {{ entry.content.replace(/\s+/g, ' ').slice(0, 80) }}{{ entry.content.length > 80 ? '...' : '' }}
                     </span>
                     <span v-if="entry.type === 'tool_result'" class="ml-auto flex items-center gap-1">
                       <ChevronUp v-if="entry.expanded" :size="10" class="text-muted-foreground/50" />
@@ -830,12 +930,13 @@ onBeforeUnmount(() => {
                   </div>
 
                   <!-- 日志行内容 -->
-                  <div v-if="entry.type !== 'tool_result' || entry.expanded" class="px-3 pb-2">
+                  <div v-if="entry.type === 'tool_result' ? entry.expanded : true" class="px-3 pb-2 pt-1 border-t border-border/10 mt-1">
                     <pre
                       v-if="entry.type === 'tool_result'"
                       class="text-[11px] font-mono text-emerald-300/80 whitespace-pre-wrap break-all max-h-48 overflow-auto leading-relaxed"
                       :class="entry.content.startsWith('🔴') ? 'text-red-400' : entry.content.startsWith('❌') ? 'text-red-400' : 'text-emerald-300/80'"
                     >{{ entry.content }}</pre>
+                    <pre v-else-if="entry.type === 'tool_call'" class="text-[10px] text-muted-foreground/50 font-mono whitespace-pre-wrap break-all max-h-24 overflow-auto">{{ entry.content }}</pre>
                     <p v-else class="text-[11px] text-muted-foreground/70 font-mono leading-relaxed">{{ entry.content }}</p>
                   </div>
                 </div>
@@ -872,9 +973,8 @@ onBeforeUnmount(() => {
                   class="w-full h-full border-0"
                   sandbox="allow-scripts"
                 ></iframe>
-                <!-- Markdown 报告：纯文本展示 -->
-                <div v-else-if="drillReport || drillSummary" class="p-4 prose prose-invert prose-sm max-w-none text-foreground/70 whitespace-pre-wrap text-xs font-mono leading-relaxed">
-                  {{ drillReport || drillSummary }}
+                <!-- Markdown 报告：解析后作为 HTML 渲染 -->
+                <div v-else-if="drillReport || drillSummary" class="p-4 prose prose-invert prose-sm max-w-none text-foreground/80 text-xs leading-relaxed" v-html="parsedReportHtml">
                 </div>
               </ScrollArea>
             </div>

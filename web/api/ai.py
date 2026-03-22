@@ -202,6 +202,14 @@ def ai_sessions():
     return ok(sessions)
 
 
+@ai_bp.route('/reports', methods=['GET'])
+@require_auth
+def ai_reports():
+    """从数据库获取所有已生成的演练报告"""
+    reports = AiModel.get_reports()
+    return ok(reports)
+
+
 @ai_bp.route('/sessions/<int:session_id>/messages', methods=['GET'])
 @require_auth
 def ai_session_messages(session_id: int):
@@ -258,10 +266,18 @@ def ai_chat_stream():
     if session_id:
         sid = int(session_id)
         history = _get_history(sid)
+        # 如果是已有会话进入了演练模式，更新会话标记
+        if is_drill_mode:
+            AiModel.update_session_drill_mode(sid, 1)
     else:
         # 创建新会话
         title = message[:20] + "..." if len(message) > 20 else message
-        sid = AiModel.create_session(title=title, context_type=context_type, context_id=context_id)
+        sid = AiModel.create_session(
+            title=title, 
+            context_type=context_type, 
+            context_id=context_id,
+            is_drill_mode=1 if is_drill_mode else 0
+        )
         history = []
 
         # 注入初始上下文

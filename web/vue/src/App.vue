@@ -50,9 +50,9 @@ watch(() => auth.isLoggedIn, (v) => {
 }, { immediate: true })
 
 watch(
-  isDashboardRoute,
+  showPerspectiveGrid,
   (active) => {
-    document.documentElement.classList.toggle('dashboard-route-active', active)
+    document.documentElement.classList.toggle('app-immersive-active', active)
   },
   { immediate: true },
 )
@@ -69,7 +69,7 @@ onUnmounted(() => {
   removeBeforeGuard()
   removeAfterGuard()
   removeErrorHandler()
-  document.documentElement.classList.remove('dashboard-route-active')
+  document.documentElement.classList.remove('app-immersive-active')
   document.documentElement.classList.remove('ai-chat-background-disabled')
 })
 </script>
