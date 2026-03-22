@@ -228,7 +228,7 @@ onUnmounted(() => {
         </div>
 
         <div class="topology-stage-board__legend">
-          <span><i style="background: rgba(0, 212, 255, 0.82)"></i>骨干上联</span>
+<span><i style="background: hsl(var(--primary));"></i>骨干上联</span>
           <span><i style="background: rgba(0, 255, 136, 0.58)"></i>内网链路</span>
           <span><i style="background: rgba(0, 255, 136, 0.8)"></i>阻断联动</span>
           <span><i style="background: rgba(255, 68, 68, 0.82)"></i>攻击链路</span>
@@ -293,7 +293,7 @@ onUnmounted(() => {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(10, 18, 36, 0.82), rgba(7, 13, 29, 0.92));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 18px rgba(0, 212, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 18px hsl(var(--primary) / 0.12);
 }
 
 .topology-stage-board {
@@ -316,8 +316,8 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0, 212, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.08) 1px, transparent 1px);
+  linear-gradient(hsl(var(--primary) / 0.08) 1px, transparent 1px),
+  linear-gradient(90deg, hsl(var(--primary) / 0.08) 1px, transparent 1px);
   background-size: 34px 34px;
   mask-image: radial-gradient(circle at center, black, transparent 92%);
 }
@@ -424,7 +424,7 @@ onUnmounted(() => {
   bottom: 12px;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(0, 212, 255, 0.16);
+  border: 1px solid hsl(var(--primary) / 0.2);
   background: rgba(5, 5, 16, 0.78);
   backdrop-filter: blur(12px);
 }

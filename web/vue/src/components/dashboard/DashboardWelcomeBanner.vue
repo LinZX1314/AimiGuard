@@ -99,7 +99,7 @@ onUnmounted(() => {
       <div class="dashboard-kpi-strip">
         <article class="kpi-chip" :class="{ 'kpi-chip--active': animationStep === 0 }">
           <span>总攻击</span>
-          <strong class="text-cyan-400">{{ loading ? 0 : formatNumber(animatedMetrics.hfish_total) }}</strong>
+<strong class="text-primary">{{ loading ? 0 : formatNumber(animatedMetrics.hfish_total) }}</strong>
         </article>
         <article class="kpi-chip" :class="{ 'kpi-chip--active': animationStep === 1 }">
           <span>高危</span>

@@ -55,19 +55,19 @@ function getDecisionText(decision?: string) {
 </script>
 
 <template>
-  <TechCard title="防御处置队列" :icon="Shield" glow-color="green" class="bg-slate-900/30">
+    <TechCard title="防御处置队列" :icon="Shield" glow-color="green" class="tech-card-dashboard-clear">
     <div class="mb-3 grid grid-cols-3 gap-2">
-      <div class="rounded-lg border border-rose-400/25 bg-rose-500/10 px-2 py-1.5 text-center">
-        <p class="text-[10px] text-rose-200/70">建议封禁</p>
-        <p class="text-sm font-semibold text-rose-300 tabular-nums">{{ queueSummary.block }}</p>
+      <div class="rounded-lg border border-red-500/30 bg-red-500/8 px-2 py-1.5 text-center dark:border-red-400/25 dark:bg-red-500/10">
+        <p class="text-[10px] text-red-600 dark:text-red-300">建议封禁</p>
+        <p class="text-sm font-semibold text-red-600 dark:text-red-300 tabular-nums">{{ queueSummary.block }}</p>
       </div>
-      <div class="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1.5 text-center">
-        <p class="text-[10px] text-amber-200/70">分析中</p>
-        <p class="text-sm font-semibold text-amber-300 tabular-nums">{{ queueSummary.pending }}</p>
+      <div class="rounded-lg border border-amber-500/30 bg-amber-500/8 px-2 py-1.5 text-center dark:border-amber-400/25 dark:bg-amber-500/10">
+        <p class="text-[10px] text-amber-600 dark:text-amber-300">分析中</p>
+        <p class="text-sm font-semibold text-amber-600 dark:text-amber-300 tabular-nums">{{ queueSummary.pending }}</p>
       </div>
-      <div class="rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2 py-1.5 text-center">
-        <p class="text-[10px] text-emerald-200/70">已放行</p>
-        <p class="text-sm font-semibold text-emerald-300 tabular-nums">{{ queueSummary.safe }}</p>
+  <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/8 px-2 py-1.5 text-center border-emerald-400/25 bg-emerald-500/10">
+        <p class="text-[10px] text-emerald-600 dark:text-emerald-300">已放行</p>
+        <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-300 tabular-nums">{{ queueSummary.safe }}</p>
       </div>
     </div>
 
@@ -76,14 +76,14 @@ function getDecisionText(decision?: string) {
         <div
           v-for="item in defenseEvents"
           :key="item.attack_ip"
-          class="group rounded-lg border border-border/45 bg-gradient-to-r from-slate-900/45 to-slate-800/20 px-3 py-2.5 transition-all duration-300 hover:border-cyan-400/35 hover:shadow-[0_0_14px_rgba(34,211,238,0.08)]"
+          class="group rounded-lg border border-border/45 bg-secondary/30 px-3 py-2.5 transition-all duration-300 hover:border-primary/35 hover:shadow-[0_0_14px_hsl(var(--primary)/0.08)] dark:bg-muted/20"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 min-w-0">
               <component :is="getDecisionIcon(item.ai_decision)" class="h-3.5 w-3.5 shrink-0" :class="getDecisionColor(item.ai_decision).split(' ')[0]" />
               <p class="font-mono text-sm tracking-wide truncate">{{ item.attack_ip }}</p>
             </div>
-            <Badge variant="outline" class="text-xs shrink-0 border-cyan-400/30 bg-cyan-500/10 text-cyan-200">{{ item.attack_count }} 次</Badge>
+  <Badge variant="outline" class="text-xs shrink-0 border-primary/30 bg-primary/8 text-primary">{{ item.attack_count }} 次</Badge>
           </div>
           <p class="mt-1 pl-6 text-[11px] text-muted-foreground/80">{{ item.ip_location || '未知地区' }} · {{ item.latest_time || '-' }}</p>
           <div class="mt-2 pl-6">
@@ -97,12 +97,12 @@ function getDecisionText(decision?: string) {
           </div>
         </div>
         <div v-if="!defenseEvents.length && !loading" class="py-8 text-center text-sm text-muted-foreground">
-          <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-emerald-400/25 bg-emerald-500/10">
-            <ShieldAlert class="h-4 w-4 text-emerald-300" />
+  <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/8 border-emerald-400/25 bg-emerald-500/10">
+    <ShieldAlert class="h-4 w-4 text-emerald-600 text-emerald-300" />
           </div>
           暂无待处置事件
         </div>
       </div>
     </ScrollArea>
-  </TechCard>
+</TechCard>
 </template>

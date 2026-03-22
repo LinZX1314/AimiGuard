@@ -50,8 +50,8 @@ function animate() {
   const isDark = document.documentElement.classList.contains('dark')
   
   // 暗黑模式下用极客蓝/青，明亮模式下用清新蓝
-  const particleColor = isDark ? 'rgba(0, 212, 255, 0.6)' : 'rgba(59, 130, 246, 0.5)'
-  const lineColor = isDark ? 'rgba(0, 212, 255, 0.2)' : 'rgba(59, 130, 246, 0.2)'
+const particleColor = 'hsl(var(--primary) / 0.6)'
+const lineColor = 'hsl(var(--primary) / 0.2)'
 
   particles.forEach((p, i) => {
     p.x += p.vx

@@ -364,8 +364,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="absolute bottom-0 left-0 right-0 p-6 pointer-events-none">
-    <div class="max-w-4xl mx-auto flex flex-col gap-4 pointer-events-auto">
+  <div class="p-3 w-full shrink-0 relative z-10 bg-gradient-to-t from-background via-background/95 to-transparent">
+    <div class="w-full flex flex-col gap-3">
       <!-- Voice Capture Card -->
       <Transition
         enter-active-class="transition duration-300 ease-out"

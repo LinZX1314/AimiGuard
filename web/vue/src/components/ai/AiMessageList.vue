@@ -112,7 +112,7 @@ function messageKey(message: Message, index: number): string {
 </script>
 
 <template>
-  <ScrollArea ref="scrollAreaRef" class="flex-1 w-full pb-36 h-full">
+  <ScrollArea ref="scrollAreaRef" class="flex-1 w-full h-full">
     <div class="max-w-4xl w-full mx-auto flex flex-col px-4 pt-6 pb-5">
       <!-- Loading State -->
       <div v-if="loading && !messages.length" class="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-4 py-20">
@@ -173,40 +173,50 @@ function messageKey(message: Message, index: number): string {
                 v-html="renderMd(msg.content)"
               ></div>
 
-              <!-- Tool Calls & Results (Combined & Collapsible) -->
-              <div v-if="msg.tool_calls?.length || msg.tool_results?.length" class="w-full my-3">
-                <details class="group rounded-xl border border-border/60 bg-muted/20 overflow-hidden shadow-sm transition-all text-xs">
-                  <summary class="px-4 py-2.5 cursor-pointer hover:bg-muted/40 flex items-center justify-between list-none">
-                    <div class="flex items-center gap-2 font-semibold text-muted-foreground group-open:text-primary transition-colors">
-                      <Wrench :size="14" class="group-open:rotate-12 transition-transform" />
-                      <span>系统已执行 {{ msg.tool_calls?.length || 0 }} 项指令</span>
-                      <span v-if="msg.tool_results?.length === msg.tool_calls?.length" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">已完成</span>
-                      <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">执行中</span>
-                    </div>
-                    <div class="text-[10px] text-muted-foreground opacity-60 group-open:rotate-180 transition-transform">▼</div>
-                  </summary>
-                  
-                  <div class="p-3 space-y-4 bg-background/40 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
-                    <!-- Tool Calls -->
-                    <div v-for="tc in msg.tool_calls" :key="tc.id" class="space-y-1.5">
-                      <div class="flex items-center text-[11px] font-bold text-primary/80">
-                        <Wrench :size="12" class="mr-1.5" />
-                        调用工具: {{ tc.name || tc.function?.name }}
+              <!-- Tool Calls & Results (Individual & Sequential) -->
+              <template v-if="msg.tool_calls?.length || msg.tool_results?.length">
+                <div v-for="tc in msg.tool_calls" :key="tc.id" class="w-full my-3">
+                  <details class="group rounded-xl border border-border/60 bg-muted/20 overflow-hidden shadow-sm transition-all text-xs">
+                    <summary class="px-4 py-2.5 cursor-pointer hover:bg-muted/40 flex items-center justify-between list-none">
+                      <div class="flex items-center gap-2 font-semibold text-muted-foreground group-open:text-primary transition-colors">
+                        <Wrench :size="14" class="group-open:rotate-12 transition-transform" />
+                        <span>执行工具: {{ tc.name || tc.function?.name }}</span>
+                        <span v-if="msg.tool_results?.some(r => r.tool_call_id === tc.id)" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">已完成</span>
+                        <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">执行中</span>
                       </div>
-                      <pre class="p-2.5 rounded-lg bg-muted/40 font-mono text-[10px] text-muted-foreground/90 overflow-x-auto border border-border/20 whitespace-pre-wrap">{{ tc.arguments || tc.function?.arguments }}</pre>
-                    </div>
-
-                    <!-- Tool Results -->
-                    <div v-for="(tr, tri) in msg.tool_results" :key="tri" class="space-y-1.5 border-t border-border/20 pt-3">
-                      <div class="flex items-center text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 :size="12" class="mr-1.5" />
-                        执行结果: {{ tr.name }}
+                      <div class="text-[10px] text-muted-foreground opacity-60 group-open:rotate-180 transition-transform">▼</div>
+                    </summary>
+                    
+                    <div class="p-3 space-y-3 bg-background/40 border-t border-border/40 animate-in slide-in-from-top-1 duration-200">
+                      <div class="rounded-lg border border-border/40 overflow-hidden">
+                        <!-- Call -->
+                        <div class="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b border-border/20">
+                          <Wrench :size="12" class="text-primary/70 shrink-0" />
+                          <span class="text-[11px] font-bold text-primary/80">参数</span>
+                        </div>
+                        <pre class="p-2.5 font-mono text-[10px] text-muted-foreground/80 bg-muted/20 overflow-x-auto border-b border-border/20 whitespace-pre-wrap">{{ tc.arguments || tc.function?.arguments }}</pre>
+                        
+                        <!-- Paired Result -->
+                        <div
+                          v-for="tr in msg.tool_results?.filter(r => r.tool_call_id === tc.id)"
+                          :key="tr.tool_call_id"
+                          class="mt-0"
+                        >
+                          <div class="flex items-center gap-2 px-3 py-2 bg-emerald-500/5">
+                            <CheckCircle2 :size="12" class="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">输出结果: {{ tr.name }}</span>
+                          </div>
+                          <pre class="p-2.5 font-mono text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/5 overflow-x-auto whitespace-pre-wrap">{{ formatToolResult(tr.content) }}</pre>
+                        </div>
+                        <!-- No result yet -->
+                        <div v-if="!msg.tool_results?.some(r => r.tool_call_id === tc.id)" class="px-3 py-2 text-[10px] text-muted-foreground/50 italic">
+                          等待结果...
+                        </div>
                       </div>
-                      <pre class="p-2.5 rounded-lg bg-emerald-500/5 font-mono text-[10px] text-emerald-700 dark:text-emerald-300 overflow-x-auto border border-emerald-500/10 whitespace-pre-wrap">{{ formatToolResult(tr.content) }}</pre>
                     </div>
-                  </div>
-                </details>
-              </div>
+                  </details>
+                </div>
+              </template>
 
               <!-- Content Part 2: After Tools -->
               <div

@@ -471,30 +471,30 @@ onBeforeUnmount(() => {
 <template>
   <div class="h-full flex flex-col bg-transparent border border-border/60 rounded-lg overflow-hidden relative">
     <!-- Header - 科技风设计 + 历史记录/设置按钮 -->
-    <div class="flex items-center gap-3 px-3 py-2.5 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-cyan-500/5">
+<div class="flex items-center gap-3 px-3 py-2.5 border-b border-primary/20 bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
       <div class="relative">
-        <div class="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
-          <Bot class="h-4 w-4 text-cyan-400" />
+<div class="w-8 h-8 rounded bg-primary/10 border border-primary/30 flex items-center justify-center">
+          <Bot class="h-4 w-4 text-primary" />
         </div>
         <div class="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-background animate-pulse" />
       </div>
       <div class="flex-1 min-w-0">
         <h3 class="text-sm font-semibold text-foreground">AI 指挥中心</h3>
-        <p class="text-[10px] text-cyan-400/70 font-mono">STATUS: ONLINE</p>
+        <p class="text-[10px] text-primary/70 font-mono">STATUS: ONLINE</p>
       </div>
     </div>
 
     <!-- 快捷输入选项 -->
-    <div v-if="showQuickPrompts && messages.length === 0" class="px-3 py-2.5 border-b border-border/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
+    <div v-if="showQuickPrompts && messages.length === 0" class="px-3 py-2.5 border-b border-border/20 bg-gradient-to-r from-primary/5 to-transparent">
       <p class="text-xs text-muted-foreground mb-2 font-medium">💡 快捷指令</p>
       <div class="grid grid-cols-2 gap-2">
         <button
           v-for="prompt in quickPrompts"
           :key="prompt.label"
           @click="selectQuickPrompt(prompt.text)"
-          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-card/60 border border-border/40 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-200 text-left group"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-card/60 border border-border/40 hover:border-primary/50 hover:bg-primary/10 transition-all duration-200 text-left group"
         >
-          <component :is="prompt.icon" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <component :is="prompt.icon" class="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
           <span class="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{{ prompt.label }}</span>
         </button>
       </div>
@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
 
     <!-- 历史记录面板 -->
     <div v-if="showHistory" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-primary/20">
         <h3 class="text-sm font-semibold text-foreground">历史记录</h3>
         <button @click="showHistory = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
           <X class="w-4 h-4 text-muted-foreground" />
@@ -511,7 +511,7 @@ onBeforeUnmount(() => {
       <div class="flex-1 overflow-y-auto p-3 space-y-2">
         <button
           @click="loadHistorySession(-1)"
-          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors"
         >
           + 新对话
         </button>
@@ -519,7 +519,7 @@ onBeforeUnmount(() => {
           v-for="session in sessions"
           :key="session.id"
           @click="loadHistorySession(session.id)"
-          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-muted/30 border border-border/40 hover:bg-muted/50 hover:border-cyan-500/30 transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-left text-sm bg-muted/30 border border-border/40 hover:bg-muted/50 hover:border-primary/30 transition-colors"
         >
           <p class="text-foreground truncate">{{ session.title || '新对话' }}</p>
           <p class="text-[10px] text-muted-foreground mt-0.5">{{ session.created_at }}</p>
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
 
     <!-- 设置面板 -->
     <div v-if="showSettings" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-primary/20">
         <h3 class="text-sm font-semibold text-foreground">设置</h3>
         <button @click="showSettings = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
           <X class="w-4 h-4 text-muted-foreground" />
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
           <button
             @click="toggleTts"
             class="relative w-12 h-6 rounded-full transition-colors duration-200"
-            :class="settings.ttsEnabled ? 'bg-cyan-500' : 'bg-muted'"
+            :class="settings.ttsEnabled ? 'bg-primary' : 'bg-muted'"
           >
             <span
               class="absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
@@ -557,7 +557,7 @@ onBeforeUnmount(() => {
         <div class="py-2 border-b border-border/40">
           <div class="flex items-center justify-between mb-2">
             <p class="text-sm font-medium">语速</p>
-            <span class="text-xs text-cyan-400">{{ settings.voiceSpeed.toFixed(1) }}x</span>
+            <span class="text-xs text-primary">{{ settings.voiceSpeed.toFixed(1) }}x</span>
           </div>
           <input
             type="range"
@@ -565,7 +565,7 @@ onBeforeUnmount(() => {
             min="0.5"
             max="2"
             step="0.1"
-            class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+            class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
           />
         </div>
         <!-- 清空对话 -->

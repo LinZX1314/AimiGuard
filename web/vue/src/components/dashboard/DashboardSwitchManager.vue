@@ -204,22 +204,22 @@ onMounted(() => {
 
     <!-- replace switch-modal with Dialog from UI -->
     <Dialog :open="!!selectedPort" @update:open="(val) => { if (!val) closeModal() }">
-      <DialogContent class="sm:max-w-[425px] border-cyan-500/30 bg-slate-950/95 backdrop-blur-xl text-cyan-50">
+<DialogContent class="sm:max-w-[425px] border-primary/30 bg-white/95 backdrop-blur-xl text-slate-800">
         <DialogHeader>
           <DialogTitle>{{ selectedPort?.name }} 配置</DialogTitle>
-          <DialogDescription class="text-cyan-200/60">
+          <DialogDescription class="text-primary/70">
             修改当前物理端口的状态和 VLAN 划分。
           </DialogDescription>
         </DialogHeader>
 
         <div class="grid gap-6 py-4" v-if="selectedPort">
           <label class="grid gap-2">
-            <span class="text-sm font-medium text-cyan-200">Port Status (Admin)</span>
+            <span class="text-sm font-medium text-primary/70">Port Status (Admin)</span>
             <div class="flex gap-2">
               <button
                 type="button"
                 class="flex-1 py-2 px-3 rounded-md transition-all duration-200 text-sm font-medium border"
-                :class="editStatus === 'up' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'"
+:class="editStatus === 'up' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-600' : 'bg-slate-100 border-slate-200 text-slate-500'"
                 @click="editStatus = 'up'"
               >
                 UP (Enable)
@@ -227,7 +227,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="flex-1 py-2 px-3 rounded-md transition-all duration-200 text-sm font-medium border"
-                :class="editStatus === 'admin-down' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-slate-800/50 border-slate-700 text-slate-400'"
+:class="editStatus === 'admin-down' ? 'bg-red-500/20 border-red-500/50 text-red-600' : 'bg-slate-100 border-slate-200 text-slate-500'"
                 @click="editStatus = 'admin-down'"
               >
                 DOWN (Shutdown)
@@ -236,24 +236,24 @@ onMounted(() => {
           </label>
 
           <label class="grid gap-2">
-            <span class="text-sm font-medium text-cyan-200">Access VLAN</span>
+            <span class="text-sm font-medium text-primary/70">Access VLAN</span>
             <input
               v-model.number="editVlan"
               type="number"
               min="1"
               max="4094"
-              class="w-full rounded-md border border-cyan-500/30 bg-slate-900/80 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all font-mono"
+class="w-full rounded-md border border-primary/30 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono"
             />
           </label>
 
-          <div class="grid grid-cols-2 gap-3 p-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20">
+<div class="grid grid-cols-2 gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
             <div class="flex flex-col gap-1">
-              <span class="text-[10px] text-cyan-200/60 uppercase tracking-wider">Speed</span>
-              <strong class="text-sm text-cyan-400 font-mono">{{ selectedPort.speed }}</strong>
+              <span class="text-[10px] text-primary/70/60 uppercase tracking-wider">Speed</span>
+<strong class="text-sm text-primary font-mono">{{ selectedPort.speed }}</strong>
             </div>
             <div class="flex flex-col gap-1">
-              <span class="text-[10px] text-cyan-200/60 uppercase tracking-wider">Inbound / Outbound</span>
-              <strong class="text-sm text-cyan-400 font-mono">{{ selectedPort.tx }} M / {{ selectedPort.rx }} M</strong>
+              <span class="text-[10px] text-primary/70/60 uppercase tracking-wider">Inbound / Outbound</span>
+<strong class="text-sm text-primary font-mono">{{ selectedPort.tx }} M / {{ selectedPort.rx }} M</strong>
             </div>
           </div>
         </div>
@@ -261,7 +261,7 @@ onMounted(() => {
         <DialogFooter>
           <button
             type="button"
-            class="w-full justify-center rounded-md bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 hover:text-cyan-300 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full justify-center rounded-md bg-primary/10 px-4 py-2 text-sm font-medium text-primary border border-primary/30   transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="isSaving"
             @click="saveConfig"
           >
@@ -274,5 +274,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.switch-shell{position:relative;display:flex;flex-direction:column;height:100%;min-height:420px;border:1px solid rgba(255,255,255,.08);border-radius:20px;background:linear-gradient(180deg,rgba(5,10,24,.96),rgba(12,12,18,.98));overflow:hidden}.switch-head,.switch-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}.switch-head__identity,.switch-head p,.switch-head__reload,.switch-summary,.switch-port,.switch-modal__head,.switch-toggle-group,.switch-modal__stats div{display:flex;align-items:center}.switch-head__identity{gap:14px}.switch-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;color:var(--cyber-cyan);border:1px solid rgba(0,212,255,.2);background:rgba(0,212,255,.08)}.switch-icon svg,.switch-head__reload svg{width:22px;height:22px}.switch-head h3,.switch-modal__head h4{margin:0}.switch-head p,.switch-modal__stats span{margin:0;font:11px/1.4 'JetBrains Mono',monospace;color:var(--muted-foreground)}.switch-head p{display:flex;flex-wrap:wrap;gap:10px}.switch-head p strong{color:var(--cyber-green)}.switch-head__reload,.switch-modal__close,.switch-toggle,.switch-modal__save{min-height:44px;border-radius:12px;border:1px solid transparent;transition:background-color .18s ease,border-color .18s ease,opacity .18s ease}.switch-head__reload,.switch-modal__save{padding:0 14px;font-weight:600}.switch-head__reload{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--foreground);gap:10px}.switch-summary span,.switch-chassis__range,.switch-port__id,.switch-modal__field span,.switch-modal__stats strong{font-family:'JetBrains Mono',monospace;font-size:11px}.switch-summary strong,.switch-modal__stats strong{color:var(--cyber-cyan)}.switch-stage{flex:1;display:grid;place-items:center;padding:24px}.switch-chassis{position:relative;width:min(100%,860px);padding:20px;border-radius:12px;border:2px solid #2a2d36;background:#1a1c23;box-shadow:0 16px 40px rgba(0,0,0,.35)}.switch-chassis__lights{position:absolute;top:12px;left:18px;display:flex;gap:6px}.switch-chassis__lights span{width:8px;height:8px;border-radius:999px}.switch-chassis__lights span:first-child{background:#22c55e;box-shadow:0 0 12px #22c55e}.switch-chassis__lights span:last-child{background:#3b82f6}.switch-chassis__brand{position:absolute;right:26px;top:24px;font-size:34px;font-weight:900;font-style:italic;letter-spacing:-.06em;color:rgba(255,255,255,.12)}.switch-port-grid{margin-top:44px;padding:16px;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.06);border-radius:8px;display:grid;gap:8px}.switch-port-row{display:flex;justify-content:center;gap:8px}.switch-port{position:relative;flex-direction:column;gap:6px;padding:0;background:none;border:0;color:var(--foreground)}.switch-port__jack{width:34px;height:34px;border-radius:4px;border:2px solid #333;border-top:0;background:#111;position:relative}.switch-port[data-status='admin-down'] .switch-port__jack{background:#333;border-color:#555}.switch-port__jack::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:12px;height:6px;background:#222}.switch-port__jack::after{content:'';position:absolute;left:4px;right:4px;bottom:4px;height:4px;background:linear-gradient(90deg,#b8860b,#ffd700,#b8860b);opacity:.55}.switch-port__led{width:10px;height:5px;border-radius:999px;background:rgba(255,255,255,.16);box-shadow:0 0 10px rgba(255,255,255,.12)}.switch-port[data-status='up'] .switch-port__led{background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.65)}.switch-port[data-status='admin-down'] .switch-port__led{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.55)}.switch-chassis__range{margin-top:16px;text-align:center;color:rgba(255,255,255,.3);letter-spacing:.3em;text-transform:uppercase}.switch-modal{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}.switch-modal__dialog{width:min(100%,420px);padding:22px;border-radius:18px;border:1px solid rgba(0,212,255,.28);background:linear-gradient(180deg,rgba(10,15,24,.96),rgba(5,9,16,.98));box-shadow:0 24px 60px rgba(0,0,0,.45)}.switch-modal__body,.switch-modal__field{display:grid;gap:12px}.switch-modal__body{margin-top:16px}.switch-modal__close{padding:0 10px;border-color:rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7)}.switch-toggle-group{gap:10px}.switch-toggle{flex:1;justify-content:center;padding:0 12px;border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7)}.switch-toggle--danger.switch-toggle--active{border-color:rgba(255,68,68,.4);background:rgba(255,68,68,.16);color:#ff9c9c}.switch-toggle--active{border-color:rgba(34,197,94,.42);background:rgba(34,197,94,.12);color:#6ee7b7}.switch-modal__field input{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.36);color:var(--foreground);padding:0 14px}.switch-modal__stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.04)}.switch-modal__stats div{flex-direction:column;align-items:flex-start;gap:4px}.switch-modal__save{justify-content:center;border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.12);color:var(--cyber-cyan)}.switch-head__reload:focus-visible,.switch-port:focus-visible,.switch-modal__close:focus-visible,.switch-toggle:focus-visible,.switch-modal__field input:focus-visible,.switch-modal__save:focus-visible{outline:2px solid rgba(0,212,255,.7);outline-offset:2px}.switch-spin{animation:switch-spin 1s linear infinite}@keyframes switch-spin{to{transform:rotate(360deg)}}
+.switch-shell{position:relative;display:flex;flex-direction:column;height:100%;min-height:420px;border:1px solid rgba(255,255,255,.08);border-radius:20px;background:linear-gradient(180deg,rgba(5,10,24,.96),rgba(12,12,18,.98));overflow:hidden}.switch-head,.switch-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}.switch-head__identity,.switch-head p,.switch-head__reload,.switch-summary,.switch-port,.switch-modal__head,.switch-toggle-group,.switch-modal__stats div{display:flex;align-items:center}.switch-head__identity{gap:14px}.switch-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;color:var(--primary);border:1px solid rgba(59,130,246,.2);background:rgba(59,130,246,.08)}.switch-icon svg,.switch-head__reload svg{width:22px;height:22px}.switch-head h3,.switch-modal__head h4{margin:0}.switch-head p,.switch-modal__stats span{margin:0;font:11px/1.4 'JetBrains Mono',monospace;color:var(--muted-foreground)}.switch-head p{display:flex;flex-wrap:wrap;gap:10px}.switch-head p strong{color:var(--cyber-green)}.switch-head__reload,.switch-modal__close,.switch-toggle,.switch-modal__save{min-height:44px;border-radius:12px;border:1px solid transparent;transition:background-color .18s ease,border-color .18s ease,opacity .18s ease}.switch-head__reload,.switch-modal__save{padding:0 14px;font-weight:600}.switch-head__reload{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--foreground);gap:10px}.switch-summary span,.switch-chassis__range,.switch-port__id,.switch-modal__field span,.switch-modal__stats strong{font-family:'JetBrains Mono',monospace;font-size:11px}.switch-summary strong,.switch-modal__stats strong{color:var(--primary)}.switch-stage{flex:1;display:grid;place-items:center;padding:24px}.switch-chassis{position:relative;width:min(100%,860px);padding:20px;border-radius:12px;border:2px solid #2a2d36;background:#1a1c23;box-shadow:0 16px 40px rgba(0,0,0,.35)}.switch-chassis__lights{position:absolute;top:12px;left:18px;display:flex;gap:6px}.switch-chassis__lights span{width:8px;height:8px;border-radius:999px}.switch-chassis__lights span:first-child{background:#22c55e;box-shadow:0 0 12px #22c55e}.switch-chassis__lights span:last-child{background:#3b82f6}.switch-chassis__brand{position:absolute;right:26px;top:24px;font-size:34px;font-weight:900;font-style:italic;letter-spacing:-.06em;color:rgba(255,255,255,.12)}.switch-port-grid{margin-top:44px;padding:16px;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.06);border-radius:8px;display:grid;gap:8px}.switch-port-row{display:flex;justify-content:center;gap:8px}.switch-port{position:relative;flex-direction:column;gap:6px;padding:0;background:none;border:0;color:var(--foreground)}.switch-port__jack{width:34px;height:34px;border-radius:4px;border:2px solid #333;border-top:0;background:#111;position:relative}.switch-port[data-status='admin-down'] .switch-port__jack{background:#333;border-color:#555}.switch-port__jack::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:12px;height:6px;background:#222}.switch-port__jack::after{content:'';position:absolute;left:4px;right:4px;bottom:4px;height:4px;background:linear-gradient(90deg,#b8860b,#ffd700,#b8860b);opacity:.55}.switch-port__led{width:10px;height:5px;border-radius:999px;background:rgba(255,255,255,.16);box-shadow:0 0 10px rgba(255,255,255,.12)}.switch-port[data-status='up'] .switch-port__led{background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.65)}.switch-port[data-status='admin-down'] .switch-port__led{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.55)}.switch-chassis__range{margin-top:16px;text-align:center;color:rgba(255,255,255,.3);letter-spacing:.3em;text-transform:uppercase}.switch-modal{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}.switch-modal__dialog{width:min(100%,420px);padding:22px;border-radius:18px;border:1px solid rgba(59,130,246,.28);background:linear-gradient(180deg,rgba(10,15,24,.96),rgba(5,9,16,.98));box-shadow:0 24px 60px rgba(0,0,0,.45)}.switch-modal__body,.switch-modal__field{display:grid;gap:12px}.switch-modal__body{margin-top:16px}.switch-modal__close{padding:0 10px;border-color:rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7)}.switch-toggle-group{gap:10px}.switch-toggle{flex:1;justify-content:center;padding:0 12px;border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7)}.switch-toggle--danger.switch-toggle--active{border-color:rgba(255,68,68,.4);background:rgba(255,68,68,.16);color:#ff9c9c}.switch-toggle--active{border-color:rgba(34,197,94,.42);background:rgba(34,197,94,.12);color:#6ee7b7}.switch-modal__field input{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.36);color:var(--foreground);padding:0 14px}.switch-modal__stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.04)}.switch-modal__stats div{flex-direction:column;align-items:flex-start;gap:4px}.switch-modal__save{justify-content:center;border-color:rgba(59,130,246,.35);background:rgba(59,130,246,.12);color:var(--primary)}.switch-head__reload:focus-visible,.switch-port:focus-visible,.switch-modal__close:focus-visible,.switch-toggle:focus-visible,.switch-modal__field input:focus-visible,.switch-modal__save:focus-visible{outline:2px solid rgba(59,130,246,.7);outline-offset:2px}.switch-spin{animation:switch-spin 1s linear infinite}@keyframes switch-spin{to{transform:rotate(360deg)}}
 </style>
+
+

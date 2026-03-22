@@ -100,12 +100,12 @@ function getThreatLevelColor(level?: string) {
   if (lower === 'low' || level === '低危') {
     return 'text-emerald-300 border-emerald-400/35 bg-emerald-500/15'
   }
-  return 'text-slate-300 border-slate-400/30 bg-slate-500/15'
+return 'text-slate-500 border-slate-300 bg-slate-100'
 }
 </script>
 
 <template>
-  <TechCard glow-color="orange" class="flex-1 min-h-0 bg-slate-900/30">
+  <TechCard glow-color="orange" class="flex-1 min-h-0 bg-card">
 
     <div v-if="showErrorOnly" class="rounded-lg border border-orange-400/25 bg-gradient-to-r from-orange-500/15 to-red-500/10 px-3 py-3 text-sm text-orange-100">
       <div class="flex items-center gap-2">
@@ -120,16 +120,16 @@ function getThreatLevelColor(level?: string) {
         实时刷新失败，当前展示最近一次成功获取的数据
       </div>
 
-      <div class="mb-2 rounded-lg border border-cyan-400/20 bg-slate-950/40 p-2">
+    <div class="mb-2 rounded-lg border border-primary/20 bg-card p-2">
         <transition name="popup">
           <div
             v-if="popupItem && popupVisible"
-            class="rounded-md border border-cyan-400/30 bg-cyan-500/12 px-2 py-1.5 shadow-[0_0_18px_rgba(34,211,238,0.15)]"
+    class="rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 shadow-[0_0_18px_hsl(var(--primary)/0.15)]"
           >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <p class="truncate font-mono text-sm text-cyan-100">{{ popupItem.attack_ip }}</p>
-                <p class="truncate text-xs text-cyan-100/80">{{ popupItem.ip_location || '未知地区' }} / {{ popupItem.service_name || '未知服务' }}</p>
+    <p class="truncate font-mono text-sm text-foreground">{{ popupItem.attack_ip }}</p>
+    <p class="truncate text-xs text-muted-foreground">{{ popupItem.ip_location || '未知地区' }} / {{ popupItem.service_name || '未知服务' }}</p>
               </div>
               <Badge variant="outline" class="text-xs" :class="getThreatLevelColor(popupItem.threat_level)">
                 {{ formatThreatLevel(popupItem.threat_level) }}
@@ -139,9 +139,9 @@ function getThreatLevelColor(level?: string) {
         </transition>
       </div>
 
-      <div class="relative h-[88px] overflow-hidden rounded-lg border border-border/40 bg-slate-950/45">
-        <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-slate-950 to-transparent" />
-        <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-slate-950 to-transparent" />
+    <div class="relative h-[88px] overflow-hidden rounded-lg border border-border/40 bg-secondary">
+      <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-secondary to-transparent" />
+      <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-secondary to-transparent" />
 
         <div v-if="tickerItems.length" class="attack-ticker-track flex h-full w-max items-center gap-2 px-2">
           <div

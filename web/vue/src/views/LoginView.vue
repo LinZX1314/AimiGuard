@@ -182,7 +182,10 @@ function triggerShake() {
     <Button
       variant="outline"
       size="sm"
-      class="absolute top-5 right-5 z-20 rounded-full border-white/15 bg-black/20 backdrop-blur-md hover:bg-black/30"
+      class="absolute top-5 right-5 z-20 rounded-full backdrop-blur-md transition-all duration-300"
+      :class="isDark
+        ? 'border-white/15 bg-black/20 hover:bg-black/30'
+        : 'border-slate-300/60 bg-white/60 hover:bg-white/80 shadow-sm'"
       @click="handleToggleTheme"
     >
       <Sun v-if="isDark" class="h-4 w-4 mr-1.5" />
@@ -192,13 +195,16 @@ function triggerShake() {
 
     <!-- Ambient glow orbs -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute w-[600px] h-[600px] -top-40 -left-40 rounded-full bg-cyan-500/[0.04] blur-[120px] animate-[drift_12s_ease-in-out_infinite_alternate]"></div>
-      <div class="absolute w-[500px] h-[500px] -bottom-32 -right-32 rounded-full bg-blue-600/[0.05] blur-[100px] animate-[drift_15s_ease-in-out_infinite_alternate-reverse]"></div>
-      <div class="absolute w-[300px] h-[300px] top-1/2 left-1/3 rounded-full bg-indigo-500/[0.03] blur-[80px] animate-[drift_10s_ease-in-out_infinite_alternate]"></div>
+      <div class="absolute w-[600px] h-[600px] -top-40 -left-40 rounded-full opacity-[0.035] blur-[120px] animate-[drift_12s_ease-in-out_infinite_alternate]" :class="isDark ? 'bg-blue-500' : 'bg-primary'"></div>
+      <div class="absolute w-[500px] h-[500px] -bottom-32 -right-32 rounded-full opacity-[0.04] blur-[100px] animate-[drift_15s_ease-in-out_infinite_alternate-reverse]" :class="isDark ? 'bg-blue-600' : 'bg-primary/80'"></div>
+      <div class="absolute w-[300px] h-[300px] top-1/2 left-1/3 rounded-full opacity-[0.03] blur-[80px] animate-[drift_10s_ease-in-out_infinite_alternate]" :class="isDark ? 'bg-indigo-500' : 'bg-primary/60'"></div>
     </div>
 
     <!-- Grid overlay -->
-    <div class="absolute inset-0 pointer-events-none opacity-[0.04]" style="background-image: linear-gradient(rgba(0,229,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.3) 1px, transparent 1px); background-size: 60px 60px;"></div>
+    <div class="absolute inset-0 pointer-events-none opacity-[0.04]" :style="isDark ? 'background-image: linear-gradient(rgba(0,229,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.3) 1px, transparent 1px); background-size: 60px 60px;' : 'background-image: linear-gradient(rgba(59,130,246,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.4) 1px, transparent 1px); background-size: 60px 60px;'"></div>
+
+    <!-- Scan lines effect -->
+    <div class="absolute inset-0 pointer-events-none z-[1] opacity-[0.03]" :style="isDark ? 'background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.1) 2px, rgba(0,229,255,0.1) 4px);' : 'background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(59,130,246,0.08) 2px, rgba(59,130,246,0.08) 4px);'"></div>
 
     <!-- Particle canvas -->
     <canvas ref="canvasRef" class="fixed inset-0 z-0 pointer-events-none" />
@@ -222,10 +228,10 @@ function triggerShake() {
           class="relative inline-flex items-center justify-center transition-all duration-700 delay-200"
           :class="mounted ? 'opacity-100 scale-100' : 'opacity-0 scale-50'"
         >
-          <div class="absolute w-24 h-24 rounded-full border border-cyan-400/20 animate-[ping_3s_ease-in-out_infinite]"></div>
-          <div class="absolute w-20 h-20 rounded-full border border-cyan-400/10"></div>
-          <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-600/10 border border-cyan-400/30 flex items-center justify-center backdrop-blur-sm shadow-[0_0_40px_rgba(0,229,255,0.15)]">
-            <Shield class="h-8 w-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(0,229,255,0.5)]" />
+<div class="absolute w-24 h-24 rounded-full border animate-[ping_3s_ease-in-out_infinite]" :class="isDark ? 'border-primary/20' : 'border-primary/30'"></div>
+<div class="absolute w-20 h-20 rounded-full border" :class="isDark ? 'border-primary/10' : 'border-primary/20'"></div>
+          <div class="relative w-16 h-16 rounded-full border flex items-center justify-center backdrop-blur-sm" :class="isDark ? 'bg-gradient-to-br from-primary/20 to-primary/10 border-primary/30 shadow-[0_0_40px_hsl(var(--primary)/0.15)]' : 'bg-gradient-to-br from-primary/10 to-primary/5 border-primary/30 shadow-[0_0_40px_hsl(var(--primary)/0.15)]'">
+            <Shield class="h-8 w-8" :class="isDark ? 'text-primary drop-shadow-[0_0_8px_hsl(var(--primary)/0.4)]' : 'text-primary'" />
           </div>
         </div>
 
@@ -233,7 +239,7 @@ function triggerShake() {
           class="text-[28px] font-black mt-6 tracking-wider transition-all duration-700 delay-300"
           :class="mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'"
         >
-          <span class="bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(0,229,255,0.3)]">
+          <span class="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent" :class="isDark ? 'drop-shadow-[0_0_20px_rgba(0,229,255,0.3)]' : 'drop-shadow-[0_0_12px_hsl(var(--primary)/0.3)]'">
             智能AI防御指挥官
           </span>
         </h1>
@@ -243,8 +249,8 @@ function triggerShake() {
           class="h-5 mt-2.5 transition-all duration-700 delay-500"
           :class="mounted ? 'opacity-100' : 'opacity-0'"
         >
-          <span class="text-[10px] tracking-[0.25em] font-mono text-cyan-600/80">
-            {{ typedSubtitle }}<span class="inline-block w-[1px] h-3 bg-cyan-400 ml-[1px] align-middle" :class="showCursor ? 'opacity-100' : 'opacity-0'"></span>
+          <span class="text-[10px] tracking-[0.25em] font-mono" :class="isDark ? 'text-primary/60' : 'text-primary/70'">
+          <span class="inline-block w-[1px] h-3 ml-[1px] align-middle" :class="isDark ? 'bg-primary' : 'bg-primary'"></span>
           </span>
         </div>
       </div>
@@ -258,16 +264,16 @@ function triggerShake() {
         ]"
       >
         <!-- Card glow border -->
-        <div class="absolute -inset-[1px] rounded-xl bg-gradient-to-b from-cyan-400/30 via-cyan-400/5 to-blue-500/20 opacity-60 group-hover:opacity-100 transition-opacity duration-500 blur-[0.5px]"></div>
+        <div class="absolute -inset-[1px] rounded-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500 blur-[0.5px]" :class="isDark ? 'bg-gradient-to-b from-primary/40 via-primary/10 to-primary/20' : 'bg-gradient-to-b from-primary/40 via-primary/10 to-primary/20'"></div>
         
         <div
           class="relative rounded-xl backdrop-blur-2xl overflow-hidden border transition-colors duration-300"
           :class="isDark
             ? 'bg-[#0c1222]/88 border-white/[0.05] shadow-[0_20px_60px_rgba(0,0,0,0.5)]'
-            : 'bg-slate-100/72 border-slate-300/55 shadow-[0_14px_45px_rgba(15,23,42,0.10)]'"
+            : 'bg-white/95 border-primary/20 shadow-[0_8px_32px_rgba(59,130,246,0.15),0_2px_8px_rgba(59,130,246,0.08)]'"
         >
           <!-- Top accent line -->
-          <div class="h-[1px] w-full bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent"></div>
+          <div class="h-[1px] w-full" :class="isDark ? 'bg-gradient-to-r from-transparent via-primary/40 to-transparent' : 'bg-gradient-to-r from-transparent via-primary/40 to-transparent'"></div>
 
           <div class="px-8 pt-8 pb-9 space-y-5">
             <!-- Status indicator -->
@@ -298,14 +304,15 @@ function triggerShake() {
             <div class="space-y-3.5">
               <div 
                 class="relative rounded-lg transition-all duration-300"
-                :class="focusField === 'user' ? 'shadow-[0_0_0_1px_rgba(0,229,255,0.3),0_0_15px_rgba(0,229,255,0.08)]' : ''"
+                :class="focusField === 'user' ? `shadow-[0_0_0_1px_hsl(var(--primary)/0.35),0_0_15px_hsl(var(--primary)/0.1)]` : ''"
               >
-                <User class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200" :class="focusField === 'user' ? 'text-cyan-400' : 'text-slate-500'" />
+                <User class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200" :class="focusField === 'user' ? 'text-primary' : 'text-slate-400'" />
                 <Input 
                   v-model="username" 
                   placeholder="用户名"
                   autocomplete="username"
-                  class="pl-10 h-11 rounded-lg border-border bg-background/70 text-foreground placeholder:text-muted-foreground focus:border-cyan-400/30 focus:bg-background transition-all duration-300"
+                  class="pl-10 h-11 rounded-lg border-border bg-background/70 text-foreground placeholder:text-muted-foreground transition-all duration-300"
+                  :class="focusField === 'user' ? `border-primary/40 focus:border-primary/60 focus:bg-background focus:shadow-[0_0_0_1px_hsl(var(--primary)/0.3)]` : 'focus:border-primary/30 focus:bg-background'"
                   @focus="focusField = 'user'"
                   @blur="focusField = 'none'"
                   @keyup.enter="handleLogin"
@@ -314,15 +321,16 @@ function triggerShake() {
               
               <div 
                 class="relative rounded-lg transition-all duration-300"
-                :class="focusField === 'pass' ? 'shadow-[0_0_0_1px_rgba(0,229,255,0.3),0_0_15px_rgba(0,229,255,0.08)]' : ''"
+                :class="focusField === 'pass' ? `shadow-[0_0_0_1px_hsl(var(--primary)/0.35),0_0_15px_hsl(var(--primary)/0.1)]` : ''"
               >
-                <Lock class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200" :class="focusField === 'pass' ? 'text-cyan-400' : 'text-slate-500'" />
+                <Lock class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors duration-200" :class="focusField === 'pass' ? 'text-primary' : 'text-slate-400'" />
                 <Input 
                   v-model="password" 
                   :type="showPwd ? 'text' : 'password'"
                   placeholder="密码"
                   autocomplete="current-password"
-                  class="pl-10 pr-10 h-11 rounded-lg border-border bg-background/70 text-foreground placeholder:text-muted-foreground focus:border-cyan-400/30 focus:bg-background transition-all duration-300"
+                  class="pl-10 pr-10 h-11 rounded-lg border-border bg-background/70 text-foreground placeholder:text-muted-foreground transition-all duration-300"
+                  :class="focusField === 'pass' ? `border-primary/40 focus:border-primary/60 focus:bg-background focus:shadow-[0_0_0_1px_hsl(var(--primary)/0.3)]` : 'focus:border-primary/30 focus:bg-background'"
                   @focus="focusField = 'pass'"
                   @blur="focusField = 'none'"
                   @keyup.enter="handleLogin"
@@ -340,12 +348,12 @@ function triggerShake() {
             </div>
 
             <!-- Login Button -->
-            <Button 
+            <Button
               class="login-btn w-full h-11 text-sm font-bold tracking-[0.15em] uppercase relative overflow-hidden rounded-lg border-0 transition-all duration-300"
               :class="[
-                loading 
-                  ? 'bg-cyan-500/20 text-cyan-300 cursor-wait' 
-                  : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:shadow-[0_0_30px_rgba(0,229,255,0.25)] hover:scale-[1.01] active:scale-[0.99]'
+                loading
+                  ? `bg-primary/20 text-primary cursor-wait`
+                  : `bg-gradient-to-r from-primary to-primary/80 text-white hover:shadow-[0_0_30px_hsl(var(--primary)/0.3)] hover:scale-[1.01] active:scale-[0.99]`
               ]"
               :disabled="loading"
               @click="handleLogin"
@@ -405,8 +413,6 @@ function triggerShake() {
 }
 
 .login-page {
-  /* Subtle vignette */
-  background-image: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
   background-color: hsl(var(--background));
 }
 </style>

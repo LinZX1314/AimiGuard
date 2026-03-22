@@ -21,7 +21,7 @@ const props = defineProps<{
         /* Dark mode base */
         'dark:bg-gradient-to-br dark:from-slate-900/60 dark:to-slate-900/20 dark:border-white/[0.08] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
         /* Dark mode hover */
-        'dark:hover:from-slate-800/80 dark:hover:to-slate-900/40 dark:hover:border-cyan-400/40 dark:hover:shadow-[0_0_30px_rgba(34,211,238,0.15)]',
+'dark:hover:from-slate-800/80 dark:hover:to-slate-900/40 dark:hover:border-primary/40 dark:hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]',
         
         /* Inner 3D rim lighting */
         'after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:border after:border-white/20 dark:after:border-white/5 after:mix-blend-overlay',

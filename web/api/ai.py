@@ -287,6 +287,7 @@ def ai_chat_stream():
     AiModel.save_message(sid, 'user', message)
 
     def generate():
+        nonlocal drill_state
         # 如果是新会话，流开始的第一帧直接告诉前端建立的会话 ID
         if not session_id:
             yield f"data: {json.dumps({'session_id': sid}, ensure_ascii=False)}\n\n"
@@ -309,7 +310,8 @@ def ai_chat_stream():
                 "- drill_honeypot_stats: 获取蜜罐态势统计\n"
                 "- drill_ban_ip: 封禁恶意 IP\n"
                 "- drill_generate_report: 生成完整演练报告（必须最后调用）\n"
-                "- drill_get_status: 查询当前演练进度\n\n"
+                "- drill_get_status: 查询当前演练进度\n"
+                "- drill_get_local_ip: 查询本机IP地址\n\n"
                 "## 正确的工作流\n"
                 "1. 立即调用 drill_analyze_document 分析演练文档\n"
                 "2. 调用 drill_plan_actions 制定行动计划\n"
@@ -476,7 +478,28 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     'port': arguments.get('port', '21,22,23,80,81,135,139,443,445,1433,3306,5432,6379,8080,8443'),
                 }, cfg))
                 if drill_state and result.get('ok'):
-                    drill_state.add_scan_result({'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'target': target, 'result': result})
+                    drill_state.add_result('scan', {'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'target': target, 'result': result})
+                    # 提取 findings：主机 + 漏洞
+                    hosts = result.get('主机列表', [])
+                    vuln_list = result.get('漏洞列表', [])
+                    for h in hosts:
+                        ports_str = h.get('ports', '')
+                        if ports_str:
+                            drill_state.add_result('finding', {
+                                'ip': h.get('ip'),
+                                'ports': ports_str,
+                                'type': 'open_ports',
+                                'severity': 'info',
+                            })
+                    for v in vuln_list:
+                        drill_state.add_result('finding', {
+                            'ip': v.get('ip'),
+                            'port': v.get('port'),
+                            'service': v.get('service'),
+                            'vuln': v.get('vuln'),
+                            'type': 'vulnerability',
+                            'severity': 'high',
+                        })
                 return _json.dumps(result)
 
             if tool_name == 'drill_web_screenshot':
@@ -487,7 +510,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     return _json.dumps({'ok': False, 'error': '缺少参数'})
                 result = _json.loads(execute_tool('take_screenshot', {'url': url, 'ip': ip, 'port': port}, cfg))
                 if drill_state and result.get('ok'):
-                    drill_state.add_screenshot_result({'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'ip': ip, 'port': port, 'url': url, 'screenshot_url': result.get('screenshot_url', '')})
+                    drill_state.add_result('screenshot', {'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'ip': ip, 'port': port, 'url': url, 'screenshot_url': result.get('screenshot_url', '')})
                 return _json.dumps(result)
 
             if tool_name in ('drill_bruteforce_ssh', 'drill_bruteforce_rdp', 'drill_bruteforce_mysql'):
@@ -496,7 +519,20 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     return _json.dumps({'ok': False, 'error': '缺少目标IP'})
                 result = drill_bruteforce(tool_name, target_ip, arguments.get('port'))
                 if drill_state and result.get('ok'):
-                    drill_state.add_bruteforce_result({'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'tool': tool_name, 'target': target_ip, 'result': result})
+                    drill_state.add_result('bruteforce', {'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'tool': tool_name, 'target': target_ip, 'result': result})
+                    # 发现弱口令时同步记入 findings（critical 级别）
+                    if result.get('vulnerable') and result.get('vulnerable_creds'):
+                        for cred in result['vulnerable_creds']:
+                            drill_state.add_result('finding', {
+                                'type': 'weak_password',
+                                'severity': 'critical',
+                                'service': result.get('service', tool_name.replace('drill_bruteforce_', '').upper()),
+                                'ip': target_ip,
+                                'port': result.get('port'),
+                                'username': cred.get('username') or (cred.get('credential', '').split('/')[0] if '/' in cred.get('credential', '') else ''),
+                                'password': cred.get('password') or (cred.get('credential', '').split('/')[1] if '/' in cred.get('credential', '') else ''),
+                                'description': f'{result.get("service", "unknown")} 弱口令: {cred}',
+                            })
                 return _json.dumps(result)
 
             if tool_name == 'drill_honeypot_audit':
@@ -505,11 +541,16 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     'limit': arguments.get('limit', 50),
                 }, cfg))
                 if drill_state and result.get('ok'):
-                    drill_state.add_honeypot_result({'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'service': arguments.get('service_name') or '全部', 'count': result.get('总数', 0), 'records': result.get('攻击记录', [])})
+                    records = result.get('攻击记录', [])
+                    # 从攻击记录中取实际服务名，不再用请求参数
+                    actual_service = records[0].get('服务', '全部') if records else (arguments.get('service_name') or '全部')
+                    drill_state.add_result('honeypot', {'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'service': actual_service, 'count': result.get('总数', 0), 'records': records})
                 return _json.dumps(result)
 
             if tool_name == 'drill_honeypot_stats':
                 result = _json.loads(execute_tool('get_honeypot_stats', {}, cfg))
+                if drill_state and result.get('ok'):
+                    drill_state.add_result('honeypot_stats', result)
                 return _json.dumps(result)
 
             if tool_name == 'drill_ban_ip':
@@ -521,6 +562,8 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     'target_ip': target_ip,
                     'description': arguments.get('reason', '演练中发现的可疑IP'),
                 }, cfg))
+                if drill_state and result.get('ok'):
+                    drill_state.add_result('ban', {'time': _dt.now().strftime('%Y-%m-%d %H:%M:%S'), 'ip': target_ip, 'reason': arguments.get('reason', '演练中发现的可疑IP')})
                 return _json.dumps(result)
 
             if tool_name == 'drill_generate_report':
@@ -535,6 +578,38 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 if drill_state:
                     return _json.dumps({'ok': True, **drill_state.to_dict()})
                 return _json.dumps({'ok': True})
+
+            if tool_name == 'drill_get_local_ip':
+                import socket
+                hostname = socket.gethostname()
+                # 获取本机局域网 IP
+                try:
+                    local_ip = socket.gethostbyname(hostname)
+                except Exception:
+                    local_ip = '127.0.0.1'
+                # 获取本机所有 IP（排除回环）
+                all_ips = []
+                try:
+                    import psutil
+                    for iface, addrs in psutil.net_if_addrs().items():
+                        for addr in addrs:
+                            if addr.family == socket.AF_INET and addr.address != '127.0.0.1':
+                                all_ips.append(addr.address)
+                except ImportError:
+                    all_ips = [local_ip] if local_ip != '127.0.0.1' else []
+                # 推断网段
+                network = None
+                if local_ip and local_ip != '127.0.0.1':
+                    parts = local_ip.rsplit('.', 1)
+                    if len(parts) == 2:
+                        network = f"{parts[0]}.0.0/24"
+                return _json.dumps({
+                    'ok': True,
+                    'hostname': hostname,
+                    'local_ip': local_ip,
+                    'all_ips': list(set(all_ips)),
+                    'network': network or 'unknown',
+                })
 
             return _json.dumps({'ok': False, 'error': f'未知工具: {tool_name}'})
 
@@ -708,7 +783,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 except Exception:
                     pass
 
-        # 检查演练是否已结束
+        # 检查演练是否已结束（drill_generate_report 已触发过 drill_complete）
         if drill_state and drill_state.is_complete:
             yield json.dumps({'drill_complete': {
                 'report': drill_state.report_content,
@@ -716,6 +791,37 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 'findings_count': len(drill_state.findings),
             }})
             break
+
+    # ── 兜底：循环自然退出但从未触发 drill_complete（AI 一直在调用工具但未生成报告）─────────
+    if drill_state and not drill_state.is_complete:
+        try:
+            from database.models import HFishModel
+            hfish = HFishModel.get_stats()
+        except Exception:
+            hfish = {'total': 0, 'service_stats': [], 'ip_stats': [], 'time_stats': []}
+        report_prompt = _build_report_prompt(
+            drill_state, hfish,
+            drill_state.scan_results, drill_state.bruteforce_results,
+            drill_state.honeypot_results, drill_state.ban_records,
+            drill_state.findings, drill_state.screenshot_results
+        )
+        messages = [{'role': 'user', 'content': report_prompt}]
+        result = call_openai_chat_completion(messages, cfg)
+        if isinstance(result, dict) and result.get('content'):
+            report_html = result['content']
+            if '<html' not in report_html.lower():
+                report_html = f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>安全演练报告</title>\n</head>\n<body>\n{report_html}\n</body>\n</html>'
+        else:
+            report_html = '<div class="error">报告生成失败</div>'
+        drill_state.report_content = report_html
+        drill_state.is_complete = True
+        yield json.dumps({'drill_complete': {
+            'report': report_html,
+            'summary': drill_state.get_exec_summary(),
+            'findings_count': len(drill_state.findings),
+            'auto_generated': True,
+            'is_html': True,
+        }})
 
     # 保存最后一条 assistant 消息
     if history and history[-1].get('role') == 'assistant':

@@ -162,9 +162,9 @@ onUnmounted(() => {
 }
 
 :global(html) .route-progress {
-  --route-progress-color: #0b0b0b;
-  --route-progress-color-soft: rgba(0, 0, 0, 0.45);
-  --route-progress-track: rgba(0, 0, 0, 0.08);
+  --route-progress-color: #3B82F6;
+  --route-progress-color-soft: rgba(59, 130, 246, 0.45);
+  --route-progress-track: rgba(59, 130, 246, 0.12);
 }
 
 :global(html.dark) .route-progress {

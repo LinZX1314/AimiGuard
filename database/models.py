@@ -635,13 +635,30 @@ class ScreenshotModel:
 
     @staticmethod
     def get_all_screenshots(limit=100):
-        """获取所有截图记录"""
+        """获取所有截图记录（自动过滤文件已删除的记录）"""
+        import os
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM web_screenshots ORDER BY scan_time DESC LIMIT ?', (limit,))
         rows = cursor.fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            path = d.get('screenshot_path')
+            if path and os.path.exists(path):
+                result.append(d)
+            else:
+                # 文件已删除，清理数据库记录
+                try:
+                    conn2 = get_connection()
+                    cur2 = conn2.cursor()
+                    cur2.execute('DELETE FROM web_screenshots WHERE ip = ? AND port = ?', (d.get('ip'), d.get('port')))
+                    conn2.commit()
+                    conn2.close()
+                except Exception:
+                    pass
+        return result
 
     @staticmethod
     def delete_screenshot(ip, port):

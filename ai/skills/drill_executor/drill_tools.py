@@ -322,4 +322,22 @@ def get_drill_tool_definitions() -> list[dict]:
                 },
             },
         },
+
+        # ── 系统信息 ─────────────────────────────────────────────────────────
+        {
+            'type': 'function',
+            'function': {
+                'name': 'drill_get_local_ip',
+                'description': (
+                    '【本机IP查询】获取当前运行系统的 IP 地址信息。'
+                    '返回：本机局域网IP（内网）、公网IP（外网）、主机名。'
+                    '在演练前使用，确认本机网络环境。'
+                ),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {},
+                    'required': [],
+                },
+            },
+        },
     ]

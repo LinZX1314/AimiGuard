@@ -226,7 +226,7 @@ function formatToolResult(result: string): string {
       if (creds.length > 0) {
         return `🔴 弱口令发现！\n${creds.map((c: any) => `  ${c.username} / ${c.password}`).join('\n')}`
       }
-      return `✅ 检测完成，未发现弱口令`
+      return `✅ 检测完成，未发现常见弱口令`
     }
     if (parsed.发现主机 !== undefined) {
       drillHostsFound.value = Math.max(drillHostsFound.value, parsed.发现主机)
@@ -235,6 +235,11 @@ function formatToolResult(result: string): string {
     if (parsed.total !== undefined) return `✅ 蜜罐记录 ${parsed.total} 次攻击`
     if (parsed.screenshot_url) { drillScreenshotsTaken.value++; return `✅ 截图已保存` }
     if (parsed.report) return `✅ 报告生成完毕，共 ${parsed.findings_count || 0} 项发现`
+    if (parsed.plan) {
+      // 行动计划：提取阶段数作为摘要，不显示完整 markdown
+      const phases = (parsed.plan.match(/### /g) || []).length
+      return `✅ ${parsed.message || '行动计划已生成'}（${phases} 个阶段）`
+    }
     if (parsed.message) return parsed.message
     return JSON.stringify(parsed, null, 2)
   } catch { return result }
@@ -449,10 +454,10 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     let response: Response
-    if (!isDrill && attachmentFiles.length) {
+    if (attachmentFiles.length) {
       const form = new FormData()
       form.append('message', requestText)
-      form.append('drill_mode', 'false')
+      form.append('drill_mode', isDrill ? 'true' : 'false')
       if (currentSession.value && currentSession.value !== -1) {
         form.append('session_id', String(currentSession.value))
       }
@@ -516,7 +521,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             drillMode.value = true; drillLog.value = []; drillReport.value = ''
             drillFindingCount.value = 0; drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
             startDrillTimer()
-            drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行动计划...', 'zap', 'text-cyan-400')
+drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行动计划...', 'zap', 'text-primary')
             continue
           }
 
@@ -613,7 +618,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     }
 
     inFlightSessionId.value = null
-    if (drillMode.value && !sending.value) setTimeout(() => { if (!sending.value) drillMode.value = false }, 500)
   }
 }
 
@@ -695,8 +699,8 @@ onBeforeUnmount(() => {
               <!-- 统计数据 -->
               <div class="flex items-center gap-4">
                 <div class="flex items-center gap-1.5" title="已用时">
-                  <Clock :size="12" class="text-cyan-400/70" />
-                  <span class="text-xs font-mono text-cyan-400/90 tabular-nums">{{ formatElapsed(drillElapsed) }}</span>
+<Clock :size="12" class="text-primary/70" />
+                  <span class="text-xs font-mono text-primary/80 tabular-nums">{{ formatElapsed(drillElapsed) }}</span>
                 </div>
                 <div class="flex items-center gap-1.5" title="发现主机">
                   <Server :size="12" class="text-emerald-400/70" />
@@ -723,7 +727,7 @@ onBeforeUnmount(() => {
                 <div class="w-40 h-1.5 bg-muted/40 rounded-full overflow-hidden border border-border/20">
                   <div
                     class="h-full transition-all duration-500 ease-out rounded-full"
-                    :class="drillProgress > 80 ? 'bg-gradient-to-r from-emerald-500 to-cyan-500' : drillProgress > 40 ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : 'bg-gradient-to-r from-primary to-cyan-500'"
+                    :class="drillProgress > 80 ? 'bg-gradient-to-r from-blue-500 to-primary' : drillProgress > 40 ? 'bg-gradient-to-r from-primary to-blue-500' : 'bg-gradient-to-r from-primary to-blue-400'"
                     :style="{ width: drillProgress + '%' }"
                   ></div>
                 </div>
@@ -766,7 +770,7 @@ onBeforeUnmount(() => {
               <!-- 终端内容 -->
               <ScrollArea class="drill-log-scroll flex-1 p-3 space-y-1.5 bg-[#0a0e14]">
                 <!-- 欢迎信息 -->
-                <div class="text-[11px] font-mono text-cyan-400/40 mb-3 leading-relaxed">
+                <div class="text-[11px] font-mono text-primary/40 mb-3 leading-relaxed">
                   <div>╔══════════════════════════════════════════════════════════════════╗</div>
                   <div>║  玄枢·AI 攻防指挥官 Security Drill Executor                    ║</div>
                   <div>║  Copyright (c) 2026 XuanShu Security Systems                 ║</div>
@@ -783,7 +787,7 @@ onBeforeUnmount(() => {
                     'bg-emerald-500/5 border-emerald-500/20': entry.type === 'tool_result',
                     'bg-emerald-500/8 border-emerald-500/40': entry.type === 'complete',
                     'bg-orange-500/5 border-orange-500/20': entry.type === 'warning',
-                    'bg-cyan-500/5 border-cyan-500/20': entry.type === 'text',
+                    'bg-primary/5 border-primary/20': entry.type === 'text',
                   }"
                 >
                   <!-- 日志行头部 -->
@@ -799,7 +803,7 @@ onBeforeUnmount(() => {
                         'text-purple-400': entry.type === 'tool_call',
                         'text-emerald-400': entry.type === 'tool_result' || entry.type === 'complete',
                         'text-orange-400': entry.type === 'warning',
-                        'text-cyan-400': entry.type === 'text',
+                        'text-primary': entry.type === 'text',
                       }"
                     >[{{ entry.label }}]</span>
                     <span v-if="entry.type === 'tool_call'" class="text-[10px] text-muted-foreground/60 font-mono">
@@ -893,7 +897,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="bg-muted/30 rounded-lg p-3 border border-border/30">
                   <div class="text-[10px] text-muted-foreground/50 uppercase tracking-wider mb-1">已用时间</div>
-                  <div class="text-xl font-mono font-bold text-cyan-400">{{ formatElapsed(drillElapsed) }}</div>
+                  <div class="text-xl font-mono font-bold text-primary">{{ formatElapsed(drillElapsed) }}</div>
                 </div>
 
                 <!-- 工具调用历史 -->
@@ -919,7 +923,7 @@ onBeforeUnmount(() => {
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <div v-if="drillMode && !drillPanelOpen" class="absolute top-0 left-0 right-0 z-40">
         <div class="h-0.5 bg-muted">
-          <div class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500" :style="{ width: drillProgress + '%' }"></div>
+          <div class="h-full bg-gradient-to-r from-primary to-blue-500 transition-all duration-500" :style="{ width: drillProgress + '%' }"></div>
         </div>
         <div class="bg-muted/90 border-b border-border/40 px-4 py-1.5 flex items-center justify-between backdrop-blur">
           <div class="flex items-center gap-3 text-xs">
@@ -960,6 +964,6 @@ onBeforeUnmount(() => {
 }
 .animate-scanline {
   animation: scanline 4s linear infinite;
-  background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.15), transparent);
+background: linear-gradient(to bottom, transparent, hsl(var(--primary) / 0.12), transparent);
 }
 </style>

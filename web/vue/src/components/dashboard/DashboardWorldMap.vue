@@ -1,7 +1,11 @@
 <script lang="ts">
 let hasWorldMapLoadedOnce = false
-</script>
 
+function getComputedHue(): number {
+  const isDark = document.documentElement.classList.contains('dark')
+  return isDark ? 215 : 220
+}
+</script>
 <script setup lang="ts">
 import type { FeatureCollection, Geometry } from 'geojson'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -320,12 +324,12 @@ onBeforeUnmount(() => {
     <svg v-show="mapReady" class="world-map-shell__svg" viewBox="0 0 960 540" role="img" aria-label="全球攻击地图" @click="handleOceanClick">
       <defs>
         <linearGradient id="worldMapCountryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="rgba(0, 212, 255, 0.16)" />
-          <stop offset="100%" stop-color="rgba(0, 255, 136, 0.06)" />
+          <stop offset="0%" :stop-color="`hsl(${getComputedHue()} 80% 60% / 0.2)`" />
+          <stop offset="100%" stop-color="rgba(59, 130, 246, 0.08)" />
         </linearGradient>
         <radialGradient id="worldMapTargetGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.45" />
-          <stop offset="100%" stop-color="#00d4ff" stop-opacity="0" />
+          <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.45" />
+          <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
         </radialGradient>
       </defs>
 
@@ -357,7 +361,7 @@ onBeforeUnmount(() => {
 
       <g>
         <circle :cx="projectedTarget[0]" :cy="projectedTarget[1]" r="18" fill="url(#worldMapTargetGlow)" />
-        <circle :cx="projectedTarget[0]" :cy="projectedTarget[1]" r="3" fill="#00d4ff" />
+        <circle :cx="projectedTarget[0]" :cy="projectedTarget[1]" r="3" fill="#3b82f6" />
         <text :x="projectedTarget[0]" :y="projectedTarget[1] + 24" text-anchor="middle" class="world-map-shell__target-label">TARGET</text>
       </g>
     </svg>
@@ -366,7 +370,7 @@ onBeforeUnmount(() => {
       <span><i style="background:#ff4444"></i>严重</span>
       <span><i style="background:#ff7f24"></i>高危</span>
       <span><i style="background:#ffd700"></i>中危</span>
-      <span><i style="background:#00d4ff"></i>目标</span>
+      <span><i style="background:#3b82f6"></i>目标</span>
     </div>
 
     <div class="world-map-shell__status"><span class="status-indicator status-indicator--online"></span><span>{{ loading ? '载入中' : '实时监控' }}</span></div>
@@ -397,14 +401,14 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 12px;
   border: 1px solid hsl(var(--border) / 0.48);
-  background: radial-gradient(circle at 20% 15%, rgb(14 116 144 / 0.18), transparent 45%),
+  background: radial-gradient(circle at 20% 15%, rgb(30 64 175 / 0.12), transparent 45%),
     linear-gradient(160deg, hsl(var(--card) / 0.75), hsl(var(--card) / 0.5));
   overflow: hidden;
 }
 
 :global(html.dark) .world-map-shell {
-  background: radial-gradient(circle at 20% 15%, rgb(6 182 212 / 0.22), transparent 45%),
-    linear-gradient(160deg, rgb(7 18 34 / 0.96), rgb(2 10 23 / 0.86));
+  background: radial-gradient(circle at 20% 15%, rgb(59 130 246 / 0.15), transparent 50%),
+    linear-gradient(160deg, rgb(15 23 42 / 0.96), rgb(2 6 23 / 0.86));
 }
 
 .world-map-shell__toolbar {
@@ -445,14 +449,14 @@ onBeforeUnmount(() => {
 }
 
 .world-map-shell__country {
-  stroke: rgb(8 145 178 / 0.45);
+  stroke: rgb(59 130 246 / 0.45);
   stroke-width: 0.8;
   transition: fill 0.2s ease;
   cursor: pointer;
 }
 
 .world-map-shell__country:hover {
-  fill: rgb(34 211 238 / 0.28);
+  fill: rgb(96 165 250 / 0.28);
 }
 
 .world-map-shell__line {
@@ -465,7 +469,7 @@ onBeforeUnmount(() => {
 
 .world-map-shell__target-label {
   font-size: 10px;
-  fill: rgb(34 211 238 / 0.9);
+  fill: rgb(96 165 250 / 0.9);
   letter-spacing: 1px;
 }
 

@@ -30,6 +30,7 @@ import {
   Network,
   Zap,
   Settings,
+  Image as ImageIcon,
 } from 'lucide-vue-next'
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
@@ -140,6 +141,7 @@ const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
   { title: 'HFish 蜜罐', icon: Bug,             to: '/hfish' },
   { title: '主机探测',  icon: Radar,           to: '/nmap' },
+  { title: '截图画廊',  icon: ImageIcon,       to: '/screenshots' },
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
 ]
@@ -184,20 +186,20 @@ onUnmounted(() => {
 <template>
   <div class="flex h-screen w-full bg-transparent text-foreground overflow-hidden font-sans relative" :class="{ 'dashboard-immersive-shell': isDashboardRoute }">
     <!-- Sidebar -->
-    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10" :class="isDashboardRoute ? 'bg-transparent backdrop-blur-0' : 'bg-background/80 backdrop-blur-md'">
+    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10" :class="isDashboardRoute ? 'bg-transparent' : 'bg-secondary/80'">
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
-        <Avatar class="h-8 w-8 mr-3 drop-shadow-[0_0_4px_rgba(0,229,255,0.3)] bg-transparent">
+        <Avatar class="h-8 w-8 mr-3 shadow-[0_0_6px_hsl(var(--primary)/0.35)] bg-transparent">
           <AvatarImage :src="logoUrl" />
           <AvatarFallback class="bg-primary/20 text-primary uppercase text-xs">AG</AvatarFallback>
         </Avatar>
         <div class="flex flex-col justify-center">
-          <div class="text-[15px] font-black tracking-wide bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent leading-tight">
+          <div class="text-[15px] font-black tracking-wide bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent leading-tight">
             玄枢指挥官
           </div>
           <div class="text-[10px] font-medium text-muted-foreground mt-0.5 flex items-center">
             AI攻防
-            <span class="ml-1 px-1 border border-cyan-400/30 text-cyan-400 rounded text-[8px] uppercase">Pro</span>
+            <span class="ml-1 px-1 border border-primary/30 text-primary rounded text-[8px] uppercase">Pro</span>
           </div>
         </div>
       </div>
@@ -223,8 +225,8 @@ onUnmounted(() => {
               class="flex items-center px-3 py-2.5 rounded-md text-sm group relative overflow-hidden transition-all duration-300 ease-out"
               :class="[
                 isExactActive || (item.to !== '/' && route.path.startsWith(item.to))
-                   ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_rgba(0,229,255,0.1)]'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-foreground'
+                   ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_hsl(var(--primary)/0.15)]'
+                  : 'text-slate-500 hover:bg-muted/60 hover:text-foreground'
               ]"
             >
               <div
@@ -244,7 +246,7 @@ onUnmounted(() => {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Top Header -->
-      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] flex items-center justify-between px-4 sm:px-6 relative z-10" :class="isDashboardRoute ? 'bg-transparent backdrop-blur-0' : 'bg-background/60 backdrop-blur-md'">
+      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] flex items-center justify-between px-4 sm:px-6 relative z-10" :class="isDashboardRoute ? 'bg-transparent' : 'bg-secondary/80'">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
           <Button variant="ghost" size="icon" class="md:hidden mr-2">

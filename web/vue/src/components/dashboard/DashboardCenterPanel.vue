@@ -185,20 +185,20 @@ onUnmounted(() => {
 <template>
   <div ref="containerRef" class="dashboard-center-panel flex-1 min-h-0 relative rounded-lg border border-border/20">
     <!-- 主内容区域 -->
-    <div class="dashboard-center-panel__inner h-full p-3 md:p-3.5">
+    <div class="dashboard-center-panel__inner h-full flex flex-col p-3 md:p-3.5">
       <!-- Topbar: 仅保留当前页面视图切换 -->
-      <div class="mb-2.5 flex items-start justify-start">
-        <div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-cyan-500/20 shadow-lg shadow-cyan-500/5">
+      <div class="mb-2.5 flex items-start justify-start shrink-0">
+<div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-primary/20 shadow-lg shadow-primary/5">
           <button
             v-for="view in dashboardViews"
             :key="view.key"
             @click="activeView = view.key"
             class="group relative flex items-center gap-2 overflow-hidden rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-300"
             :class="activeView === view.key
-              ? 'text-cyan-400 bg-cyan-400/10 border border-cyan-400/30 shadow-inner'
+? 'text-primary bg-primary/10 border border-primary/30 shadow-inner'
               : 'text-muted-foreground hover:text-foreground'"
           >
-            <span v-if="activeView === view.key" class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-transparent animate-pulse" />
+            <span v-if="activeView === view.key" class="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent animate-pulse" />
             <component :is="view.icon" class="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110" />
             <span class="relative">{{ view.label }}</span>
           </button>
@@ -207,10 +207,10 @@ onUnmounted(() => {
 
       <!-- 主内容区域切换 -->
       <transition name="view-fade" mode="out-in">
-        <div class="h-full space-y-3">
+        <div class="flex-1 min-h-0 flex flex-col gap-3">
           <!-- 三个标签统一动画，但顶部信息按各自页面内容显示 -->
           <div
-            class="transition-all duration-700 ease-out"
+            class="shrink-0 transition-all duration-700 ease-out"
             :class="animationState.welcome ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'"
           >
             <DashboardWelcomeBanner v-if="activeView === 'overview'" :top-metrics="payload.top_metrics" :loading="loading" />
@@ -239,7 +239,7 @@ onUnmounted(() => {
           </div>
 
           <div
-            class="view-stage-shell transition-all duration-700 ease-out"
+            class="view-stage-shell flex-1 flex flex-col transition-all duration-700 ease-out"
             :class="animationState.overviewMap ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'"
           >
             <!-- 总览视图 -->
@@ -252,7 +252,7 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div class="honeypot-feed-card">
+              <div class="honeypot-feed-card shrink-0">
                 <div class="honeypot-feed__title">最新蜜罐捕获</div>
                 <TransitionGroup name="honeypot-list" tag="div" class="honeypot-feed__list">
                   <div
@@ -309,27 +309,21 @@ onUnmounted(() => {
 
 .dashboard-center-panel {
   height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
+  overflow: hidden;
 }
 
 .dashboard-center-panel__inner {
-  min-height: 100%;
+  height: 100%;
 }
 
 .view-stage-shell {
-  height: calc(100% - 132px);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   min-height: 0;
+  gap: 12px;
 }
 
 .view-main-card {
-  height: 520px;
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .view-empty-pad {
@@ -468,7 +462,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 176px;
+  height: 176px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -627,39 +621,11 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1279px) {
-  .dashboard-center-panel {
-    /* 小屏时固定中栏可视高度，让滚动条稳定出现在中间面板内部 */
-    height: calc(100svh - 132px);
-  }
-
-  .dashboard-center-panel__inner {
-    height: auto;
-  }
-
-  .view-stage-shell {
-    height: auto;
-    min-height: initial;
-  }
-
-  .view-main-card {
-    height: clamp(320px, 56vh, 520px);
-  }
+  /* No overrides needed since we use flexbox now */
 }
 
 @media (max-width: 640px) {
-  .dashboard-center-panel {
-    height: calc(100svh - 110px);
-  }
-
-  .view-main-card {
-    height: clamp(300px, 52vh, 460px);
-  }
-}
-
-@media (max-width: 1279px) and (max-height: 860px) {
-  .dashboard-center-panel {
-    height: calc(100svh - 120px);
-  }
+  /* On very small max-width devices, we probably want scroll if it's too squished, but we assume landscape self-adaptation */
 }
 
 .dashboard-center-panel::-webkit-scrollbar {

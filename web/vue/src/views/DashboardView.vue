@@ -96,12 +96,13 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-screen :deep(.tech-card-dashboard-clear) {
-  background: transparent;
-  backdrop-filter: none;
+  background: linear-gradient(180deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.84));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px hsl(var(--primary) / 0.08);
 }
 
 .dashboard-screen :deep(.tech-card-dashboard-clear)::before {
-  opacity: 0.1;
+  opacity: 0.16;
 }
 
 .dashboard-screen :deep(.dashboard-kpi-shell),
@@ -110,13 +111,13 @@ onUnmounted(() => {
 .dashboard-screen :deep(.device-panel-card),
 .dashboard-screen :deep(.topology-detail-card),
 .dashboard-screen :deep(.device-detail-strip) {
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
+  background: linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.38));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 32px hsl(var(--primary) / 0.08);
 }
 
 .dashboard-screen :deep(.dashboard-kpi-shell::before) {
-  opacity: 0.08;
+  opacity: 0.12;
 }
 
 .dashboard-screen :deep(.kpi-chip),
@@ -126,14 +127,35 @@ onUnmounted(() => {
 .dashboard-screen :deep(.device-detail-strip__eyebrow),
 .dashboard-screen :deep(.topology-stage-board__grid),
 .dashboard-screen :deep(.world-map-shell__loading) {
-  background: transparent;
-  backdrop-filter: none;
+  background: hsl(var(--secondary) / 0.4);
+  backdrop-filter: blur(8px);
   box-shadow: none;
 }
 
 .dashboard-screen :deep(.map-card),
 .dashboard-screen :deep(.view-main-card) {
-  border-color: hsl(var(--border) / 0.3);
+  border-color: hsl(var(--border) / 0.5);
+}
+
+.dashboard-screen {
+  position: relative;
+}
+
+.dashboard-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 30%),
+    radial-gradient(circle at top right, hsl(var(--primary) / 0.08), transparent 28%),
+    linear-gradient(180deg, hsl(var(--background) / 0.88), hsl(var(--secondary) / 0.22));
+  pointer-events: none;
+}
+
+.dashboard-screen__grid {
+  position: relative;
+  z-index: 1;
 }
 
 .dashboard-screen__grid > * {

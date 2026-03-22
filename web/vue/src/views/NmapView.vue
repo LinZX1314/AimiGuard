@@ -370,29 +370,15 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             <Network :size="20" class="text-primary" />
           </div>
           <div class="flex items-center gap-2">
-            <button
-              class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
-              :class="currentTab === 'hosts' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'"
-              @click="currentTab = 'hosts'"
-            >
-              网络探测结果
-            </button>
-            <button
-              class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5"
-              :class="currentTab === 'screenshots' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'"
-              @click="currentTab = 'screenshots'; loadGalleryScreenshots()"
-            >
-              <Camera :size="14" />
-              截图画廊
-            </button>
+            <span class="px-3 py-1.5 text-sm font-medium rounded-md bg-primary/10 text-primary">网络探测结果</span>
           </div>
         </div>
-        <Button variant="ghost" size="icon" @click="loadHosts" :disabled="loading" v-if="currentTab === 'hosts'">
+        <Button variant="ghost" size="icon" @click="loadHosts" :disabled="loading">
           <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
         </Button>
       </CardHeader>
       
-      <CardContent class="p-0" v-if="currentTab === 'hosts'">
+      <CardContent class="p-0">
         <div class="p-4 flex flex-wrap gap-4 border-b border-border/10">
           <div class="relative w-64">
             <Search :size="16" class="absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -453,78 +439,6 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
           </table>
         </div>
         <Pagination v-model:page="page" v-model:page-size="pageSize" :total="total" @update:page="loadHosts" @update:page-size="loadHosts" />
-      </CardContent>
-
-      <!-- Screenshot Gallery Tab -->
-      <CardContent class="p-4" v-else>
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <div class="relative w-64">
-            <Search :size="16" class="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input v-model="gallerySearch" placeholder="搜索 IP、端口、URL..." class="pl-9 h-9 bg-black/20" />
-          </div>
-          <Button variant="ghost" size="icon" @click="loadGalleryScreenshots" :disabled="galleryLoading">
-            <RefreshCw :size="16" :class="{ 'animate-spin': galleryLoading }" />
-          </Button>
-        </div>
-
-        <div v-if="galleryLoading && galleryScreenshots.length === 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          <div v-for="i in 8" :key="i" class="rounded-xl border border-border/50 overflow-hidden">
-            <div class="aspect-[4/3] bg-muted/40 animate-pulse"></div>
-            <div class="p-3 space-y-2">
-              <div class="h-4 bg-muted/40 rounded animate-pulse w-3/4"></div>
-              <div class="h-3 bg-muted/40 rounded animate-pulse w-1/2"></div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="filteredGalleryScreenshots.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          <div
-            v-for="sh in filteredGalleryScreenshots"
-            :key="`${sh.ip}-${sh.port}`"
-            class="rounded-xl border border-border/50 overflow-hidden bg-card hover:border-primary/40 transition-all cursor-pointer group"
-            @click="viewGalleryScreenshot(sh)"
-          >
-            <div class="aspect-[4/3] bg-muted/20 relative overflow-hidden">
-              <img
-                :src="getScreenshotUrl(sh.ip, sh.port)"
-                :alt="`${sh.ip}:${sh.port}`"
-                class="w-full h-full object-cover object-top"
-                @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
-              />
-              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
-                <ExternalLink :size="28" class="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <div class="absolute top-2 left-2">
-                <Badge v-if="sh.scan_id" variant="secondary" class="bg-primary/70 text-white border-0 text-[10px] px-1.5 py-0">
-                  #{{ sh.scan_id }}
-                </Badge>
-              </div>
-              <div class="absolute top-2 right-2">
-                <Badge variant="secondary" class="bg-black/60 text-white border-0 text-xs px-2 py-0.5 font-mono">
-                  :{{ sh.port }}
-                </Badge>
-              </div>
-            </div>
-            <div class="p-3 space-y-1.5">
-              <div class="flex items-center gap-2">
-                <Monitor :size="12" class="text-muted-foreground shrink-0" />
-                <span class="text-sm font-bold text-foreground truncate">{{ sh.ip }}</span>
-              </div>
-              <div class="text-[11px] text-muted-foreground truncate font-mono" :title="sh.url || ''">
-                {{ sh.url || '—' }}
-              </div>
-              <div v-if="sh.scan_time" class="text-[10px] text-muted-foreground/60">
-                {{ sh.scan_time?.slice(0, 16) }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="flex flex-col items-center justify-center py-24 text-muted-foreground">
-          <Camera :size="48" class="mb-4 opacity-30" />
-          <p class="text-sm font-medium">暂无截图记录</p>
-          <p class="text-xs mt-1">网络扫描时将对 Web 服务自动截图</p>
-        </div>
       </CardContent>
     </Card>
 

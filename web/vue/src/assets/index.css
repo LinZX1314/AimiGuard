@@ -4,25 +4,26 @@
 
 @layer base {
   :root {
-    --background: 218 22% 92%; /* 进一步压低亮度，减少大面积高亮造成的眩光 */
-    --foreground: 228 15% 15%;
-    --card: 220 18% 96%;
-    --card-foreground: 228 15% 15%;
-    --popover: 220 18% 96%;
-    --popover-foreground: 228 15% 15%;
-    --primary: 220 28% 22%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 220 16% 89%;
-    --secondary-foreground: 225 18% 20%;
-    --muted: 220 16% 89%;
-    --muted-foreground: 224 10% 40%;
-    --accent: 220 16% 89%;
-    --accent-foreground: 225 18% 20%;
+    /* 亮色主题：蓝色点缀 + 灰蓝层次背景 */
+    --background: 213 30% 94%;    /* 淡蓝灰底色，与白色卡片拉开层次 */
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;           /* 白色卡片 */
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;      /* 品牌蓝 #3B82F6 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 35% 82%;    /* 次级区域，蓝色更明显的中灰蓝 */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 215 15% 91%;
+    --muted-foreground: 215 16% 55%;
+    --accent: 217 91% 60%;       /* 强调蓝 */
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 14% 80%;
-    --input: 220 14% 82%;
-    --ring: 210 70% 45%;
+    --border: 214 30% 82%;
+    --input: 214 30% 84%;
+    --ring: 217 91% 60%;
     --radius: 0.5rem;
   }
 
@@ -84,7 +85,7 @@ html.ai-chat-background-disabled body::after {
 
 html.dashboard-route-active.dark body::after {
   /* 暗色模式：赛博朋克深邃青蓝光晕，扩大范围，增强可见度 */
-  background: radial-gradient(circle at 50% 50%, rgba(0, 229, 255, 0.25) 0%, transparent 80%);
+background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, transparent 80%);
 }
 
 @keyframes ambient-glow {
@@ -142,8 +143,8 @@ html.dashboard-route-active .perspective-floor {
 .dark .perspective-floor__grid {
   /* 暗色模式：赛博青色网格线 */
   background-image:
-    linear-gradient(to right, rgba(0, 212, 255, 0.30) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 212, 255, 0.30) 1px, transparent 1px);
+linear-gradient(to right, hsl(var(--primary) / 0.25) 1px, transparent 1px),
+  linear-gradient(to bottom, hsl(var(--primary) / 0.25) 1px, transparent 1px);
   filter: blur(1.2px);
 }
 
@@ -275,7 +276,7 @@ html.view-transitioning body * {
     background: transparent;
 }
 .honeypot-feed__list::-webkit-scrollbar-thumb {
-    background: rgba(34, 211, 238, 0.2); 
+    background: rgba(59, 130, 246, 0.25);
     border-radius: 999px;
 }
 

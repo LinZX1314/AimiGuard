@@ -115,7 +115,7 @@ export function resolveTopologyNodeTone(status: TopologyStatus): string {
 }
 
 export function getTopologyLinkColor(type: TopologyLinkType): string {
-  if (type === 'uplink') return 'rgba(0, 212, 255, 0.82)'
+if (type === 'uplink') return 'hsl(var(--primary))'
   if (type === 'lan') return 'rgba(0, 255, 136, 0.58)'
   if (type === 'blocked') return 'rgba(0, 255, 136, 0.8)'
   return 'rgba(255, 68, 68, 0.82)'

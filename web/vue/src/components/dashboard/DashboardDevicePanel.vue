@@ -57,9 +57,9 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
 
 .device-panel-card {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(10, 18, 36, 0.82), rgba(7, 13, 29, 0.92));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 18px rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  box-shadow: var(--shadow);
   padding: 12px;
   height: fit-content;
 }
@@ -68,9 +68,9 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
   display: inline-flex;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 212, 255, 0.24);
-  background: rgba(0, 212, 255, 0.08);
-  color: rgba(0, 212, 255, 0.82);
+  border: 1px solid hsl(var(--primary) / 0.3);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary) / 0.9);
   font-size: 10px;
   letter-spacing: 0.14em;
 }

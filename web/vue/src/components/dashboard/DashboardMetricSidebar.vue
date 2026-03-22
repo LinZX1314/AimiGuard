@@ -56,11 +56,11 @@ const props = defineProps<{
 }>()
 
 const metricCards = computed(() => [
-  { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-cyan-400' },
-  { key: 'hfish_high', label: '高危攻击', value: props.payload.top_metrics.hfish_high, color: 'text-red-400' },
-  { key: 'nmap_online', label: '在线主机', value: props.payload.top_metrics.nmap_online, color: 'text-emerald-400' },
-  { key: 'ai_decisions', label: 'AI 决策数', value: props.payload.top_metrics.ai_decisions, color: 'text-violet-400' },
-  { key: 'blocked_ips', label: '已封禁 IP', value: props.payload.top_metrics.blocked_ips, color: 'text-slate-400' },
+  { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-primary' },
+  { key: 'hfish_high', label: '高危攻击', value: props.payload.top_metrics.hfish_high, color: 'text-red-500' },
+  { key: 'nmap_online', label: '在线主机', value: props.payload.top_metrics.nmap_online, color: 'text-emerald-500' },
+  { key: 'ai_decisions', label: 'AI 决策数', value: props.payload.top_metrics.ai_decisions, color: 'text-violet-500' },
+  { key: 'blocked_ips', label: '已封禁 IP', value: props.payload.top_metrics.blocked_ips, color: 'text-slate-500 dark:text-slate-400' },
 ])
 
 const chainItems = [
@@ -75,8 +75,8 @@ const trendData = computed(() => ({
   datasets: [{
     label: '攻击次数',
     data: props.payload.trends.counts,
-    borderColor: '#06b6d4',
-    backgroundColor: 'rgba(6, 182, 212, 0.12)',
+    borderColor: 'hsl(var(--primary))',
+    backgroundColor: 'hsl(var(--primary) / 0.12)',
     fill: true,
     tension: 0.35,
     pointRadius: 2,
@@ -99,7 +99,7 @@ const serviceData = computed(() => ({
   datasets: [{
     label: '攻击次数',
     data: props.payload.hot_services.slice(0, 6).map((x) => x.count),
-    backgroundColor: '#8b5cf6',
+    backgroundColor: 'hsl(var(--primary) / 0.65)',
     borderRadius: 6,
   }],
 }))
@@ -130,10 +130,10 @@ const attackTypeWords = computed(() => {
 })
 
 const wordCloudOption = computed(() => {
-  // 定义一组柔和的颜色，符合暗色主题
+  // 主题感知色板：暗色用彩虹，亮色用蓝色系
   const colors = [
-    '#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb923c',
-    '#fbbf24', '#a3e635', '#2dd4bf', '#22d3ee', '#8b5cf6'
+    'hsl(var(--primary))', 'hsl(260 60% 55%)', 'hsl(340 65% 55%)',
+    'hsl(25 95% 55%)', 'hsl(158 80% 45%)', 'hsl(185 80% 45%)',
   ]
   return {
     tooltip: { show: true },
@@ -149,7 +149,7 @@ const wordCloudOption = computed(() => {
         right: null,
         bottom: null,
         sizeRange: [12, 32],
-        rotationRange: [0, 0], // 不旋转，正常的水平显示
+        rotationRange: [0, 0],
         rotationStep: 45,
         gridSize: 8,
         drawOutOfBound: false,
@@ -157,7 +157,6 @@ const wordCloudOption = computed(() => {
         textStyle: {
           fontWeight: 'bold',
           color: function () {
-            // 随机选取颜色
             return colors[Math.floor(Math.random() * colors.length)]
           }
         },
@@ -176,13 +175,11 @@ function getChainStatus(key: string): boolean {
 </script>
 
 <template>
-  <aside class="min-h-0 overflow-hidden pr-1">
-    <ScrollArea class="h-full">
-      <div class="space-y-3 pr-2">
-        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan" class="tech-card-dashboard-clear">
+  <aside class="h-full flex flex-col gap-3 min-h-0 overflow-hidden pr-2">
+        <TechCard title="态势摘要" :icon="Activity" glow-color="blue" class="tech-card-dashboard-clear shrink-0">
           <div class="space-y-1.5">
             <div class="grid grid-cols-2 gap-1.5">
-              <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
+              <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-secondary/30 px-2 py-1.5 dark:bg-muted/20">
                 <p class="text-[10px] tracking-wide text-muted-foreground">{{ item.label }}</p>
                 <p class="text-sm font-semibold leading-4" :class="item.color">{{ item.value || 0 }}</p>
               </div>
@@ -190,16 +187,17 @@ function getChainStatus(key: string): boolean {
           </div>
         </TechCard>
 
-        <TechCard title="实时攻击趋势" glow-color="cyan" class="tech-card-dashboard-clear">
-          <div class="h-36">
+        <TechCard title="实时攻击趋势" glow-color="blue" class="tech-card-dashboard-clear flex-adaptive-card flex-[0.9] shrink-0 min-h-0">
+          <div class="flex-1 min-h-0 relative w-full h-full">
             <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
             <Skeleton v-else-if="loading" class="h-full w-full" />
             <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
           </div>
         </TechCard>
 
-        <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear">
-          <div class="h-36">
+        <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
+          <div class="flex flex-col gap-2 flex-1 min-h-0 h-full">
+            <div class="flex-1 min-h-0 relative w-full h-full">
             <Bar
               v-if="payload.hot_services.length"
               :data="serviceData"
@@ -209,33 +207,42 @@ function getChainStatus(key: string): boolean {
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: {
-                  x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                  y: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                  x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } },
+                  y: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } }
                 }
               }"
             />
             <Skeleton v-else-if="loading" class="h-full w-full" />
             <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
-          </div>
+            </div>
 
-          <div class="h-40 mt-3 rounded-lg border border-border/60 bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
-            <v-chart class="h-full w-full" :option="wordCloudOption" autoresize />
-          </div>
-        </TechCard>
-
-        <TechCard title="防御链路状态" glow-color="green" class="tech-card-dashboard-clear">
-          <div class="space-y-1.5">
-            <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground">{{ item.label }}</span>
-              <span v-if="getChainStatus(item.key)" class="text-xs text-emerald-400">运行中</span>
-              <span v-else class="text-xs text-slate-500">未启用</span>
+            <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
+              <v-chart class="h-full w-full absolute inset-0" :option="wordCloudOption" autoresize />
             </div>
           </div>
         </TechCard>
-      </div>
-    </ScrollArea>
+
+        <TechCard title="防御链路状态" glow-color="green" class="tech-card-dashboard-clear shrink-0">
+          <div class="space-y-1.5">
+            <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
+              <span class="text-sm text-muted-foreground">{{ item.label }}</span>
+              <span v-if="getChainStatus(item.key)" class="text-xs text-emerald-500 font-medium">运行中</span>
+              <span v-else class="text-xs text-muted-foreground">未启用</span>
+            </div>
+          </div>
+        </TechCard>
   </aside>
 </template>
 
 <style scoped>
+.flex-adaptive-card {
+  display: flex;
+  flex-direction: column;
+}
+.flex-adaptive-card :deep(> div.p-2\.5) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 </style>
