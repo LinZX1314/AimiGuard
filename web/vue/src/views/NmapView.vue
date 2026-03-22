@@ -251,13 +251,14 @@ function analyzeWithAi(host: any) {
   })
 }
 
-function getScreenshotUrl(ip: string, port: number) {
+function getScreenshotUrl(ip: string, port: number, fresh = false) {
   const token = getToken() || ''
-  return `/api/nmap/screenshot/${encodeURIComponent(ip)}/${port}?token=${encodeURIComponent(token)}&t=${Date.now()}`
+  const base = `/api/nmap/screenshot/${encodeURIComponent(ip)}/${port}?token=${encodeURIComponent(token)}`
+  return fresh ? `${base}&t=${Date.now()}` : base
 }
 
 function viewScreenshot(ip: string, port: number, title?: string) {
-  screenshotImg.value = getScreenshotUrl(ip, port)
+  screenshotImg.value = getScreenshotUrl(ip, port, true)
   screenshotTitle.value = title || `${ip}:${port}`
   screenshotDlg.value = true
 }

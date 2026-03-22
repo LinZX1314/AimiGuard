@@ -195,6 +195,7 @@ function getToolIcon(toolName: string): string {
 }
 
 function drillAdd(type: 'step' | 'thinking' | 'tool_call' | 'tool_result' | 'complete' | 'warning' | 'text', label: string, content: string, icon: string, color: string, toolIcon = 'terminal') {
+  if (drillLog.value.length >= 500) drillLog.value.shift()  // 限制最大长度，防止内存溢出
   drillLog.value.push({
     id: ++drillLogId,
     type,
@@ -239,6 +240,16 @@ function formatToolResult(result: string): string {
       // 行动计划：提取阶段数作为摘要，不显示完整 markdown
       const phases = (parsed.plan.match(/### /g) || []).length
       return `✅ ${parsed.message || '行动计划已生成'}（${phases} 个阶段）`
+    }
+    if (parsed.攻击记录 !== undefined) {
+      // 蜜罐审计结果
+      const count = parsed.总数 || (parsed.攻击记录 && parsed.攻击记录.length) || 0
+      const service = parsed.service || '全部'
+      return `✅ 蜜罐审计完成，服务 [${service}]，${count} 条攻击记录`
+    }
+    if (parsed.local_ip) {
+      // 本机IP查询结果
+      return `✅ 本机 IP: ${parsed.local_ip} | 主机名: ${parsed.hostname || 'unknown'}`
     }
     if (parsed.message) return parsed.message
     return JSON.stringify(parsed, null, 2)
@@ -312,7 +323,7 @@ async function deleteSession(sid: number) {
     delete pendingSessionMessages[sid]
     if (currentSession.value === sid) { messages.value = []; currentSession.value = null }
     await loadSessions()
-  } catch {}
+  } catch (e) { console.error('删除会话失败:', e) }
 }
 
 function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] {
@@ -347,12 +358,9 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
           toolResults.push({ content: resolveContent(next), created_at: resolveTime(next), name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
           seqIndex++; cursor += 1; continue
         }
-        if (next.role === 'assistant' && !next.tool_calls?.length) {
-          postContent = resolveContent(next); createdAt = resolveTime(next) || createdAt; cursor += 1
-        }
         break
       }
-      normalized.push({ role: 'assistant', content, post_content: postContent, created_at: createdAt, tool_calls: current.tool_calls, tool_results: toolResults })
+      normalized.push({ role: 'assistant', content, created_at: createdAt, tool_calls: current.tool_calls, tool_results: toolResults })
       index = cursor; continue
     }
     if (current.role === 'assistant') {
@@ -441,7 +449,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     inFlightSessionId.value = null
   }
 
-  const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
+  let assistantMsg = reactive<Message>({ role: 'assistant', content: '' })
   requestMessages.push(assistantMsg as any)
 
   const controller = new AbortController()
@@ -496,8 +504,11 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
         if (typeQueue.length > 0) {
           const popCount = Math.max(1, Math.ceil(typeQueue.length / 15))
           const hasTools = (assistantMsg as any).tool_calls?.length > 0 || (assistantMsg as any).tool_results?.length > 0
-          if (hasTools) assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue.slice(0, popCount)
-          else assistantMsg.content += typeQueue.slice(0, popCount)
+          if (hasTools) {
+            assistantMsg = reactive({ role: 'assistant', content: '', created_at: new Date().toISOString() }) as any
+            requestMessages.push(assistantMsg as any)
+          }
+          assistantMsg.content += typeQueue.slice(0, popCount)
           typeQueue = typeQueue.slice(popCount)
         } else { clearInterval(typeInterval); typeInterval = null }
       }, 30)
@@ -557,8 +568,7 @@ drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行�
 
           if (parsed.tool_call) {
             if (typeQueue) {
-              if ((assistantMsg as any).tool_calls?.length > 0) assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue
-              else assistantMsg.content += typeQueue
+              assistantMsg.content += typeQueue
               typeQueue = ''
             }
             if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
@@ -572,19 +582,19 @@ drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行�
           }
 
           if (parsed.tool_result) {
-            if (typeQueue) { assistantMsg.post_content = (assistantMsg.post_content || '') + typeQueue; typeQueue = '' }
+            if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
             if (!(assistantMsg as any).tool_results) (assistantMsg as any).tool_results = []
             const tcId = parsed.tool_call_id || (assistantMsg as any).tool_calls?.slice(-1)[0]?.id || ''
             const result = typeof parsed.tool_result === 'string' ? parsed.tool_result : JSON.stringify(parsed.tool_result, null, 2)
             ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: result })
             if (drillMode.value) {
-              const lastLog = [...drillLog.value].reverse().find(e => e.type === 'tool_call')
+              const lastLog = (() => { for (let i = drillLog.value.length - 1; i >= 0; i--) { if (drillLog.value[i].type === 'tool_call') return drillLog.value[i] } return null })()
               if (lastLog) {
                 lastLog.content = formatToolResult(result)
                 try {
                   const r = JSON.parse(result)
                   if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
-                } catch {}
+                } catch (e) { console.warn('工具结果解析异常:', e) }
               }
             }
           }
@@ -598,7 +608,7 @@ drillAdd('text', '🚀 演练启动', 'AI 正在分析演练文档，制定行�
               currentSession.value = resolvedSessionId
             }
           }
-        } catch {}
+        } catch (e) { console.error('SSE解析错误:', e) }
       }
     }
     if (!drillMode.value) speak(assistantMsg.content)

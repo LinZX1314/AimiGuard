@@ -582,33 +582,25 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             if tool_name == 'drill_get_local_ip':
                 import socket
                 hostname = socket.gethostname()
-                # 获取本机局域网 IP
-                try:
-                    local_ip = socket.gethostbyname(hostname)
-                except Exception:
-                    local_ip = '127.0.0.1'
-                # 获取本机所有 IP（排除回环）
+                # 固定局域网 IP（离线环境）
+                local_ip = '192.168.0.5'
+                network = '192.168.0.0/24'
+                # 获取本机所有 IP（排除回环，仅供信息参考）
                 all_ips = []
                 try:
                     import psutil
                     for iface, addrs in psutil.net_if_addrs().items():
                         for addr in addrs:
-                            if addr.family == socket.AF_INET and addr.address != '127.0.0.1':
+                            if addr.family == socket.AF_INET and addr.address not in ('127.0.0.1', local_ip):
                                 all_ips.append(addr.address)
                 except ImportError:
-                    all_ips = [local_ip] if local_ip != '127.0.0.1' else []
-                # 推断网段
-                network = None
-                if local_ip and local_ip != '127.0.0.1':
-                    parts = local_ip.rsplit('.', 1)
-                    if len(parts) == 2:
-                        network = f"{parts[0]}.0.0/24"
+                    pass
                 return _json.dumps({
                     'ok': True,
                     'hostname': hostname,
                     'local_ip': local_ip,
                     'all_ips': list(set(all_ips)),
-                    'network': network or 'unknown',
+                    'network': network,
                 })
 
             return _json.dumps({'ok': False, 'error': f'未知工具: {tool_name}'})
@@ -644,7 +636,8 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 tool_calls.append(tool_call)
 
         response_text = ''.join(text_chunks)
-        if response_text:
+        if response_text and not tool_calls:
+            # 无工具调用时才保存纯文本回复，避免与带 tool_calls 的消息重复
             history.append({'role': 'assistant', 'content': response_text})
 
         # 无工具调用则结束
@@ -675,17 +668,30 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     ban_data, findings_data, screenshots_data
                 )
 
-                # 调用 AI 生成 HTML 报告
+                # 调用 AI 生成 HTML 报告（使用更长超时，因为报告内容较长）
                 messages = [{'role': 'user', 'content': report_prompt}]
-                result = call_openai_chat_completion(messages, cfg)
+                # 临时覆盖超时为 120s
+                cfg_report = dict(cfg)
+                ai_cfg_report = dict(cfg_report.get('ai', {}))
+                ai_cfg_report['timeout'] = 120
+                cfg_report['ai'] = ai_cfg_report
+                result = call_openai_chat_completion(messages, cfg_report)
 
-                if isinstance(result, dict) and result.get('content'):
+                if isinstance(result, dict) and result.get('error') == 'timeout':
+                    # 超时回退：使用本地 Markdown 报告
+                    report_html = _generate_drill_report(drill_state)
+                    is_html = False
+                    unified_log('AIChat', '报告生成超时，使用本地 Markdown 报告', 'WARN')
+                elif isinstance(result, dict) and result.get('content'):
                     report_html = result['content']
+                    is_html = True
                     # 确保是完整 HTML（可能 AI 忘了加 DOCTYPE）
                     if '<html' not in report_html.lower():
                         report_html = f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>安全演练报告</title>\n</head>\n<body>\n{report_html}\n</body>\n</html>'
                 else:
-                    report_html = '<div class="error">报告生成失败，请查看控制台日志。</div>'
+                    report_html = _generate_drill_report(drill_state)
+                    is_html = False
+                    unified_log('AIChat', f'报告生成失败({result})，使用本地 Markdown 报告', 'WARN')
 
                 drill_state.report_content = report_html
                 drill_state.is_complete = True
@@ -694,7 +700,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     'summary': drill_state.get_exec_summary(),
                     'findings_count': len(drill_state.findings),
                     'auto_generated': True,
-                    'is_html': True,
+                    'is_html': is_html,
                 }})
             break
 
@@ -708,6 +714,9 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                 'function': {'name': tc['name'], 'arguments': json.dumps(tc['arguments'], ensure_ascii=False)},
             } for tc in tool_calls]
         })
+        # 将当前 loop 步数同步到 drill_state，供执行摘要正确费用
+        if drill_state:
+            drill_state.step_count = step_count
         # 持久化 assistant tool_call 消息，避免前端断开后工具链记录丢失
         try:
             AiModel.save_message(
@@ -743,14 +752,11 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             res = _execute_tool(tool_name, tool_args)
 
             # 发送给前端（截断过长结果）
-            try:
-                res_json = json.loads(res)
-                display = res[:800] + '...' if len(res) > 800 else res
-            except Exception:
-                display = res[:800] + '...' if len(res) > 800 else res
+            display = res[:800] + '...' if len(res) > 800 else res
 
             yield json.dumps({'tool_result': {
                 'id': tc['id'],
+                'tool_call_id': tc['id'],   # 前端匹配所需
                 'name': tool_name,
                 'result': display,
                 'full_result': res,
@@ -779,18 +785,10 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                             'report': report_res.get('report', ''),
                             'summary': drill_state.get_exec_summary(),
                             'findings_count': len(drill_state.findings),
+                            'is_html': False,
                         }})
                 except Exception:
                     pass
-
-        # 检查演练是否已结束（drill_generate_report 已触发过 drill_complete）
-        if drill_state and drill_state.is_complete:
-            yield json.dumps({'drill_complete': {
-                'report': drill_state.report_content,
-                'summary': drill_state.get_exec_summary(),
-                'findings_count': len(drill_state.findings),
-            }})
-            break
 
     # ── 兜底：循环自然退出但从未触发 drill_complete（AI 一直在调用工具但未生成报告）─────────
     if drill_state and not drill_state.is_complete:
@@ -806,13 +804,24 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             drill_state.findings, drill_state.screenshot_results
         )
         messages = [{'role': 'user', 'content': report_prompt}]
-        result = call_openai_chat_completion(messages, cfg)
-        if isinstance(result, dict) and result.get('content'):
+        cfg_report = dict(cfg)
+        ai_cfg_report = dict(cfg_report.get('ai', {}))
+        ai_cfg_report['timeout'] = 120
+        cfg_report['ai'] = ai_cfg_report
+        result = call_openai_chat_completion(messages, cfg_report)
+        if isinstance(result, dict) and result.get('error') == 'timeout':
+            report_html = _generate_drill_report(drill_state)
+            is_html = False
+            unified_log('AIChat', '兜底报告生成超时，使用本地 Markdown 报告', 'WARN')
+        elif isinstance(result, dict) and result.get('content'):
             report_html = result['content']
+            is_html = True
             if '<html' not in report_html.lower():
                 report_html = f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>安全演练报告</title>\n</head>\n<body>\n{report_html}\n</body>\n</html>'
         else:
-            report_html = '<div class="error">报告生成失败</div>'
+            report_html = _generate_drill_report(drill_state)
+            is_html = False
+            unified_log('AIChat', f'兜底报告生成失败({result})，使用本地 Markdown 报告', 'WARN')
         drill_state.report_content = report_html
         drill_state.is_complete = True
         yield json.dumps({'drill_complete': {
@@ -820,7 +829,7 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             'summary': drill_state.get_exec_summary(),
             'findings_count': len(drill_state.findings),
             'auto_generated': True,
-            'is_html': True,
+            'is_html': is_html,
         }})
 
     # 保存最后一条 assistant 消息
@@ -962,10 +971,11 @@ def _generate_drill_report(state: DrillState) -> str:
     """生成演练 Markdown 报告"""
     from datetime import datetime
 
-    critical = [f for f in state.findings if f.get('severity') == 'critical']
-    high = [f for f in state.findings if f.get('severity') == 'high']
-    medium = [f for f in state.findings if f.get('severity') == 'medium']
-    info = [f for f in state.findings if f.get('severity') == 'info']
+    # 单次遍历，按 severity 分组
+    grouped = {'critical': [], 'high': [], 'medium': [], 'info': []}
+    for f in state.findings:
+        grouped.get(f.get('severity', 'info'), grouped['info']).append(f)
+    critical, high, medium, info = grouped['critical'], grouped['high'], grouped['medium'], grouped['info']
 
     report = f"""# 🛡️ 安全演练报告
 

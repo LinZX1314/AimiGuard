@@ -13,6 +13,11 @@ SOCKET_TIMEOUT = 3         # 端口检测超时（秒）
 CONN_TIMEOUT = 5           # 服务连接超时（秒）
 MAX_OUTPUT_DISPLAY = 2000  # 返回结果截断长度（字符）
 
+# ─── fscan 路径缓存（模块级，只计算一次）──────────────────────────────
+_BRUTEFORCE_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_LOCAL_FSCAN = os.path.join(_BRUTEFORCE_BASE_DIR, 'lib', 'fscan.exe')
+_FSCAN_PATH = _LOCAL_FSCAN if os.path.isfile(_LOCAL_FSCAN) else shutil.which('fscan')
+
 COMMON_SSH_CREDS = [
     ('root', 'root'), ('root', 'toor'), ('root', 'password'), ('root', '123456'),
     ('admin', 'admin'), ('admin', 'password'), ('admin', '123456'),
@@ -42,15 +47,7 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
         service_type: 服务类型 (ssh/rdp/mysql/smb/mssql/postgres)
         port: 端口号（可选，fscan会自动扫描）
     """
-    fscan_path = None
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    local_fscan = os.path.join(base_dir, 'lib', 'fscan.exe')
-    if os.path.isfile(local_fscan):
-        fscan_path = local_fscan
-    else:
-        system_fscan = shutil.which('fscan')
-        if system_fscan:
-            fscan_path = system_fscan
+    fscan_path = _FSCAN_PATH
 
     if not fscan_path:
         return {

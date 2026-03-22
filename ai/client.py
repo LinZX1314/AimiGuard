@@ -52,7 +52,11 @@ def call_openai_chat_completion(messages: list[dict], cfg: dict) -> dict:
         content = _content_to_text(message.content)
         return {'content': content}
     except Exception as e:
-        return {'content': f'⚠️ AI 调用失败: {e}'}
+        err_msg = str(e)
+        # 识别超时错误，返回特殊标记供调用方判断
+        if 'timeout' in err_msg.lower() or 'timed out' in err_msg.lower() or '524' in err_msg:
+            return {'ok': False, 'error': 'timeout', 'message': f'⚠️ AI 调用超时: {e}'}
+        return {'ok': False, 'error': str(e), 'content': f'⚠️ AI 调用失败: {e}'}
 
 
 def stream_openai_chat_completion(

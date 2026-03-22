@@ -130,14 +130,20 @@ function messageKey(message: Message, index: number): string {
       </div>
 
       <!-- Message List -->
-      <div v-else class="space-y-8">
+      <div v-else class="pb-8">
         <div
           v-for="(msg, idx) in renderMessages"
           :key="messageKey(msg, idx)"
           class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300"
-          :class="[msg.role === 'user' ? 'flex-row-reverse' : '']"
+          :class="[
+            msg.role === 'user' ? 'flex-row-reverse' : '',
+            idx > 0 && renderMessages[idx-1].role === msg.role ? 'mt-2' : (idx > 0 ? 'mt-8' : '')
+          ]"
         >
-          <Avatar class="mt-1 shadow-md border border-border/50 shrink-0">
+          <Avatar 
+            class="mt-1 shadow-md border border-border/50 shrink-0 transition-opacity"
+            :class="{ 'opacity-0 pointer-events-none': idx > 0 && renderMessages[idx-1].role === msg.role }"
+          >
             <template v-if="msg.role === 'assistant'">
               <AvatarImage src="" />
               <AvatarFallback class="bg-primary/10 text-primary">
@@ -229,10 +235,14 @@ function messageKey(message: Message, index: number): string {
         </div>
         <div ref="chatEnd" class="h-1" />
 
-        <div v-if="showSendingIndicator" class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300">
+        <div 
+          v-if="showSendingIndicator" 
+          class="flex gap-4 animate-in slide-in-from-bottom-2 duration-300"
+          :class="renderMessages.length > 0 && renderMessages[renderMessages.length-1].role === 'assistant' ? 'mt-2' : 'mt-8'"
+        >
           <Avatar class="mt-1 shadow-md border border-border/50 shrink-0">
             <AvatarImage src="" />
-            <AvatarFallback class="bg-primary/10 text-primary">
+            <AvatarFallback class="bg-primary/10 text-primary transition-opacity" :class="{ 'opacity-0 pointer-events-none': renderMessages.length > 0 && renderMessages[renderMessages.length-1].role === 'assistant' }">
               <Bot :size="18" />
             </AvatarFallback>
           </Avatar>

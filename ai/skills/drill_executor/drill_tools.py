@@ -3,12 +3,17 @@ Drill Skill 专用工具定义
 这些工具会在演练模式下暴露给 AI Agent
 """
 
+# ─── 工具定义缓存（避免每次调用重建）───────────────────────────────────
+_TOOL_DEFS_CACHE: list[dict] | None = None
+
 # ─── 文档分析工具 ──────────────────────────────────────────────────────────────
 
 
 def get_drill_tool_definitions() -> list[dict]:
-    """返回演练 Skill 的工具定义列表"""
-    return [
+    """返回演练 Skill 的工具定义列表（带缓存）"""
+    global _TOOL_DEFS_CACHE
+    if _TOOL_DEFS_CACHE is None:
+        _TOOL_DEFS_CACHE = [
         # ── 文档与规划 ────────────────────────────────────────────────────────
         {
             'type': 'function',
@@ -27,7 +32,7 @@ def get_drill_tool_definitions() -> list[dict]:
                             'description': '安全演练文档的完整文本内容',
                         },
                     },
-                    'required': ['document_content'],
+                    'required': [],   # 后端会从 drill_state 注入文档内容，无需 AI 重复传入
                 },
             },
         },
@@ -341,3 +346,4 @@ def get_drill_tool_definitions() -> list[dict]:
             },
         },
     ]
+    return _TOOL_DEFS_CACHE

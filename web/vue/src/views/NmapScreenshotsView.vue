@@ -48,13 +48,14 @@ async function loadScreenshots() {
   loading.value = false
 }
 
-function getScreenshotUrl(ip: string, port: number) {
+function getScreenshotUrl(ip: string, port: number, fresh = false) {
   const token = getToken() || ''
-  return `/api/nmap/screenshot/${encodeURIComponent(ip)}/${port}?token=${encodeURIComponent(token)}&t=${Date.now()}`
+  const base = `/api/nmap/screenshot/${encodeURIComponent(ip)}/${port}?token=${encodeURIComponent(token)}`
+  return fresh ? `${base}&t=${Date.now()}` : base
 }
 
 function viewScreenshot(sh: any) {
-  previewImg.value = getScreenshotUrl(sh.ip, sh.port)
+  previewImg.value = getScreenshotUrl(sh.ip, sh.port, true)  // 预览时强制刷新
   previewTitle.value = `${sh.ip}:${sh.port} — ${sh.url || ''}`
   previewDlg.value = true
 }

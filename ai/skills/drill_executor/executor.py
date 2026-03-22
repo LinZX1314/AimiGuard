@@ -740,12 +740,11 @@ def create_drill_stream(
         # 合并文本响应
         response_text = ''.join(text_chunks)
 
-        # 保存 AI 响应到历史
-        if response_text:
-            history.append({'role': 'assistant', 'content': response_text})
-
         # ─── 如果没有工具调用，结束循环 ─────────────────────────────────────
         if not tool_calls:
+            # 只有在无工具调用时才追加纯文本消息，避免与后面带 tool_calls 的消息重复
+            if response_text:
+                history.append({'role': 'assistant', 'content': response_text})
             unified_log('DrillExecutor', 'AI 无更多工具调用，演练结束', 'INFO')
             break
 
@@ -771,19 +770,20 @@ def create_drill_stream(
                 }
             })
 
-            # 保存 AI 的 tool_call 消息
-            history.append({
-                'role': 'assistant',
-                'content': response_text if response_text else None,
-                'tool_calls': [{
-                    'id': tc['id'],
-                    'type': 'function',
-                    'function': {
-                        'name': tool_name,
-                        'arguments': json.dumps(tool_args, ensure_ascii=False),
-                    }
-                }]
-            })
+            # 保存 AI 的 tool_call 消息（仅在第一个工具时附带 content，避免重复追加）
+            if tc is tool_calls[0]:
+                history.append({
+                    'role': 'assistant',
+                    'content': response_text if response_text else None,
+                    'tool_calls': [{
+                        'id': t['id'],
+                        'type': 'function',
+                        'function': {
+                            'name': t['name'],
+                            'arguments': json.dumps(t['arguments'], ensure_ascii=False),
+                        }
+                    } for t in tool_calls]
+                })
 
             # 执行工具
             tool_result = _execute_drill_tool(tool_name, tool_args, cfg, state)
