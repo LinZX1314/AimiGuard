@@ -34,7 +34,9 @@ interface ToolCall {
 
 interface ApiMessage {
   role: 'user' | 'assistant' | 'tool'
-  content: string
+  content?: string
+  openai_content?: string | null
+  ts?: string
   created_at?: string
   name?: string
   tool_call_id?: string
@@ -59,6 +61,14 @@ interface Message {
 
 interface Session { id: number; title: string; created_at: string }
 
+interface ChatAttachmentPayload {
+  name: string
+  type: string
+  size: number
+  isImage: boolean
+  textContent?: string
+}
+
 // ─── 通用状态 ────────────────────────────────────────────────────────────────
 const sessions = ref<Session[]>([])
 const messages = ref<Message[]>([])
@@ -67,7 +77,63 @@ const sending = ref(false)
 const currentSession = ref<number | null>(null)
 const activeChatController = ref<AbortController | null>(null)
 const ttsEnabled = ref(true)
+const inFlightSessionId = ref<number | null>(null)
+const pendingSessionMessages = reactive<Record<number, Message[]>>({})
 const route = useRoute()
+const TTS_STORAGE_KEY = 'aimiguard.ai.tts-enabled'
+
+function cloneMessages(source: Message[]): Message[] {
+  return source.map((msg) => ({
+    ...msg,
+    tool_calls: msg.tool_calls ? msg.tool_calls.map((tc) => ({ ...tc, function: tc.function ? { ...tc.function } : undefined })) : undefined,
+    tool_results: msg.tool_results ? msg.tool_results.map((tr) => ({ ...tr })) : undefined,
+  }))
+}
+
+function setPendingMessages(sessionId: number, source: Message[]) {
+  pendingSessionMessages[sessionId] = source
+}
+
+function getPendingMessages(sessionId: number): Message[] | null {
+  const pending = pendingSessionMessages[sessionId]
+  return pending ? cloneMessages(pending) : null
+}
+
+function mergeServerWithPending(sessionId: number, serverMessages: Message[]): Message[] {
+  const pending = pendingSessionMessages[sessionId]
+  if (!pending) return serverMessages
+
+  if (inFlightSessionId.value === sessionId) {
+    return cloneMessages(pending)
+  }
+
+  if (pending.length > serverMessages.length) {
+    return cloneMessages(pending)
+  }
+
+  delete pendingSessionMessages[sessionId]
+  return serverMessages
+}
+
+function loadTtsPreference() {
+  if (typeof window === 'undefined') return true
+  try {
+    const saved = window.localStorage.getItem(TTS_STORAGE_KEY)
+    if (saved === null) return true
+    return saved === '1' || saved === 'true'
+  } catch {
+    return true
+  }
+}
+
+function persistTtsPreference(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TTS_STORAGE_KEY, enabled ? '1' : '0')
+  } catch {
+    // 本地存储不可用时静默降级
+  }
+}
 
 // ─── 演练模式状态 ────────────────────────────────────────────────────────────
 const drillMode = ref(false)
@@ -203,6 +269,7 @@ function speak(text: string) {
 function toggleTts() {
   if (ttsEnabled.value && window.speechSynthesis) window.speechSynthesis.cancel()
   ttsEnabled.value = !ttsEnabled.value
+  persistTtsPreference(ttsEnabled.value)
 }
 
 function stopGenerating() { activeChatController.value?.abort() }
@@ -218,9 +285,18 @@ async function loadSessions() {
 async function loadMessages(sid: number) {
   if (sid === -1) { currentSession.value = -1; messages.value = []; loading.value = false; return }
   loading.value = true; currentSession.value = sid
+
+  const pending = getPendingMessages(sid)
+  if (inFlightSessionId.value === sid && pending) {
+    messages.value = pending
+    loading.value = false
+    return
+  }
+
   try {
     const d = await api.get<any>(`/api/v1/ai/sessions/${sid}/messages`)
-    messages.value = normalizeMessages((d.data ?? d) as ApiMessage[])
+    const normalized = normalizeMessages((d.data ?? d) as ApiMessage[])
+    messages.value = mergeServerWithPending(sid, normalized)
   } catch(e) { console.error(e) }
   loading.value = false
 }
@@ -228,25 +304,33 @@ async function loadMessages(sid: number) {
 async function deleteSession(sid: number) {
   try {
     await api.delete(`/api/v1/ai/sessions/${sid}`)
+    delete pendingSessionMessages[sid]
     if (currentSession.value === sid) { messages.value = []; currentSession.value = null }
     await loadSessions()
   } catch {}
 }
 
 function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] {
+  const resolveContent = (msg: ApiMessage) => {
+    return (msg.content ?? msg.openai_content ?? '').toString()
+  }
+  const resolveTime = (msg: ApiMessage) => {
+    return msg.created_at || msg.ts
+  }
+
   const normalized: Message[] = []
   let index = 0
   while (index < source.length) {
     const current = source[index]
     if (current.role === 'user') {
-      normalized.push({ role: 'user', content: current.content || '', created_at: current.created_at })
+      normalized.push({ role: 'user', content: resolveContent(current), created_at: resolveTime(current) })
       index += 1; continue
     }
     if (current.role === 'assistant' && current.tool_calls?.length) {
       const toolResults: ToolResult[] = []
-      let content = current.content || ''
+      let content = resolveContent(current)
       let postContent = ''
-      let createdAt = current.created_at
+      let createdAt = resolveTime(current)
       let cursor = index + 1
       let seqIndex = 0
       while (cursor < source.length) {
@@ -255,11 +339,11 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
           let matchedCall = current.tool_calls?.find(tc => tc.id === next.tool_call_id)
           if (!matchedCall && seqIndex < current.tool_calls.length) matchedCall = current.tool_calls[seqIndex]
           const toolName = next.name || matchedCall?.name || (matchedCall as any)?.function?.name || 'unknown_tool'
-          toolResults.push({ content: next.content || '', created_at: next.created_at, name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
+          toolResults.push({ content: resolveContent(next), created_at: resolveTime(next), name: toolName, tool_call_id: next.tool_call_id || matchedCall?.id })
           seqIndex++; cursor += 1; continue
         }
         if (next.role === 'assistant' && !next.tool_calls?.length) {
-          postContent = next.content || ''; createdAt = next.created_at || createdAt; cursor += 1
+          postContent = resolveContent(next); createdAt = resolveTime(next) || createdAt; cursor += 1
         }
         break
       }
@@ -267,14 +351,58 @@ function normalizeMessages(source: ApiMessage[], fallbackReply = ''): Message[] 
       index = cursor; continue
     }
     if (current.role === 'assistant') {
-      normalized.push({ role: 'assistant', content: current.content || fallbackReply, created_at: current.created_at })
+      const assistantContent = resolveContent(current)
+      normalized.push({ role: 'assistant', content: assistantContent || fallbackReply, created_at: resolveTime(current) })
       index += 1; continue
     }
-    normalized.push({ role: 'assistant', content: '', created_at: current.created_at, tool_results: [{ content: current.content || '', created_at: current.created_at, name: current.name, tool_call_id: current.tool_call_id }] })
+    normalized.push({ role: 'assistant', content: '', created_at: resolveTime(current), tool_results: [{ content: resolveContent(current), created_at: resolveTime(current), name: current.name, tool_call_id: current.tool_call_id }] })
     index += 1
   }
   if (!normalized.length && fallbackReply) normalized.push({ role: 'assistant', content: fallbackReply })
   return normalized
+}
+
+function composeTextWithAttachments(text: string, attachments: ChatAttachmentPayload[] = []): string {
+  if (!attachments.length) return text
+
+  const header = attachments
+    .map((item, index) => `${index + 1}. ${item.name} (${item.type || 'unknown'}, ${Math.max(1, Math.ceil(item.size / 1024))}KB)`)
+    .join('\n')
+
+  const textParts = attachments
+    .filter((item) => !item.isImage && item.textContent)
+    .map((item) => `【文件内容：${item.name}】\n${item.textContent}`)
+    .join('\n\n')
+
+  const imageTips = attachments
+    .filter((item) => item.isImage)
+    .map((item) => `- ${item.name}`)
+    .join('\n')
+
+  const blocks = [
+    text,
+    `\n\n[已附加文件]\n${header}`,
+  ]
+
+  if (textParts) {
+    blocks.push(`\n\n${textParts}`)
+  }
+
+  if (imageTips) {
+    blocks.push(`\n\n[已附加图片]\n${imageTips}\n请基于对话上下文给出处理建议。`)
+  }
+
+  return blocks.join('')
+}
+
+function isEmptyAssistantMessage(msg?: Message): boolean {
+  if (!msg || msg.role !== 'assistant') return false
+  return !(
+    msg.content?.trim() ||
+    msg.post_content?.trim() ||
+    msg.tool_calls?.length ||
+    msg.tool_results?.length
+  )
 }
 
 // Send
@@ -283,6 +411,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   if (sending.value) return
 
   const isDrill = !!documentContent
+  const attachmentFiles = (extraParams?.files || []) as File[]
   if (isDrill) {
     drillLog.value = []; drillReport.value = ''; drillMode.value = true; drillPanelOpen.value = true
     drillStep.value = 0; drillFindingCount.value = 0; drillElapsed.value = 0
@@ -290,26 +419,64 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     startDrillTimer()
   }
 
-  const displayText = isDrill ? `【演练文档】\n${documentContent}` : text
+  const attachments = (extraParams?.attachments || []) as ChatAttachmentPayload[]
+  const baseText = (text || '').trim() || (attachmentFiles.length ? '请分析我上传的文件/图片。' : '')
+  const composedText = isDrill ? text : composeTextWithAttachments(baseText, attachments)
+  const displayText = isDrill ? `【演练文档】\n${documentContent}` : composedText
   messages.value.push({ role: 'user', content: displayText })
   sending.value = true
+  const requestMessages = messages.value
+  const requestSessionId = currentSession.value && currentSession.value > 0 ? currentSession.value : null
+  let resolvedSessionId: number | null = requestSessionId
+
+  if (requestSessionId) {
+    inFlightSessionId.value = requestSessionId
+    setPendingMessages(requestSessionId, requestMessages)
+  } else {
+    inFlightSessionId.value = null
+  }
+
   const assistantMsg = reactive<Message>({ role: 'assistant', content: '', post_content: '' })
-  messages.value.push(assistantMsg as any)
+  requestMessages.push(assistantMsg as any)
 
   const controller = new AbortController()
   activeChatController.value = controller
 
   try {
-    const body: any = { message: isDrill ? `【演练文档】${documentContent}` : text, drill_mode: isDrill, ...extraParams }
-    if (currentSession.value && currentSession.value !== -1) body.session_id = currentSession.value
-
+    const requestText = isDrill ? `【演练文档】${documentContent}` : baseText
     const token = localStorage.getItem('token')
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const response = await fetch('/api/v1/ai/chat/stream', {
-      method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', signal: controller.signal
-    })
+    let response: Response
+    if (!isDrill && attachmentFiles.length) {
+      const form = new FormData()
+      form.append('message', requestText)
+      form.append('drill_mode', 'false')
+      if (currentSession.value && currentSession.value !== -1) {
+        form.append('session_id', String(currentSession.value))
+      }
+      if (extraParams?.context_type) form.append('context_type', String(extraParams.context_type))
+      if (extraParams?.context_id) form.append('context_id', String(extraParams.context_id))
+      attachmentFiles.forEach((file) => form.append('files', file))
+
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST',
+        headers,
+        body: form,
+        credentials: 'include',
+        signal: controller.signal,
+      })
+    } else {
+      headers['Content-Type'] = 'application/json'
+      const body: any = { message: requestText, drill_mode: isDrill, ...extraParams }
+      delete body.attachments
+      delete body.files
+      if (currentSession.value && currentSession.value !== -1) body.session_id = currentSession.value
+      response = await fetch('/api/v1/ai/chat/stream', {
+        method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', signal: controller.signal
+      })
+    }
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
     const reader = response.body.getReader()
@@ -417,8 +584,14 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             }
           }
 
-          if (parsed.session_id && (!currentSession.value || currentSession.value === -1)) {
-            currentSession.value = parsed.session_id; await loadSessions()
+          if (parsed.session_id && !resolvedSessionId) {
+            resolvedSessionId = Number(parsed.session_id)
+            inFlightSessionId.value = resolvedSessionId
+            setPendingMessages(resolvedSessionId, requestMessages)
+            await loadSessions()
+            if (!currentSession.value || currentSession.value === -1) {
+              currentSession.value = resolvedSessionId
+            }
           }
         } catch {}
       }
@@ -430,6 +603,16 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     if (drillMode.value) drillAdd('warning', '❌ 请求失败', e.message || '', 'alert-triangle', 'text-red-400')
   } finally {
     stopDrillTimer(); sending.value = false; activeChatController.value = null
+    const lastMsg = requestMessages[requestMessages.length - 1]
+    if (isEmptyAssistantMessage(lastMsg)) {
+      requestMessages.pop()
+    }
+
+    if (resolvedSessionId) {
+      setPendingMessages(resolvedSessionId, requestMessages)
+    }
+
+    inFlightSessionId.value = null
     if (drillMode.value && !sending.value) setTimeout(() => { if (!sending.value) drillMode.value = false }, 500)
   }
 }
@@ -438,14 +621,6 @@ function handleNewChat() {
   messages.value = []; currentSession.value = -1; drillMode.value = false
   drillLog.value = []; drillReport.value = ''; stopDrillTimer()
   sessions.value = [{ id: -1, title: '新对话', created_at: new Date().toLocaleString() }, ...sessions.value.filter(s => s.id !== -1)]
-}
-
-async function handleFileUpload(file: File) {
-  if (!file) return
-  try {
-    const text = await file.text()
-    await send(`请分析并执行以下安全演练文档：\n${file.name}`, {}, text)
-  } catch(e: any) { console.error('文件读取失败:', e) }
 }
 
 function openReportWindow() {
@@ -458,17 +633,21 @@ function openReportWindow() {
 }
 
 onMounted(async () => {
+  ttsEnabled.value = loadTtsPreference()
   await loadSessions()
   const { context_type, context_id, prompt } = route.query as any
   if (prompt) await send(String(prompt), { context_type, context_id })
   else if (context_type && context_id) await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
 })
 
-onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel() })
+onBeforeUnmount(() => {
+  // 切换页面时不主动中断请求，允许后台继续执行并在会话历史中恢复结果
+  stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel()
+})
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-64px)] bg-background/60 backdrop-blur-sm text-foreground overflow-hidden">
+  <div class="flex h-[calc(100vh-64px)] bg-transparent text-foreground overflow-hidden">
     <AiSessionSidebar
       :sessions="sessions"
       :current-session="currentSession"
@@ -759,14 +938,13 @@ onBeforeUnmount(() => { stopGenerating(); stopDrillTimer(); if (window.speechSyn
         </div>
       </div>
 
-      <AiMessageList :messages="messages" :loading="loading" />
+      <AiMessageList :messages="messages" :loading="loading" :sending="sending" />
       <AiChatInput
         :sending="sending"
         :tts-enabled="ttsEnabled"
         @send="send"
         @stop="stopGenerating"
         @toggle-tts="toggleTts"
-        @upload="handleFileUpload"
       />
     </main>
   </div>

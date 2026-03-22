@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { useErrorStore } from '@/stores/error'
-import { onUnmounted, ref, watch } from 'vue'
 import { AlertTriangle, X } from 'lucide-vue-next'
 import RouteLoading from '@/components/RouteLoading.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const ui = useUiStore()
 const errorStore = useErrorStore()
 const routeChanging = ref(false)
+const isDashboardRoute = computed(() => route.path === '/')
+const isAiRoute = computed(() => route.path.startsWith('/ai'))
+const showPerspectiveGrid = computed(() => !route.meta.public)
 
 const ROUTE_PROGRESS_MIN_MS = 220
 let routeChangeStartedAt = 0
@@ -45,14 +49,37 @@ watch(() => auth.isLoggedIn, (v) => {
   if (!v) router.replace('/login')
 }, { immediate: true })
 
+watch(
+  isDashboardRoute,
+  (active) => {
+    document.documentElement.classList.toggle('dashboard-route-active', active)
+  },
+  { immediate: true },
+)
+
+watch(
+  isAiRoute,
+  (active) => {
+    document.documentElement.classList.toggle('ai-chat-background-disabled', active)
+  },
+  { immediate: true },
+)
+
 onUnmounted(() => {
   removeBeforeGuard()
   removeAfterGuard()
   removeErrorHandler()
+  document.documentElement.classList.remove('dashboard-route-active')
+  document.documentElement.classList.remove('ai-chat-background-disabled')
 })
 </script>
 
 <template>
+  <!-- 3D 透视网格地板 -->
+  <div v-if="showPerspectiveGrid" class="perspective-floor">
+    <div class="perspective-floor__grid"></div>
+  </div>
+
   <transition name="route-progress-fade">
     <div v-if="routeChanging" class="route-progress" aria-hidden="true">
       <span class="route-progress__line route-progress__line--primary" />

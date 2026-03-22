@@ -19,7 +19,7 @@ const emit = defineEmits<{
 
 <template>
   <aside class="w-72 shrink-0 bg-muted/30 border-r border-border flex flex-col backdrop-blur-xl z-10 transition-all">
-    <div class="p-5 flex justify-between items-center border-b border-border/50">
+    <div class="px-4 py-3.5 flex justify-between items-center border-b border-border/50">
       <h2 class="text-base font-semibold flex items-center m-0 opacity-90">
         <MessageSquare :size="20" class="mr-2" />
         会话记录
@@ -29,26 +29,26 @@ const emit = defineEmits<{
       </Button>
     </div>
 
-    <ScrollArea class="flex-1 p-3">
+    <ScrollArea class="flex-1 px-2 py-2">
       <div v-if="!sessions.length" class="text-center py-8 text-muted-foreground text-sm">
         暂无历史会话
       </div>
-      <div class="flex flex-col gap-2">
+      <div class="flex flex-col rounded-lg border border-border/40 overflow-hidden divide-y divide-border/30 bg-background/10">
         <div
           v-for="s in sessions"
           :key="s.id"
-          class="group flex items-center justify-between py-3 px-4 rounded-xl cursor-pointer bg-transparent transition-all border border-transparent hover:bg-background/40"
-          :class="[currentSession === s.id ? 'bg-primary/10 border-primary/20' : '']"
+          class="group flex items-center justify-between py-2.5 px-3 cursor-pointer bg-transparent transition-all hover:bg-background/35"
+          :class="[currentSession === s.id ? 'bg-primary/10' : '']"
           @click="emit('loadMessages', s.id)"
         >
           <div class="overflow-hidden flex-1">
-            <div class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis mb-1" :class="[currentSession === s.id ? 'text-primary' : '']">
+            <div class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis" :class="[currentSession === s.id ? 'text-primary' : '']">
               {{ s.title || `会话 #${s.id}` }}
             </div>
-            <div class="text-xs text-muted-foreground">{{ s.created_at?.slice(0,16) }}</div>
+            <div class="text-[11px] text-muted-foreground mt-0.5">{{ s.created_at?.slice(0,16) }}</div>
           </div>
-          <Button variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity" @click.stop="emit('deleteSession', s.id)">
-            <Trash2 :size="16" />
+          <Button variant="ghost" size="icon" class="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity" @click.stop="emit('deleteSession', s.id)">
+            <Trash2 :size="14" />
           </Button>
         </div>
       </div>

@@ -155,6 +155,8 @@ const currentNavItem = computed(() => {
 
 // 主机探测菜单始终展开
 
+const isDashboardRoute = computed(() => route.path === '/')
+
 const currentTitle = computed(() => {
   const parent = currentNavItem.value
   if (!parent) return '玄枢·AI攻防指挥官'
@@ -180,9 +182,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen w-full bg-transparent text-foreground overflow-hidden font-sans relative">
+  <div class="flex h-screen w-full bg-transparent text-foreground overflow-hidden font-sans relative" :class="{ 'dashboard-immersive-shell': isDashboardRoute }">
     <!-- Sidebar -->
-    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10 bg-background/80 backdrop-blur-md">
+    <aside class="w-48 flex-shrink-0 border-r border-[hsl(var(--border))] flex flex-col hidden md:flex relative z-10" :class="isDashboardRoute ? 'bg-transparent backdrop-blur-0' : 'bg-background/80 backdrop-blur-md'">
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-[hsl(var(--border))]">
         <Avatar class="h-8 w-8 mr-3 drop-shadow-[0_0_4px_rgba(0,229,255,0.3)] bg-transparent">
@@ -242,7 +244,7 @@ onUnmounted(() => {
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Top Header -->
-      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] bg-background/60 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 relative z-10">
+      <header class="h-16 flex-shrink-0 border-b border-[hsl(var(--border))] flex items-center justify-between px-4 sm:px-6 relative z-10" :class="isDashboardRoute ? 'bg-transparent backdrop-blur-0' : 'bg-background/60 backdrop-blur-md'">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
           <Button variant="ghost" size="icon" class="md:hidden mr-2">
@@ -395,16 +397,22 @@ onUnmounted(() => {
       <!-- Main Router View -->
       <main class="flex-1 overflow-auto bg-transparent relative z-10">
         <router-view v-slot="{ Component, route }">
-          <transition name="fade-slide" mode="out-in">
-            <Suspense>
+          <Suspense>
+            <transition name="fade-slide" mode="out-in">
               <component :is="Component" :key="route.fullPath" />
-              <template #fallback>
-                <RouteLoading />
-              </template>
-            </Suspense>
-          </transition>
+            </transition>
+            <template #fallback>
+              <RouteLoading />
+            </template>
+          </Suspense>
         </router-view>
       </main>
     </div>
   </div>
 </template>
+
+<style scoped>
+.dashboard-immersive-shell {
+  background: transparent;
+}
+</style>

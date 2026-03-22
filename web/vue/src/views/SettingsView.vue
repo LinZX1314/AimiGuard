@@ -27,9 +27,10 @@ const systemConfig = ref({
 async function loadConfig() {
   loading.value = true
   try {
-    const res = await api.get('/api/system/config')
-    if (res.data) {
-      systemConfig.value = { ...systemConfig.value, ...res.data }
+    const res = await api.get<Partial<typeof systemConfig.value>>('/api/system/config')
+    const configData = res as Partial<typeof systemConfig.value>
+    if (configData) {
+      systemConfig.value = { ...systemConfig.value, ...configData }
     }
   } catch (err) {
     console.error('加载配置失败:', err)
