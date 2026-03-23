@@ -176,61 +176,61 @@ function getChainStatus(key: string): boolean {
 
 <template>
   <aside class="h-full flex flex-col gap-3 min-h-0 overflow-hidden pr-2">
-        <TechCard title="态势摘要" :icon="Activity" glow-color="cyan" class="tech-card-dashboard-clear shrink-0">
-          <div class="space-y-1.5">
-            <div class="grid grid-cols-2 gap-1.5">
-              <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-secondary/30 px-2 py-1.5 dark:bg-muted/20">
-                <p class="text-[10px] tracking-wide text-muted-foreground">{{ item.label }}</p>
-                <p class="text-sm font-semibold leading-4" :class="item.color">{{ item.value || 0 }}</p>
-              </div>
-            </div>
+    <TechCard title="态势摘要" :icon="Activity" glow-color="cyan" class="tech-card-dashboard-clear shrink-0">
+      <div class="space-y-1.5">
+        <div class="grid grid-cols-2 gap-1.5">
+          <div v-for="item in metricCards" :key="item.key" class="rounded-md border border-border/60 bg-secondary/30 px-2 py-1.5 dark:bg-muted/20">
+            <p class="text-[10px] tracking-wide text-muted-foreground">{{ item.label }}</p>
+            <p class="text-sm font-semibold leading-4" :class="item.color">{{ item.value || 0 }}</p>
           </div>
-        </TechCard>
+        </div>
+      </div>
+    </TechCard>
 
-        <TechCard title="实时攻击趋势" glow-color="cyan" class="tech-card-dashboard-clear flex-adaptive-card flex-[0.9] shrink-0 min-h-0">
-          <div class="flex-1 min-h-0 relative w-full h-full">
-            <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
-            <Skeleton v-else-if="loading" class="h-full w-full" />
-            <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
-          </div>
-        </TechCard>
+    <TechCard title="实时攻击趋势" glow-color="cyan" class="tech-card-dashboard-clear flex-adaptive-card flex-[0.9] shrink-0 min-h-0">
+      <div class="flex-1 min-h-0 relative w-full h-full">
+        <Line v-if="payload.trends.labels.length" :data="trendData" :options="trendOptions" />
+        <Skeleton v-else-if="loading" class="h-full w-full" />
+        <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无趋势数据</div>
+      </div>
+    </TechCard>
 
-        <TechCard title="热门攻击蜜罐" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
-          <div class="flex flex-col gap-2 flex-1 min-h-0 h-full">
-            <div class="flex-1 min-h-0 relative w-full h-full">
-            <Bar
-              v-if="payload.hot_services.length"
-              :data="serviceData"
-              :options="{
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y',
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } },
-                  y: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } }
-                }
-              }"
-            />
-            <Skeleton v-else-if="loading" class="h-full w-full" />
-            <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
-            </div>
+    <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
+      <div class="flex flex-col gap-2 flex-1 min-h-0 h-full">
+        <div class="flex-1 min-h-0 relative w-full h-full">
+          <Bar
+            v-if="payload.hot_services.length"
+            :data="serviceData"
+            :options="{
+              responsive: true,
+              maintainAspectRatio: false,
+              indexAxis: 'y',
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } },
+                y: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } }
+              }
+            }"
+          />
+          <Skeleton v-else-if="loading" class="h-full w-full" />
+          <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
+        </div>
 
-            <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
-              <v-chart class="h-full w-full absolute inset-0" :option="wordCloudOption" autoresize />
-            </div>
-          </div>
-        </TechCard>
+        <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
+          <v-chart class="h-full w-full absolute inset-0" :option="wordCloudOption" autoresize />
+        </div>
+      </div>
+    </TechCard>
 
-        <TechCard title="防御链路状态" glow-color="green" class="tech-card-dashboard-clear shrink-0">
-          <div class="space-y-1.5">
-            <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground">{{ item.label }}</span>
-              <span v-if="getChainStatus(item.key)" class="text-xs text-emerald-500 font-medium">运行中</span>
-              <span v-else class="text-xs text-muted-foreground">未启用</span>
-            </div>
-          </div>
-        </TechCard>
+    <TechCard title="防御链路状态" glow-color="green" class="tech-card-dashboard-clear shrink-0">
+      <div class="space-y-1.5">
+        <div v-for="item in chainItems" :key="item.key" class="flex items-center justify-between">
+          <span class="text-sm text-muted-foreground">{{ item.label }}</span>
+          <span v-if="getChainStatus(item.key)" class="text-xs text-emerald-500 font-medium">运行中</span>
+          <span v-else class="text-xs text-muted-foreground">未启用</span>
+        </div>
+      </div>
+    </TechCard>
   </aside>
 </template>
 

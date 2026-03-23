@@ -1,0 +1,15 @@
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { CardHeader } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+</script>
+
+<template>
+  <CardHeader :class="cn('gap-0.5 rounded-t-md border-b bg-secondary/60 p-3!', props.class)">
+    <slot />
+  </CardHeader>
+</template>

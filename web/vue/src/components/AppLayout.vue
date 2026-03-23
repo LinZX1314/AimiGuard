@@ -32,6 +32,7 @@ import {
   Settings,
   ImageIcon,
   ClipboardList,
+  GitBranchPlus,
 } from 'lucide-vue-next'
 
 import { useThemeAnimation } from '@/composables/useThemeAnimation'
@@ -146,6 +147,7 @@ const navItems = [
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
   { title: '演练报告',   icon: ClipboardList,   to: '/reports' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
+  { title: 'AI工作流',   icon: GitBranchPlus,   to: '/workflows' },
 ]
 
 const currentNavItem = computed(() => {
@@ -224,10 +226,10 @@ onUnmounted(() => {
             <a
               :href="href"
               @click="navigate"
-              class="flex items-center px-3 py-2.5 rounded-md text-sm group relative overflow-hidden transition-all duration-300 ease-out"
+              class="flex items-center px-3 py-2.5 rounded-md text-sm group relative overflow-hidden transition-all duration-300 ease-out cursor-pointer"
               :class="[
-                isExactActive || (item.to !== '/' && route.path.startsWith(item.to))
-                   ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_hsl(var(--primary)/0.15)]'
+                (isExactActive || (item.to !== '/' && route.path.startsWith(item.to)))
+                  ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_hsl(var(--primary)/0.15)]'
                   : 'text-slate-500 hover:bg-muted/60 hover:text-foreground'
               ]"
             >
@@ -241,6 +243,7 @@ onUnmounted(() => {
               {{ item.title }}
             </a>
           </router-link>
+
         </nav>
       </ScrollArea>
     </aside>
@@ -251,7 +254,7 @@ onUnmounted(() => {
       <header class="h-16 flex-shrink-0 border-b border-border/50 flex items-center justify-between px-4 sm:px-6 relative z-10 bg-transparent">
         <div class="flex items-center">
           <!-- Mobile Menu Toggle (can add sheet later if needed) -->
-          <Button variant="ghost" size="icon" class="md:hidden mr-2">
+          <Button variant="ghost" size="icon" class="md:hidden mr-2 cursor-pointer">
             <Menu class="h-5 w-5" />
           </Button>
           <component :is="currentNavItem?.icon ?? ShieldAlert" class="h-5 w-5 text-primary mr-2" />

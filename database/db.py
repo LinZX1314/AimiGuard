@@ -11,8 +11,12 @@ DB_FILE = os.path.join(BASE_DIR, "aimiguard.db")
 
 def get_connection():
     """获取数据库连接"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=30)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute('PRAGMA journal_mode=WAL')
+    except Exception:
+        pass
     return conn
 
 @contextmanager
@@ -244,6 +248,76 @@ def init_db():
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_ip ON web_screenshots(ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_scan_id ON web_screenshots(scan_id)')
+
+    # ================= 工作流定义与运行记录表 =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS workflows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            category TEXT DEFAULT 'system',
+            status TEXT DEFAULT 'draft',
+            definition_json TEXT NOT NULL,
+            trigger_json TEXT NOT NULL,
+            version INTEGER DEFAULT 1,
+            webhook_token TEXT,
+            next_run_at TEXT,
+            last_run_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflows_next_run_at ON workflows(next_run_at)')
+    cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_webhook_token ON workflows(webhook_token)')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS workflow_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_id INTEGER NOT NULL,
+            trigger_type TEXT NOT NULL,
+            trigger_payload TEXT,
+            status TEXT DEFAULT 'queued',
+            started_at TEXT,
+            ended_at TEXT,
+            summary TEXT,
+            error_message TEXT,
+            FOREIGN KEY (workflow_id) REFERENCES workflows(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS workflow_run_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            node_id TEXT NOT NULL,
+            node_type TEXT NOT NULL,
+            node_name TEXT,
+            status TEXT DEFAULT 'queued',
+            input_json TEXT,
+            output_json TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (run_id) REFERENCES workflow_runs(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run ON workflow_run_steps(run_id)')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS workflow_webhooks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workflow_id INTEGER NOT NULL UNIQUE,
+            token TEXT NOT NULL UNIQUE,
+            enabled INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (workflow_id) REFERENCES workflows(id)
+        )
+    ''')
+    cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_webhooks_token ON workflow_webhooks(token)')
 
     conn.commit()
     conn.close()

@@ -9,11 +9,13 @@ from .helpers import BASE_DIR, _load_cfg
 _is_scanning = False
 _sync_thread_started = False
 _scan_thread_started = False
+_workflow_thread_started = False
 
 # Locks for protecting global state
 _scan_lock = threading.Lock()
 _sync_lock = threading.Lock()
 _thread_lock = threading.Lock()
+_workflow_run_lock = threading.Lock()
 
 
 def _run_daemon(task):
@@ -132,13 +134,51 @@ def run_fscan_scan_loop():
             time.sleep(10)
 
 
+def run_workflow_scheduler_once(now_iso: str | None = None) -> int:
+    """执行一次工作流调度扫描，返回执行数量"""
+    from database.models import WorkflowModel
+    from workflow.engine import run_workflow
+
+    if not _workflow_run_lock.acquire(blocking=False):
+        _runtime_log('warn', 'Workflow 调度跳过: 上一轮仍在执行')
+        return 0
+
+    try:
+        cfg = _load_cfg()
+        due_workflows = WorkflowModel.list_due_workflows(now_iso)
+        executed = 0
+        for workflow in due_workflows:
+            try:
+                run_workflow(workflow, trigger_type='schedule', trigger_payload={'scheduled': True}, cfg=cfg)
+                executed += 1
+            except Exception as e:
+                _runtime_log('error', f"工作流调度执行失败 id={workflow.get('id')}: {e}")
+        return executed
+    finally:
+        _workflow_run_lock.release()
+
+
+def run_workflow_scheduler_loop():
+    """工作流定时调度循环"""
+    while True:
+        try:
+            cfg = _load_cfg()
+            workflow_cfg = cfg.get('workflow', {})
+            poll_interval = int(workflow_cfg.get('poll_interval', 15) or 15)
+            run_workflow_scheduler_once()
+            time.sleep(max(poll_interval, 5))
+        except Exception as e:
+            _runtime_log('error', f'工作流调度线程异常: {e}')
+            time.sleep(10)
+
+
 # 向后兼容别名
 run_nmap_scan_loop = run_fscan_scan_loop
 
 
 def start_runtime_workers():
     """按配置启动后台同步与扫描线程"""
-    global _sync_thread_started, _scan_thread_started
+    global _sync_thread_started, _scan_thread_started, _workflow_thread_started
     cfg = _load_cfg()
 
     with _thread_lock:
@@ -151,3 +191,9 @@ def start_runtime_workers():
             threading.Thread(target=run_fscan_scan_loop, daemon=True).start()
             _scan_thread_started = True
             _runtime_log('info', 'Fscan 扫描线程已启动')
+
+        workflow_cfg = cfg.get('workflow', {})
+        if workflow_cfg.get('enabled', True) and not _workflow_thread_started:
+            threading.Thread(target=run_workflow_scheduler_loop, daemon=True).start()
+            _workflow_thread_started = True
+            _runtime_log('info', 'Workflow 调度线程已启动')
