@@ -3,9 +3,13 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
+import hashlib
+import hmac
+import json
+import time
 
 import database.db as db_module
-from database.models import WorkflowModel
+from database.models import WorkflowModel, WorkflowWebhookModel
 from web.api.helpers import _make_token
 from web.flask_app import create_app
 
@@ -146,8 +150,13 @@ class WorkflowApiTestCase(unittest.TestCase):
         list_response = self.client.get('/api/v1/workflows/templates', headers=self.auth_headers())
         self.assertEqual(list_response.status_code, 200)
         templates = list_response.get_json()['data']
-        self.assertGreaterEqual(len(templates), 1)
-        template_id = templates[0]['id']
+        self.assertGreaterEqual(len(templates), 6)
+        template_ids = {template['id'] for template in templates}
+        self.assertIn('hfish-ai-summary', template_ids)
+        self.assertIn('hfish-triage-route', template_ids)
+        self.assertIn('scheduled-daily-digest', template_ids)
+        self.assertIn('webhook-alert-intake', template_ids)
+        template_id = 'webhook-alert-intake'
 
         instantiate_response = self.client.post(
             f'/api/v1/workflows/templates/{template_id}/instantiate',
@@ -158,6 +167,8 @@ class WorkflowApiTestCase(unittest.TestCase):
         workflow = instantiate_response.get_json()['data']
         self.assertEqual(workflow['name'], '从模板创建')
         self.assertGreater(len(workflow['definition']['nodes']), 0)
+        self.assertEqual(workflow['trigger']['type'], 'webhook')
+        self.assertTrue(workflow.get('webhook_secret'))
 
     def test_create_publish_and_run_workflow_records_run_history(self):
         create_response = self.client.post(
@@ -210,6 +221,7 @@ class WorkflowApiTestCase(unittest.TestCase):
         step_names = [step['node_name'] for step in run_payload['steps']]
         self.assertIn('高危通知', step_names)
         self.assertNotIn('普通日志', step_names)
+        self.assertEqual(run_payload['status'], 'success_with_skips')
 
     def test_run_detail_endpoint_returns_steps(self):
         create_response = self.client.post(
@@ -258,6 +270,72 @@ class WorkflowApiTestCase(unittest.TestCase):
         data = webhook_response.get_json()['data']
         self.assertEqual(data['trigger_type'], 'webhook')
         self.assertEqual(data['status'], 'success')
+
+    def test_webhook_returns_secret_and_accepts_signed_request(self):
+        create_response = self.client.post(
+            '/api/v1/workflows',
+            json=self.workflow_payload(trigger_type='webhook'),
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(create_response.status_code, 200)
+        workflow = create_response.get_json()['data']
+        self.assertTrue(workflow.get('webhook_token'))
+        self.assertTrue(workflow.get('webhook_secret'))
+        self.assertIn('X-Workflow-Timestamp', workflow.get('webhook_signature_hint', ''))
+
+        stored_webhook = WorkflowWebhookModel.get_by_workflow_id(workflow['id'])
+        self.assertIsNotNone(stored_webhook)
+        self.assertEqual(stored_webhook['secret'], workflow['webhook_secret'])
+
+        self.client.post(
+            f"/api/v1/workflows/{workflow['id']}/publish",
+            headers=self.auth_headers(),
+        )
+
+        payload = {'event': 'signed-alert', 'severity': 'high'}
+        timestamp = str(int(time.time()))
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        signature = hmac.new(
+            workflow['webhook_secret'].encode('utf-8'),
+            f'{timestamp}.{canonical}'.encode('utf-8'),
+            hashlib.sha256,
+        ).hexdigest()
+
+        with patch('database.models.HFishModel.get_attack_logs', return_value=[]):
+            response = self.client.post(
+                f"/api/v1/workflows/webhook/{workflow['webhook_token']}",
+                json=payload,
+                headers={
+                    'X-Workflow-Timestamp': timestamp,
+                    'X-Workflow-Signature': signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()['data']
+        self.assertEqual(data['trigger_type'], 'webhook')
+
+    def test_webhook_rejects_invalid_signature(self):
+        create_response = self.client.post(
+            '/api/v1/workflows',
+            json=self.workflow_payload(trigger_type='webhook'),
+            headers=self.auth_headers(),
+        )
+        workflow = create_response.get_json()['data']
+        self.client.post(
+            f"/api/v1/workflows/{workflow['id']}/publish",
+            headers=self.auth_headers(),
+        )
+
+        response = self.client.post(
+            f"/api/v1/workflows/webhook/{workflow['webhook_token']}",
+            json={'event': 'invalid-signed-alert'},
+            headers={
+                'X-Workflow-Timestamp': str(int(time.time())),
+                'X-Workflow-Signature': 'bad-signature',
+            },
+        )
+        self.assertEqual(response.status_code, 401)
 
     def test_due_schedule_query_only_returns_ready_workflows(self):
         past = (datetime.now() - timedelta(minutes=1)).isoformat()

@@ -300,7 +300,6 @@ class WorkflowRunModel:
         conn.close()
         return step_id
 
-
     @staticmethod
     def update_step(step_id: int, status: str, output_payload: dict | None = None, error_message: str = ''):
         conn = get_connection()
@@ -326,27 +325,39 @@ class WorkflowWebhookModel:
     @staticmethod
     def ensure_token(workflow_id: int, enabled: bool = True) -> str:
         workflow = WorkflowModel.get(workflow_id)
-        token = (workflow or {}).get('webhook_token') or secrets.token_urlsafe(18)
-        secret = secrets.token_urlsafe(24)
+        current = WorkflowWebhookModel.get_by_workflow_id(workflow_id)
+        token = (current or {}).get('token') or (workflow or {}).get('webhook_token') or secrets.token_urlsafe(18)
+        secret = (current or {}).get('secret') or secrets.token_urlsafe(24)
         now = _now_iso()
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
             '''
-            INSERT INTO workflow_webhooks (workflow_id, token, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO workflow_webhooks (workflow_id, token, secret, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(workflow_id) DO UPDATE SET
                 token = excluded.token,
+                secret = COALESCE(workflow_webhooks.secret, excluded.secret),
                 enabled = excluded.enabled,
                 updated_at = excluded.updated_at
             ''',
-            (workflow_id, token, 1 if enabled else 0, now, now),
+            (workflow_id, token, secret, 1 if enabled else 0, now, now),
         )
         conn.commit()
         conn.close()
         WorkflowModel.update(workflow_id, {'webhook_token': token})
         return token
 
+    @staticmethod
+    def get_by_workflow_id(workflow_id: int) -> dict | None:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM workflow_webhooks WHERE workflow_id = ?', (workflow_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    @staticmethod
     def get_by_token(token: str) -> dict | None:
         conn = get_connection()
         cursor = conn.cursor()

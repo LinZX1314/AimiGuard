@@ -7,6 +7,7 @@ import {
   type WorkflowRecord,
   type WorkflowRunDetail,
   type WorkflowRunRecord,
+  type WorkflowTemplate,
   type WorkflowTriggerType,
 } from '@/api/workflow'
 import WorkflowCanvas from '@/components/workflow/WorkflowCanvas.vue'
@@ -15,6 +16,8 @@ import WorkflowRunDialog from '@/components/workflow/WorkflowRunDialog.vue'
 import WorkflowRunDetailDrawer from '@/components/workflow/WorkflowRunDetailDrawer.vue'
 import WorkflowRunPanel from '@/components/workflow/WorkflowRunPanel.vue'
 import WorkflowSidebar from '@/components/workflow/WorkflowSidebar.vue'
+import WorkflowTemplateCenter from '@/components/workflow/WorkflowTemplateCenter.vue'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -22,24 +25,27 @@ import {
   createWorkflowNode,
   defaultWorkflowCatalogNodes,
   normalizeWorkflowDefinition,
+  toPersistedWorkflowDefinition,
 } from '@/lib/workflow/defaults'
 
 const workflows = ref<WorkflowRecord[]>([])
 const runs = ref<WorkflowRunRecord[]>([])
+const templates = ref<WorkflowTemplate[]>([])
 const catalogNodes = ref<WorkflowCatalogNode[]>([...defaultWorkflowCatalogNodes])
 const selectedWorkflowId = ref<number | null>(null)
 const selectedNodeId = ref<string | null>(null)
 const selectedRunDetail = ref<WorkflowRunDetail | null>(null)
 const runDialogOpen = ref(false)
 const runDetailOpen = ref(false)
+const templateCenterOpen = ref(false)
+const templateLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const running = ref(false)
+const publishing = ref(false)
 const loadingRunDetail = ref(false)
 
-const selectedWorkflow = computed(() => {
-  return workflows.value.find((item) => item.id === selectedWorkflowId.value) ?? null
-})
+const selectedWorkflow = computed(() => workflows.value.find((item) => item.id === selectedWorkflowId.value) ?? null)
 
 function normalizeWorkflowRecord(workflow: WorkflowRecord): WorkflowRecord {
   return {
@@ -68,8 +74,46 @@ function buildWorkflowPayload(kind: WorkflowTriggerType = 'manual') {
       enabled: true,
       ...(kind === 'schedule' ? { interval_seconds: 60 } : {}),
     },
-    definition,
+    definition: toPersistedWorkflowDefinition(definition),
   }
+}
+
+function deriveTriggerFromDefinition(workflow: WorkflowRecord) {
+  const triggerNode = workflow.definition.nodes.find((node) => ['manual', 'schedule', 'webhook'].includes(String(node.data.kind)))
+  const kind = String(triggerNode?.data.kind || workflow.trigger.type || 'manual') as WorkflowTriggerType
+  const config = (triggerNode?.data.config ?? {}) as Record<string, unknown>
+
+  if (kind === 'schedule') {
+    return {
+      type: 'schedule',
+      enabled: Boolean(workflow.trigger.enabled ?? true),
+      interval_seconds: Number(config.interval_seconds ?? workflow.trigger.interval_seconds ?? 60) || 60,
+    }
+  }
+
+  return {
+    type: kind,
+    enabled: Boolean(workflow.trigger.enabled ?? true),
+  }
+}
+
+function buildWorkflowUpdatePayload(workflow: WorkflowRecord) {
+  return {
+    name: workflow.name,
+    description: workflow.description,
+    category: workflow.category,
+    status: workflow.status,
+    definition: toPersistedWorkflowDefinition(workflow.definition),
+    trigger: deriveTriggerFromDefinition(workflow),
+  }
+}
+
+function upsertWorkflow(workflow: WorkflowRecord) {
+  const normalized = normalizeWorkflowRecord(workflow)
+  workflows.value = [normalized, ...workflows.value.filter((item) => item.id !== normalized.id)]
+  selectedWorkflowId.value = normalized.id
+  selectedNodeId.value = null
+  return normalized
 }
 
 async function loadWorkflows() {
@@ -94,20 +138,56 @@ async function loadWorkflows() {
   }
 }
 
+async function loadTemplates() {
+  templateLoading.value = true
+  const data = await apiCall(() => workflowApi.templates(), { silent: true })
+  templateLoading.value = false
+  templates.value = data ?? []
+}
+
 async function loadRuns(workflowId: number) {
   const data = await apiCall(() => workflowApi.runs(workflowId), { silent: true })
   runs.value = data ?? []
+}
+
+async function persistSelectedWorkflow() {
+  const workflow = selectedWorkflow.value
+  if (!workflow) return null
+
+  saving.value = true
+  const saved = await apiCall(() => workflowApi.update(workflow.id, buildWorkflowUpdatePayload(workflow)))
+  saving.value = false
+
+  if (!saved) return null
+  return upsertWorkflow(saved)
 }
 
 async function handleCreateWorkflow(kind: WorkflowTriggerType = 'manual') {
   const created = await apiCall(() => workflowApi.create(buildWorkflowPayload(kind)))
   if (!created) return
 
-  const normalized = normalizeWorkflowRecord(created)
-  workflows.value = [normalized, ...workflows.value.filter((item) => item.id !== normalized.id)]
-  selectedWorkflowId.value = normalized.id
-  selectedNodeId.value = null
+  upsertWorkflow(created)
   runs.value = []
+}
+
+async function handleOpenTemplateCenter() {
+  templateCenterOpen.value = true
+  if (!templates.value.length) {
+    await loadTemplates()
+  }
+}
+
+function handleTemplateCenterOpenChange(value: boolean) {
+  templateCenterOpen.value = value
+}
+
+async function handleInstantiateTemplate(templateId: string) {
+  const created = await apiCall(() => workflowApi.instantiateTemplate(templateId, {}))
+  if (!created) return
+
+  upsertWorkflow(created)
+  runs.value = []
+  templateCenterOpen.value = false
 }
 
 function handleSelectWorkflow(workflow: WorkflowRecord) {
@@ -121,39 +201,30 @@ function handleSelectWorkflow(workflow: WorkflowRecord) {
 function handleUpdateDefinition(definition: WorkflowRecord['definition']) {
   if (!selectedWorkflow.value) return
   const normalizedDefinition = normalizeWorkflowDefinition(definition)
-  workflows.value = workflows.value.map((item) => (item.id === selectedWorkflow.value?.id ? { ...item, definition: normalizedDefinition } : item))
+  workflows.value = workflows.value.map((item) =>
+    item.id === selectedWorkflow.value?.id
+      ? {
+          ...item,
+          definition: normalizedDefinition,
+          trigger: deriveTriggerFromDefinition({ ...item, definition: normalizedDefinition }),
+        }
+      : item,
+  )
 }
 
 async function handleSaveWorkflow() {
-  const workflow = selectedWorkflow.value
-  if (!workflow) return
-
-  saving.value = true
-  const saved = await apiCall(() =>
-    workflowApi.update(workflow.id, {
-      name: workflow.name,
-      description: workflow.description,
-      category: workflow.category,
-      status: workflow.status,
-      definition: normalizeWorkflowDefinition(workflow.definition),
-      trigger: workflow.trigger,
-    }),
-  )
-  saving.value = false
-
-  if (!saved) return
-  const normalized = normalizeWorkflowRecord(saved)
-  workflows.value = workflows.value.map((item) => (item.id === normalized.id ? normalized : item))
+  await persistSelectedWorkflow()
 }
 
 async function handlePublishWorkflow() {
-  const workflow = selectedWorkflow.value
+  const workflow = await persistSelectedWorkflow()
   if (!workflow) return
 
+  publishing.value = true
   const saved = await apiCall(() => workflowApi.publish(workflow.id))
+  publishing.value = false
   if (!saved) return
-  const normalized = normalizeWorkflowRecord(saved)
-  workflows.value = workflows.value.map((item) => (item.id === normalized.id ? normalized : item))
+  upsertWorkflow(saved)
 }
 
 function handleOpenRunDialog() {
@@ -178,7 +249,7 @@ async function openRunDetail(runId: number) {
 }
 
 async function handleRunWorkflow(payload: Record<string, unknown>) {
-  const workflow = selectedWorkflow.value
+  const workflow = await persistSelectedWorkflow()
   if (!workflow) return
 
   running.value = true
@@ -198,22 +269,23 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full overflow-auto p-6">
-    <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div class="space-y-2">
-        <h1 class="text-3xl font-bold tracking-tight">AI工作流</h1>
-        <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          将 AI、HFish、主机探测与防御动作编排成可执行工作流，支持手动触发、定时触发和 Webhook 触发。
-        </p>
+  <div class="h-full overflow-auto p-5">
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">AI工作流</h1>
+        <p class="max-w-2xl text-sm text-muted-foreground">把 AI、HFish 和系统动作编排成可执行流程。</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('manual')">新建工作流</Button>
-        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('schedule')">定时模板</Button>
-        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('webhook')">Webhook模板</Button>
-        <Button variant="outline" class="cursor-pointer" :disabled="!selectedWorkflow" @click="handlePublishWorkflow">发布</Button>
-        <Button class="cursor-pointer" :disabled="!selectedWorkflow || running" @click="handleOpenRunDialog">
-          {{ running ? '运行中...' : '立即运行' }}
+        <Button variant="outline" size="sm" class="cursor-pointer" @click="handleCreateWorkflow('manual')">新建</Button>
+        <Button variant="outline" size="sm" class="cursor-pointer" @click="handleOpenTemplateCenter">模板</Button>
+        <Button variant="outline" size="sm" class="cursor-pointer" @click="handleCreateWorkflow('schedule')">定时</Button>
+        <Button variant="outline" size="sm" class="cursor-pointer" @click="handleCreateWorkflow('webhook')">Webhook</Button>
+        <Button variant="outline" size="sm" class="cursor-pointer" :disabled="!selectedWorkflow || publishing" @click="handlePublishWorkflow">
+          {{ publishing ? '发布中...' : '发布' }}
+        </Button>
+        <Button size="sm" class="cursor-pointer" :disabled="!selectedWorkflow || running" @click="handleOpenRunDialog">
+          {{ running ? '运行中...' : '运行' }}
         </Button>
       </div>
     </div>
@@ -222,7 +294,7 @@ onMounted(async () => {
       正在加载工作流...
     </div>
 
-    <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+    <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
       <WorkflowSidebar
         :workflows="workflows"
         :selected-workflow-id="selectedWorkflowId"
@@ -232,14 +304,21 @@ onMounted(async () => {
 
       <div class="min-w-0 space-y-4">
         <Card v-if="selectedWorkflow" class="border-border/60 bg-card/80">
-          <CardHeader class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div class="space-y-1">
-              <CardTitle>{{ selectedWorkflow.name }}</CardTitle>
-              <CardDescription>{{ selectedWorkflow.description || '未设置描述，可在右侧属性检查器中继续完善。' }}</CardDescription>
+          <CardHeader class="gap-3 pb-4">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <CardTitle>{{ selectedWorkflow.name }}</CardTitle>
+                  <Badge variant="secondary">{{ selectedWorkflow.status }}</Badge>
+                  <Badge variant="outline">{{ selectedWorkflow.trigger.type || 'manual' }}</Badge>
+                  <Badge v-if="selectedWorkflow.template_name" variant="outline">模板：{{ selectedWorkflow.template_name }}</Badge>
+                </div>
+                <CardDescription>{{ selectedWorkflow.description || '未设置描述。' }}</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" class="cursor-pointer" :disabled="saving" @click="handleSaveWorkflow">
+                {{ saving ? '保存中...' : '保存' }}
+              </Button>
             </div>
-            <Button variant="outline" class="cursor-pointer" :disabled="saving" @click="handleSaveWorkflow">
-              {{ saving ? '保存中...' : '保存工作流' }}
-            </Button>
           </CardHeader>
         </Card>
 
@@ -257,7 +336,7 @@ onMounted(async () => {
 
         <Card v-else class="border-border/60 bg-card/80">
           <CardContent class="py-12 text-center text-sm text-muted-foreground">
-            还没有工作流，点击左上角按钮开始创建第一条 AI 工作流。
+            还没有工作流，点击左上角开始创建。
           </CardContent>
         </Card>
       </div>
@@ -280,5 +359,12 @@ onMounted(async () => {
 
     <WorkflowRunDialog :open="runDialogOpen" :running="running" @update:open="handleRunDialogOpenChange" @confirm="handleRunWorkflow" />
     <WorkflowRunDetailDrawer :open="runDetailOpen" :run="selectedRunDetail" @update:open="handleRunDetailOpenChange" />
+    <WorkflowTemplateCenter
+      :open="templateCenterOpen"
+      :loading="templateLoading"
+      :templates="templates"
+      @update:open="handleTemplateCenterOpenChange"
+      @instantiate="handleInstantiateTemplate"
+    />
   </div>
 </template>

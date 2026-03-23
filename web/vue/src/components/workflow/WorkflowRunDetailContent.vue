@@ -11,6 +11,17 @@ defineProps<{
 function formatJson(value: unknown) {
   return JSON.stringify(value ?? null, null, 2)
 }
+
+function statusVariant(status: string) {
+  if (status === 'success' || status === 'success_with_skips') return 'default'
+  if (status === 'running') return 'secondary'
+  return 'destructive'
+}
+
+function statusLabel(status: string) {
+  if (status === 'success_with_skips') return 'success (partial)'
+  return status
+}
 </script>
 
 <template>
@@ -19,8 +30,8 @@ function formatJson(value: unknown) {
       <CardHeader>
         <div class="flex flex-wrap items-center gap-2">
           <CardTitle>运行 #{{ run.id }}</CardTitle>
-          <Badge :variant="run.status === 'success' ? 'default' : run.status === 'running' ? 'secondary' : 'destructive'">
-            {{ run.status }}
+          <Badge :variant="statusVariant(run.status)">
+            {{ statusLabel(run.status) }}
           </Badge>
           <Badge variant="outline">{{ run.trigger_type }}</Badge>
         </div>

@@ -9,6 +9,7 @@ from utils.logger import log
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_FILE = os.path.join(BASE_DIR, "aimiguard.db")
 
+
 def get_connection():
     """获取数据库连接"""
     conn = sqlite3.connect(DB_FILE, timeout=30)
@@ -19,11 +20,12 @@ def get_connection():
         pass
     return conn
 
+
 @contextmanager
 def get_db_cursor():
     """
     数据库连接上下文管理器，自动处理异常和关闭连接
-    
+
     使用示例:
         with get_db_cursor() as cursor:
             cursor.execute("SELECT * FROM users")
@@ -43,6 +45,7 @@ def get_db_cursor():
     finally:
         if conn:
             conn.close()
+
 
 def init_db():
     """初始化数据库表结构"""
@@ -114,8 +117,6 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_mac ON assets(mac_address)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_ip ON assets(current_ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_asset_ip_history_asset ON asset_ip_history(asset_id)')
-    
-    # 性能优化索引（attack_logs 和 ai_analysis_logs 的索引在各表创建后）
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)')
 
@@ -135,7 +136,6 @@ def init_db():
         )
     ''')
 
-    # attack_logs 表创建后的索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)')
@@ -150,8 +150,6 @@ def init_db():
             status TEXT DEFAULT 'pending'
         )
     ''')
-
-    # ai_analysis_logs 表创建后的索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)')
 
     # ================= AI 聊天与会话持久化表 =================
@@ -167,7 +165,6 @@ def init_db():
         )
     ''')
 
-    # 迁移：给已有会话添加 is_drill_mode 列（若无此列则忽略）
     try:
         cursor.execute('ALTER TABLE ai_chat_sessions ADD COLUMN is_drill_mode INTEGER DEFAULT 0')
     except Exception:
@@ -178,11 +175,11 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER,
             role TEXT DEFAULT 'user',
-            query TEXT,           -- 旧版兼容：query
-            response TEXT,        -- 旧版兼容：response
-            content TEXT,         -- 新版统一：content
-            tool_calls TEXT,      -- 存储 JSON 格式的工具库调用
-            tool_call_id TEXT,    -- tool 消息对应的 tool_call_id
+            query TEXT,
+            response TEXT,
+            content TEXT,
+            tool_calls TEXT,
+            tool_call_id TEXT,
             create_time TEXT NOT NULL,
             FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id)
         )
@@ -203,7 +200,6 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     ''')
-
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_acl_switch ON switch_acl_rules(switch_ip, acl_number)')
 
     # ================= Web 指纹表（fscan SERVICE 条目） =================
@@ -222,8 +218,6 @@ def init_db():
             UNIQUE(ip, port)
         )
     ''')
-
-    # web_fingerprints 表索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_fp_ip ON web_fingerprints(ip)')
 
     # ================= Web 页面截图表 =================
@@ -240,11 +234,10 @@ def init_db():
         )
     ''')
 
-    # 添加 scan_id 列（如果不存在）
     try:
         cursor.execute('ALTER TABLE web_screenshots ADD COLUMN scan_id INTEGER')
     except Exception:
-        pass  # 列已存在
+        pass
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_ip ON web_screenshots(ip)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_scan_id ON web_screenshots(scan_id)')
@@ -288,6 +281,24 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)')
 
+    # ================= 交换机工作台执行记录表 =================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS switch_workbench_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_name TEXT NOT NULL,
+            device_host TEXT NOT NULL,
+            command_text TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            stdout TEXT,
+            summary TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_created_at ON switch_workbench_runs(created_at DESC)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_device_host ON switch_workbench_runs(device_host)')
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS workflow_run_steps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -311,16 +322,22 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_id INTEGER NOT NULL UNIQUE,
             token TEXT NOT NULL UNIQUE,
+            secret TEXT,
             enabled INTEGER DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (workflow_id) REFERENCES workflows(id)
         )
     ''')
+    try:
+        cursor.execute('ALTER TABLE workflow_webhooks ADD COLUMN secret TEXT')
+    except Exception:
+        pass
     cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_webhooks_token ON workflow_webhooks(token)')
 
     conn.commit()
     conn.close()
+
 
 if __name__ == "__main__":
     init_db()
