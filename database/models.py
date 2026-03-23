@@ -8,6 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 from database.db import get_connection, get_db_cursor
+from database.workflow_models import WorkflowModel, WorkflowRunModel, WorkflowWebhookModel
 
 
 def _time_str_to_timestamp(time_str: str) -> int:
@@ -732,3 +733,17 @@ class ScreenshotModel:
         cursor.execute('DELETE FROM web_screenshots WHERE ip = ? AND port = ?', (ip, port))
         conn.commit()
         conn.close()
+
+
+__all__ = [
+    'NmapModel',
+    'ScannerModel',
+    'HFishModel',
+    'StatsModel',
+    'AiModel',
+    'SwitchAclModel',
+    'ScreenshotModel',
+    'WorkflowModel',
+    'WorkflowRunModel',
+    'WorkflowWebhookModel',
+]

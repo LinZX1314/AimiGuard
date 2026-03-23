@@ -30,6 +30,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'defense',   name: 'Defense',      component: lazyWithMinDelay(() => import('../views/DefenseView.vue')) },
       { path: 'ai',        name: 'AiChat',       component: lazyWithMinDelay(() => import('../views/AiChatView.vue')) },
       { path: 'reports',   name: 'Reports',      component: lazyWithMinDelay(() => import('../views/ReportsView.vue')) },
+      { path: 'workflows', name: 'Workflow',     component: lazyWithMinDelay(() => import('../views/WorkflowView.vue')) },
       { path: 'settings',  name: 'Settings',     component: lazyWithMinDelay(() => import('../views/SettingsView.vue')) },
     ]
   },
