@@ -879,21 +879,34 @@ async function commitConfigItems() {
 }
 
 async function hydrateWorkbench() {
-  const [liveDevices, liveScripts, liveHistory] = await Promise.all([
-    apiCall(() => switchWorkbenchApi.devices(true), { silent: true }),
-    apiCall(() => switchWorkbenchApi.scripts(), { silent: true }),
-    apiCall(() => switchWorkbenchApi.history(24), { silent: true }),
-  ])
+  try {
+    const [liveDevices, liveScripts, liveHistory] = await Promise.all([
+      switchWorkbenchApi.devices(true),
+      switchWorkbenchApi.scripts(),
+      switchWorkbenchApi.history(24),
+    ])
 
-  if (liveDevices && liveDevices.length) {
-    backendMode.value = 'live'
-    devices.value = liveDevices.map(mapApiDevice)
-    selectedDeviceId.value = devices.value[0]?.id ?? selectedDeviceId.value
-    pushLog('meta', '后端已接入', '已从真实接口加载交换机列表与执行记录。')
+    // If we get valid responses from the backend, we are in LIVE mode
+    if (liveDevices && Array.isArray(liveDevices)) {
+      backendMode.value = 'live'
+      devices.value = liveDevices.map(mapApiDevice)
+      if (devices.value.length > 0) {
+        selectedDeviceId.value = devices.value[0]?.id ?? selectedDeviceId.value
+      }
+      pushLog('meta', '后端已接入', '已成功连接服务器控制中心，准备执行物理资产指令。')
+    }
+
+    if (liveScripts && Array.isArray(liveScripts)) {
+      quickScripts.value = liveScripts.map(mapApiScript)
+    }
+    if (liveHistory && Array.isArray(liveHistory)) {
+      executionRecords.value = liveHistory.map(mapApiHistory)
+    }
+  } catch (err) {
+    console.error('Hydration failed:', err)
+    backendMode.value = 'demo'
+    pushLog('warning', '降级提醒', '无法连接后端服务器，当前仅展示模拟演示数据。')
   }
-
-  if (liveScripts?.length) quickScripts.value = liveScripts.map(mapApiScript)
-  if (liveHistory?.length) executionRecords.value = liveHistory.map(mapApiHistory)
 }
 
 async function testSelectedDeviceConnection() {
@@ -1048,62 +1061,54 @@ onMounted(async () => {
     <div class="switch-orb switch-orb--cyan"></div>
     <div class="switch-orb switch-orb--violet"></div>
 
-    <div class="relative z-10 h-full overflow-hidden px-6 py-6">
-      <section class="hero-panel mb-6">
+    <div class="relative z-10 mx-auto w-full max-w-[1720px] px-8 py-10 space-y-8">
+      <section class="hero-panel">
         <div class="hero-copy">
           <div class="hero-badges">
-            <span class="hero-chip hero-chip--brand"><Zap class="h-3.5 w-3.5" />AI交换机工作台</span>
-            <span class="hero-chip" :class="backendMode === 'live' ? 'hero-chip--success' : 'hero-chip--warning'">
+            <div class="hero-chip hero-chip--brand"><Bot class="h-3.5 w-3.5" />AI Command</div>
+            <div class="hero-chip" :class="backendMode === 'live' ? 'hero-chip--success' : 'hero-chip--warning'">
               <CircleCheck v-if="backendMode === 'live'" class="h-3.5 w-3.5" />
               <Radar v-else class="h-3.5 w-3.5" />
-              {{ backendMode === 'live' ? '真实接口模式' : '演示回退模式' }}
-            </span>
+              {{ backendMode === 'live' ? 'Live Session' : 'Demo Mode' }}
+            </div>
           </div>
-
-          <div class="hero-title-wrap">
-            <p class="hero-kicker">Network Command Theater</p>
-            <h1 class="hero-title">Telnet 联动 · 多交换机 AI 运维工作台</h1>
-            <p class="hero-subtitle">
-              将交换机资产、Telnet 会话、AI 多轮诊断与批量脚本放进同一个指挥视图。
-              这里不是工具拼盘，而是一块真正可操作的运维战情台。
-            </p>
-          </div>
+          <p class="hero-kicker">Network Command Theater</p>
+          <h1 class="hero-title">AimiGuard AI 运维矩阵</h1>
+          <p class="hero-subtitle">深度集成物理资产、会话终端与 AI 诊断回路，构建多维一体的指挥视图。</p>
         </div>
 
         <div class="hero-metrics">
-          <div class="metric-card metric-card--glass">
-            <span class="metric-label">交换机</span>
+          <div class="metric-card">
+            <span class="metric-label">Switches</span>
             <strong class="metric-value">{{ devices.length }}</strong>
-            <span class="metric-meta">已纳管设备</span>
           </div>
           <div class="metric-card metric-card--success">
-            <span class="metric-label">在线</span>
+            <span class="metric-label">Online</span>
             <strong class="metric-value">{{ onlineCount }}</strong>
-            <span class="metric-meta">链路稳定</span>
           </div>
           <div class="metric-card metric-card--warning">
-            <span class="metric-label">不稳定</span>
+            <span class="metric-label">Unstable</span>
             <strong class="metric-value">{{ degradedCount }}</strong>
-            <span class="metric-meta">需继续诊断</span>
           </div>
-          <div class="metric-card metric-card--glass">
-            <span class="metric-label">批量目标</span>
+          <div class="metric-card">
+            <span class="metric-label">Batch</span>
             <strong class="metric-value">{{ checkedDevices.length }}</strong>
-            <span class="metric-meta">执行队列</span>
           </div>
         </div>
       </section>
 
-      <div class="workbench-layout h-[calc(100vh-14.5rem)]">
-        <section class="panel-shell panel-shell--asset">
+      <div class="workbench-layout">
+        <section class="panel-shell">
           <header class="panel-head">
             <div>
               <p class="panel-eyebrow">Asset Matrix</p>
-              <h2 class="panel-title">多交换机资产</h2>
-              <p class="panel-desc">按区域筛选、切换工作对象、纳入批量巡检。</p>
+              <h2 class="panel-title">资产矩阵</h2>
+              <p class="panel-desc">快速筛选区域、切换目标、管理批量队列。</p>
             </div>
-            <div class="panel-head-actions">
-              <Button size="sm" variant="outline" class="panel-btn" @click="openConfigManager"><Settings2 class="h-4 w-4" />管理交换机</Button>
+            <div class="mt-4 flex items-center justify-between">
+              <Button size="sm" variant="outline" class="panel-btn h-9 px-4" @click="openConfigManager">
+                <Settings2 class="mr-2 h-4 w-4" />管理
+              </Button>
               <span class="mini-pill">{{ checkedDevices.length }} 已选</span>
             </div>
           </header>
@@ -1112,7 +1117,6 @@ onMounted(async () => {
             <button
               v-for="group in availableGroupOptions"
               :key="group.id"
-              type="button"
               class="group-pill"
               :class="{ 'group-pill--active': selectedGroup === group.id }"
               @click="selectGroup(group.id)"
@@ -1127,38 +1131,22 @@ onMounted(async () => {
               <button
                 v-for="device in visibleDevices"
                 :key="device.id"
-                type="button"
                 class="asset-card"
                 :class="{ 'asset-card--active': device.id === selectedDeviceId }"
                 @click="setActiveDevice(device.id)"
               >
-                <div class="asset-card__head">
-                  <div>
-                    <div class="asset-card__title-row">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
                       <strong class="asset-card__title">{{ device.name }}</strong>
                       <span :class="statusTone(device.status)"></span>
                     </div>
-                    <p class="asset-card__subtitle">{{ device.vendor }} · {{ device.model }}</p>
+                    <p class="asset-card__subtitle">{{ device.vendor }} / {{ device.model }}</p>
                   </div>
-                  <label class="asset-card__check" @click.stop>
-                    <input :checked="device.checked" type="checkbox" @change="toggleDeviceSelection(device.id)" />
-                    <span>批量</span>
+                  <label class="flex items-center gap-1.5 cursor-pointer opacity-60 hover:opacity-100" @click.stop>
+                    <input :checked="device.checked" type="checkbox" class="w-3.5 h-3.5 accent-cyan-400" @change="toggleDeviceSelection(device.id)" />
+                    <span class="text-[10px] uppercase font-bold text-slate-500">Multiselect</span>
                   </label>
-                </div>
-
-                <div class="asset-meta-chips">
-                  <span class="asset-chip">{{ device.host }}:{{ device.port }}</span>
-                  <span class="asset-chip asset-chip--brand">{{ device.protocol }}</span>
-                  <span class="asset-chip">{{ statusLabel(device.status) }}</span>
-                </div>
-
-                <div class="asset-tags">
-                  <span v-for="tag in device.tags" :key="tag" class="asset-tag">{{ tag }}</span>
-                </div>
-
-                <div class="asset-card__foot">
-                  <span>{{ device.lastSeen }}</span>
-                  <span>ACL {{ device.aclNumber }}</span>
                 </div>
               </button>
             </div>
@@ -1167,52 +1155,54 @@ onMounted(async () => {
 
         <section class="center-column">
           <article class="device-spotlight" v-if="selectedDevice">
-            <div class="device-spotlight__main">
-              <p class="panel-eyebrow">Current Focus</p>
-              <div class="device-title-row">
-                <h2>{{ selectedDevice.name }}</h2>
-                <span class="device-badge">Telnet 会话</span>
-                <span class="device-badge device-badge--muted">{{ selectedDevice.vendor }}</span>
+            <div class="flex-1 space-y-6">
+              <div>
+                <p class="panel-eyebrow">Current Focus</p>
+                <div class="flex items-center gap-4 mt-2">
+                  <h2 class="hero-title text-4xl mb-0">{{ selectedDevice.name }}</h2>
+                  <span class="device-badge">Telnet 23</span>
+                </div>
+                <p class="text-slate-400 mt-2 text-sm">{{ selectedDevice.vendor }} {{ selectedDevice.model }} · {{ selectedDevice.host }}</p>
               </div>
-              <p class="device-copy">{{ selectedDevice.host }}:{{ selectedDevice.port }} · {{ selectedDevice.model }} · ACL {{ selectedDevice.aclNumber }}</p>
-              <div class="device-actions">
-                <Button variant="outline" class="panel-btn" @click="detailOpen = true"><Cpu class="h-4 w-4" />设备详情</Button>
-                <Button variant="outline" class="panel-btn" :disabled="testingConnection" @click="testSelectedDeviceConnection"><Activity class="h-4 w-4" />{{ testingConnection ? '测试中...' : '测试连接' }}</Button>
-                <Button variant="outline" class="panel-btn" @click="toggleSelectedDeviceChoice"><CheckCircle2 class="h-4 w-4" />{{ selectedDeviceSelected ? '移出批量' : '加入批量' }}</Button>
+              <div class="flex gap-3">
+                <Button variant="outline" class="panel-btn" @click="detailOpen = true"><Cpu class="mr-2 h-4 w-4" />详情</Button>
+                <Button variant="outline" class="panel-btn" :disabled="testingConnection" @click="testSelectedDeviceConnection">
+                  <Activity class="mr-2 h-4 w-4" />{{ testingConnection ? '测试中...' : '测试连接' }}
+                </Button>
+                <Button variant="outline" class="panel-btn" @click="toggleSelectedDeviceChoice">
+                  <CheckCircle2 class="mr-2 h-4 w-4" />{{ selectedDeviceSelected ? '移出批量' : '加入批量' }}
+                </Button>
               </div>
             </div>
 
-            <div class="device-spotlight__side">
+            <div class="space-y-3">
               <div class="status-box">
-                <span class="status-box__label">连接状态</span>
-                <strong class="status-box__value" :class="connectionStatusTone === 'success' ? 'text-emerald-300' : connectionStatusTone === 'warning' ? 'text-amber-300' : 'text-slate-100'">{{ connectionStatus }}</strong>
+                <span class="status-box__label">Connection</span>
+                <strong class="status-box__value" :class="connectionStatusTone === 'success' ? 'text-emerald-400' : 'text-slate-100'">{{ connectionStatus }}</strong>
               </div>
               <div class="status-box">
-                <span class="status-box__label">历史留痕</span>
-                <strong class="status-box__value">{{ selectedDeviceRecordCount }} 条</strong>
-              </div>
-              <div class="status-box">
-                <span class="status-box__label">健康判定</span>
-                <strong class="status-box__value">{{ healthTone }}</strong>
+                <span class="status-box__label">History</span>
+                <strong class="status-box__value">{{ selectedDeviceRecordCount }} 条记录</strong>
               </div>
             </div>
           </article>
 
-          <article class="panel-shell panel-shell--terminal terminal-panel">
-            <header class="panel-head panel-head--terminal">
+          <article class="panel-shell flex-1">
+            <header class="panel-head flex items-center justify-between">
               <div>
-                <p class="panel-eyebrow">Live Session</p>
-                <h2 class="panel-title">Telnet 会话终端</h2>
-                <p class="panel-desc">AI 与人工共用一条链路，命令、回显、分析全部沉淀留痕。</p>
+                <p class="panel-eyebrow">Interactive Shell</p>
+                <h2 class="panel-title">会话终端</h2>
               </div>
-              <div class="panel-head-actions">
-                <Button variant="outline" class="panel-btn" @click="clearTerminal">清空回显</Button>
-                <Button class="panel-btn panel-btn--primary" :disabled="running" @click="submitManualCommand"><Play class="h-4 w-4" />{{ running ? '执行中...' : '执行命令' }}</Button>
+              <div class="flex gap-2">
+                <Button variant="outline" size="sm" class="panel-btn" @click="clearTerminal">清空</Button>
+                <Button size="sm" class="panel-btn panel-btn--primary" :disabled="running" @click="submitManualCommand">
+                  <Play class="mr-2 h-3.5 w-3.5" />{{ running ? '执行中' : '发送' }}
+                </Button>
               </div>
             </header>
 
-            <CardContent class="terminal-body">
-              <ScrollArea class="terminal-screen terminal-screen--premium">
+            <div class="flex-1 flex flex-col min-height-0 overflow-hidden">
+              <ScrollArea class="flex-1 p-6">
                 <div class="terminal-stream">
                   <div
                     v-for="entry in terminalLogs"
@@ -1226,158 +1216,126 @@ onMounted(async () => {
                   >
                     <div class="terminal-entry__meta">
                       <span>{{ entry.title }}</span>
-                      <span>{{ entry.timestamp }}</span>
+                      <span class="ml-4 opacity-50">{{ entry.timestamp }}</span>
                     </div>
                     <pre class="terminal-text whitespace-pre-wrap break-all">{{ entry.content }}</pre>
                   </div>
                 </div>
               </ScrollArea>
 
-              <div class="terminal-input-shell">
-                <div class="quick-command-row">
-                  <button v-for="command in quickCommands" :key="command" type="button" class="quick-command-chip" @click="applyQuickCommand(command)">{{ command }}</button>
+              <div class="terminal-input-shell border-t border-white/5 mx-6 mb-6 pt-6">
+                <div class="flex flex-wrap gap-2 mb-4">
+                  <button v-for="command in quickCommands" :key="command" class="quick-command-chip" @click="applyQuickCommand(command)">{{ command }}</button>
                 </div>
-                <div class="terminal-compose-row">
-                  <Input v-model="commandInput" class="terminal-input" placeholder="输入命令，如 display interface brief" />
-                  <Button class="panel-btn panel-btn--primary min-w-[132px]" :disabled="running" @click="submitManualCommand">手动执行</Button>
+                <div class="flex gap-3">
+                  <Input v-model="commandInput" class="h-12 bg-slate-950/50 border-white/10" placeholder="发送指令或通过 AI 助手自动生成..." />
+                  <Button class="panel-btn panel-btn--primary h-12 px-8" :disabled="running" @click="submitManualCommand">执行</Button>
                 </div>
               </div>
-            </CardContent>
+            </div>
           </article>
         </section>
 
         <section class="right-column">
-          <article class="panel-shell panel-shell--ai">
-            <header class="panel-head">
-              <div>
-                <p class="panel-eyebrow">Copilot Loop</p>
-                <h2 class="panel-title">AI 协同助手</h2>
-                <p class="panel-desc">让意图、回显与下一步建议形成连续诊断回路。</p>
-              </div>
+          <article class="panel-shell p-8 space-y-8">
+            <header>
+              <p class="panel-eyebrow">AI Co-pilot</p>
+              <h2 class="panel-title">智能诊断助理</h2>
+              <p class="panel-desc">基于实时回显提供下一步操作建议。</p>
             </header>
 
-            <div class="assistant-intent">
-              <Textarea v-model="aiPrompt" class="assistant-intent__input" placeholder="例如：帮我批量检查这些交换机的接口健康和 ACL 命中情况。" />
+            <div class="space-y-4">
+              <Textarea v-model="aiPrompt" class="min-h-[100px] bg-slate-950/50 border-white/10 resize-none" placeholder="输入诊断需求，例如：检查此设备的接口报错统计..." />
               <div class="assistant-toggle">
-                <div>
-                  <div class="assistant-toggle__title">只读建议自动执行</div>
-                  <div class="assistant-toggle__desc">仅对 AI 标记为安全的只读命令自动串行执行。</div>
+                <div class="flex-1">
+                  <p class="text-sm font-bold text-slate-200">自动执行安全建议</p>
+                  <p class="text-[10px] text-slate-500">仅限只读检查指令</p>
                 </div>
                 <Switch v-model:checked="autoExecuteReadonly" />
               </div>
-              <Button class="panel-btn panel-btn--primary w-full" :disabled="running" @click="askAiAssistant"><WandSparkles class="h-4 w-4" />{{ running ? 'AI 正在诊断...' : '开始多轮诊断' }}</Button>
+              <Button class="panel-btn panel-btn--primary w-full h-12" :disabled="running" @click="askAiAssistant">
+                <WandSparkles class="mr-2 h-4 w-4" />{{ running ? '正在处理...' : '多轮协同诊断' }}
+              </Button>
             </div>
 
             <div v-if="aiSummary" class="diagnosis-card diagnosis-card--summary">
-              <span class="diagnosis-card__label">当前诊断结论</span>
-              <p class="diagnosis-card__content">{{ aiSummary }}</p>
-              <div v-if="aiNextSteps.length" class="next-steps-row">
-                <span v-for="step in aiNextSteps" :key="step" class="next-step-chip">{{ step }}</span>
-              </div>
+              <p class="text-[10px] uppercase font-bold text-cyan-400 mb-2">CURRENT INSIGHT</p>
+              <p class="text-sm text-slate-300 leading-relaxed">{{ aiSummary }}</p>
             </div>
 
-            <div v-if="aiConversation.length" class="diagnosis-card">
-              <div class="diagnosis-card__head">
-                <span class="diagnosis-card__label">AI 诊断对话</span>
+            <div v-if="aiSuggestions.length" class="space-y-4">
+              <div class="flex items-center justify-between">
+                <p class="panel-eyebrow mb-0">AI Suggestions</p>
+                <Button variant="ghost" size="sm" class="text-xs text-cyan-400 hover:text-cyan-300" @click="runAllSuggestions">全部串行执行</Button>
               </div>
-              <div class="conversation-thread">
-                <div v-for="(message, index) in aiConversation" :key="`${message.role}-${index}`" class="conversation-bubble" :class="message.role === 'assistant' ? 'conversation-bubble--assistant' : 'conversation-bubble--user'">
-                  <span class="conversation-bubble__role">{{ message.role === 'assistant' ? 'AI' : '你' }}</span>
-                  <div class="conversation-bubble__body">{{ message.content }}</div>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="aiSuggestions.length" class="diagnosis-card diagnosis-card--suggestion">
-              <div class="diagnosis-card__head">
-                <span class="diagnosis-card__label">AI 建议命令</span>
-                <Button variant="outline" class="panel-btn panel-btn--ghost" @click="runAllSuggestions">全部执行</Button>
-              </div>
-              <div class="suggestion-stack">
+              <div class="space-y-3">
                 <div v-for="suggestion in aiSuggestions" :key="suggestion.id" class="suggestion-card">
-                  <div class="suggestion-card__head">
+                  <div class="flex items-start justify-between gap-4">
                     <div>
-                      <strong class="suggestion-card__title">{{ suggestion.title }}</strong>
-                      <p class="suggestion-card__reason">{{ suggestion.reason }}</p>
+                      <h4 class="text-sm font-bold text-slate-200">{{ suggestion.title }}</h4>
+                      <p class="text-[11px] text-slate-500 mt-1">{{ suggestion.reason }}</p>
                     </div>
-                    <span class="suggestion-risk">{{ suggestion.risk }}</span>
+                    <span class="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-slate-800 text-slate-400">{{ suggestion.risk }}</span>
                   </div>
-                  <div class="suggestion-card__command">{{ suggestion.command }}</div>
-                  <div class="suggestion-card__actions">
-                    <Button size="sm" class="panel-btn panel-btn--primary" @click="runSuggestion(suggestion)">执行</Button>
-                    <Button size="sm" variant="outline" class="panel-btn panel-btn--ghost" @click="commandInput = suggestion.command">写入输入框</Button>
+                  <div class="bg-black/40 rounded-lg p-3 mt-4 font-mono text-xs text-cyan-300 border border-white/5">{{ suggestion.command }}</div>
+                  <div class="grid grid-cols-2 gap-2 mt-4">
+                    <Button size="sm" class="panel-btn panel-btn--primary h-8" @click="runSuggestion(suggestion)">立即发送</Button>
+                    <Button size="sm" variant="ghost" class="panel-btn h-8 text-xs" @click="commandInput = suggestion.command">引用</Button>
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div class="diagnosis-card diagnosis-card--warning">
-              <div class="diagnosis-card__head"><span class="diagnosis-card__label"><AlertTriangle class="h-4 w-4" />安全执行边界</span></div>
-              <p class="diagnosis-card__content">当前工作台对后端真实执行默认启用只读命令门禁，先支持 display / show / dis / ping 这类巡检命令，为后续审批流与命令白名单预留扩展点。</p>
             </div>
           </article>
 
-          <article class="panel-shell panel-shell--script">
-            <header class="panel-head">
-              <div>
-                <p class="panel-eyebrow">Script Rack</p>
-                <h2 class="panel-title">快捷脚本</h2>
-                <p class="panel-desc">把标准化巡检操作压缩成一键动作。</p>
-              </div>
-              <span class="mini-pill">先 A 后 B</span>
+          <article class="panel-shell p-8 space-y-6">
+            <header>
+              <p class="panel-eyebrow">Script Rack</p>
+              <h2 class="panel-title">快捷脚本</h2>
             </header>
 
-            <div class="script-stack">
-              <button v-for="script in quickScripts" :key="script.id" type="button" class="script-card" @click="runQuickScript(script)">
-                <div class="script-card__head">
+            <div class="grid grid-cols-1 gap-3">
+              <button v-for="script in quickScripts" :key="script.id" class="script-card" @click="runQuickScript(script)">
+                <div class="flex items-start justify-between">
                   <div>
-                    <strong class="script-card__title">{{ script.title }}</strong>
-                    <p class="script-card__desc">{{ script.description }}</p>
+                    <h4 class="text-sm font-bold text-slate-200">{{ script.title }}</h4>
+                    <p class="text-[11px] text-slate-500 mt-1 line-clamp-1">{{ script.description }}</p>
                   </div>
-                  <span class="script-card__scope">{{ script.scope === 'batch' ? '批量' : '单台' }}</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-400 border border-cyan-500/20">{{ script.scope === 'batch' ? 'BATCH' : 'SINGLE' }}</span>
                 </div>
-                <div class="script-card__meta">
-                  <span class="script-meta-pill script-meta-pill--brand">{{ script.risk }}</span>
-                  <span class="script-meta-pill">{{ script.commands.length }} 条命令</span>
+                <div class="mt-4 flex items-center gap-3">
+                  <span class="text-[10px] text-slate-400 font-mono">{{ script.commands.length }} Cmds</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-white/5 text-slate-500">{{ script.risk }}</span>
                 </div>
               </button>
             </div>
           </article>
 
-          <article class="panel-shell panel-shell--records records-panel">
-            <header class="panel-head">
+          <article class="panel-shell flex-1">
+             <header class="panel-head">
               <div>
-                <p class="panel-eyebrow">Trace Archive</p>
-                <h2 class="panel-title">执行记录</h2>
-                <p class="panel-desc">记录 AI / 人工 / 脚本链路的所有执行摘要。</p>
+                <p class="panel-eyebrow">History</p>
+                <h2 class="panel-title">执行审计</h2>
               </div>
-              <div class="w-32">
-                <Select v-model="selectedRecordSource">
-                  <SelectTrigger class="record-filter-trigger"><SelectValue placeholder="来源过滤" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部来源</SelectItem>
-                    <SelectItem value="manual">手工</SelectItem>
-                    <SelectItem value="ai">AI</SelectItem>
-                    <SelectItem value="script">脚本</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select v-model="selectedRecordSource">
+                <SelectTrigger class="w-32 bg-slate-950/50 border-white/10 h-8 text-[11px]"><SelectValue placeholder="All Sources" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  <SelectItem value="manual">手工</SelectItem>
+                  <SelectItem value="ai">AI</SelectItem>
+                  <SelectItem value="script">脚本</SelectItem>
+                </SelectContent>
+              </Select>
             </header>
-
-            <ScrollArea class="records-scroll">
-              <div class="record-stack">
+            <ScrollArea class="flex-1 p-6">
+              <div class="space-y-4">
                 <div v-for="record in filteredExecutionRecords" :key="record.id" class="record-card">
-                  <div class="record-card__head">
-                    <div>
-                      <strong class="record-card__title">{{ record.title }}</strong>
-                      <p class="record-card__target">目标：{{ record.target }}</p>
-                    </div>
-                    <span class="record-status">{{ record.status }}</span>
+                   <div class="flex items-start justify-between">
+                    <h4 class="text-sm font-bold">{{ record.title }}</h4>
+                    <span class="text-[10px] text-emerald-400">{{ record.status }}</span>
                   </div>
-                  <p class="record-card__summary">{{ record.summary }}</p>
-                  <div class="record-card__foot">
-                    <span>{{ sourceLabel(record.source) }}</span>
-                    <span>·</span>
+                  <p class="text-[11px] text-slate-500 mt-2 line-clamp-2">{{ record.summary }}</p>
+                  <div class="flex items-center justify-between mt-4 text-[10px] text-slate-600 font-mono">
+                    <span>Target: {{ record.target }}</span>
                     <span>{{ record.createdAt }}</span>
                   </div>
                 </div>
@@ -1478,904 +1436,498 @@ onMounted(async () => {
 <style scoped>
 .switch-workbench-page {
   position: relative;
-  background:
-    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 28%),
-    radial-gradient(circle at top right, rgba(139, 92, 246, 0.16), transparent 24%),
-    linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(2, 8, 23, 1));
+  min-height: 100vh;
+  background: #020617;
+  color: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 .switch-grid-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 85%);
+  background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse at top, black 40%, transparent 90%);
 }
 
 .switch-orb {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(70px);
-  opacity: 0.35;
+  filter: blur(120px);
+  opacity: 0.15;
   pointer-events: none;
 }
 
 .switch-orb--cyan {
-  top: 48px;
-  left: 3%;
-  width: 320px;
-  height: 320px;
-  background: rgba(34, 211, 238, 0.35);
+  top: -100px;
+  left: 10%;
+  width: 500px;
+  height: 500px;
+  background: #22d3ee;
 }
 
 .switch-orb--violet {
-  right: 6%;
-  top: 120px;
-  width: 280px;
-  height: 280px;
-  background: rgba(124, 58, 237, 0.28);
+  top: 20%;
+  right: 5%;
+  width: 400px;
+  height: 400px;
+  background: #8b5cf6;
 }
 
 .hero-panel {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
-  gap: 20px;
-  padding: 28px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 30px;
-  background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(3, 7, 18, 0.72)),
-    radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.12), transparent 32%),
-    radial-gradient(circle at 100% 0%, rgba(139, 92, 246, 0.12), transparent 24%);
-  box-shadow:
-    0 28px 90px rgba(2, 8, 23, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 40px;
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
 
-.hero-panel::after {
+.hero-panel::before {
   content: '';
   position: absolute;
   inset: 0;
+  background: radial-gradient(circle at top left, rgba(34, 211, 238, 0.08), transparent 40%);
   pointer-events: none;
-  background: linear-gradient(120deg, transparent 10%, rgba(255, 255, 255, 0.04), transparent 48%);
 }
 
 .hero-copy {
-  position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  max-width: 65%;
 }
 
 .hero-badges {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .hero-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-radius: 9999px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(226, 232, 240, 0.94);
-  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 99px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
 }
 
 .hero-chip--brand {
-  border-color: rgba(34, 211, 238, 0.25);
-  background: rgba(34, 211, 238, 0.12);
-  color: rgba(165, 243, 252, 0.95);
-}
-
-.hero-chip--success {
-  border-color: rgba(74, 222, 128, 0.24);
-  background: rgba(74, 222, 128, 0.12);
-  color: rgba(187, 247, 208, 0.96);
-}
-
-.hero-chip--warning {
-  border-color: rgba(251, 191, 36, 0.24);
-  background: rgba(251, 191, 36, 0.12);
-  color: rgba(253, 230, 138, 0.96);
+  background: rgba(34, 211, 238, 0.1);
+  border-color: rgba(34, 211, 238, 0.2);
+  color: #22d3ee;
 }
 
 .hero-kicker {
-  margin: 0;
-  color: rgba(125, 211, 252, 0.74);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.38em;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  color: #22d3ee;
   text-transform: uppercase;
+  margin-bottom: 12px;
+  opacity: 0.8;
 }
 
 .hero-title {
-  margin: 0;
-  max-width: 14ch;
-  color: #f8fbff;
-  font-size: clamp(2rem, 3vw, 3.35rem);
-  font-weight: 900;
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  font-size: 2.25rem;
+  font-weight: 850;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+  background: linear-gradient(to bottom right, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .hero-subtitle {
-  margin: 0;
-  max-width: 62ch;
-  color: rgba(191, 201, 220, 0.82);
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 1.6;
+  color: #94a3b8;
+  max-width: 520px;
 }
 
 .hero-metrics {
-  position: relative;
-  z-index: 1;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-content: center;
+  grid-template-columns: repeat(4, 130px);
+  gap: 12px;
+  z-index: 1;
 }
 
 .metric-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 18px;
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  backdrop-filter: blur(18px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: transform 0.3s ease, background 0.3s ease;
 }
 
-.metric-card--glass {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
-}
-
-.metric-card--success {
-  background: linear-gradient(180deg, rgba(16, 185, 129, 0.14), rgba(6, 95, 70, 0.18));
-  border-color: rgba(52, 211, 153, 0.22);
-}
-
-.metric-card--warning {
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(120, 53, 15, 0.18));
-  border-color: rgba(251, 191, 36, 0.22);
+.metric-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
 }
 
 .metric-label {
-  color: rgba(148, 163, 184, 0.78);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  color: #64748b;
   text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
 }
 
 .metric-value {
-  color: #f8fbff;
-  font-size: 2rem;
-  line-height: 1;
-  font-weight: 900;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #94a3b8;
 }
 
-.metric-meta {
-  color: rgba(191, 201, 220, 0.72);
-  font-size: 12px;
-}
+.metric-card--success .metric-value { color: #10b981; }
+.metric-card--warning .metric-value { color: #f59e0b; }
 
 .workbench-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 390px;
-  gap: 16px;
+  grid-template-columns: 340px minmax(0, 1fr) 420px;
+  gap: 20px;
+  padding-bottom: 40px;
+  height: calc(100vh - 280px); /* Fill remaining height */
+}
+
+.center-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
 }
 
 .panel-shell {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 32px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  border-radius: 28px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: linear-gradient(180deg, rgba(10, 15, 28, 0.88), rgba(5, 8, 18, 0.76));
-  box-shadow:
-    0 24px 80px rgba(2, 8, 23, 0.44),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-}
-
-.panel-shell--terminal {
-  background: linear-gradient(180deg, rgba(4, 10, 28, 0.94), rgba(2, 7, 18, 0.88));
-}
-
-.panel-shell--ai {
-  background:
-    linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(8, 15, 28, 0.84)),
-    radial-gradient(circle at top right, rgba(139, 92, 246, 0.1), transparent 30%);
 }
 
 .panel-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 20px 18px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-}
-
-.panel-head-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .panel-eyebrow {
-  margin: 0 0 6px;
-  color: rgba(103, 232, 249, 0.75);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
+  color: #22d3ee;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  margin-bottom: 8px;
+  opacity: 0.8;
 }
 
 .panel-title {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 1.05rem;
-  font-weight: 800;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f1f5f9;
 }
 
 .panel-desc {
-  margin: 6px 0 0;
-  color: rgba(148, 163, 184, 0.82);
   font-size: 12px;
-  line-height: 1.65;
-}
-
-.panel-btn {
-  border-radius: 14px;
-  font-weight: 600;
-}
-
-.panel-btn--primary {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.9), rgba(59, 130, 246, 0.88));
-  color: #04111e;
-  border: none;
-}
-
-.panel-btn--ghost,
-.panel-btn {
-  border-color: rgba(148, 163, 184, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e2e8f0;
-}
-
-.panel-btn--danger {
-  border-color: rgba(248, 113, 113, 0.22);
-  background: rgba(127, 29, 29, 0.18);
-  color: #fda4af;
-}
-
-.panel-btn--danger-solid {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(190, 24, 93, 0.9));
-  color: white;
-}
-
-.mini-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 12px;
-  border-radius: 9999px;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.18);
-  color: rgba(165, 243, 252, 0.95);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 .group-pills {
+  padding: 20px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 16px 20px 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .group-pill {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  padding: 12px 16px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   text-align: left;
-  transition: all 0.24s ease;
+  transition: all 0.2s ease;
 }
 
-.group-pill:hover,
 .group-pill--active {
-  border-color: rgba(34, 211, 238, 0.24);
-  background: rgba(34, 211, 238, 0.1);
-  transform: translateY(-1px);
+  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(34, 211, 238, 0.3);
 }
 
 .group-pill__label {
-  color: #f8fbff;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .group-pill__desc {
-  color: rgba(148, 163, 184, 0.74);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
 }
 
 .asset-scroll {
+  padding: 0 20px 20px;
   flex: 1;
-  min-height: 0;
-  padding: 16px 20px 20px;
 }
 
 .asset-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
 }
 
 .asset-card {
-  width: 100%;
-  padding: 16px;
+  padding: 20px;
   border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
-    rgba(3, 7, 18, 0.5);
-  text-align: left;
-  transition: all 0.24s ease;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.asset-card:hover,
-.asset-card--active {
-  border-color: rgba(34, 211, 238, 0.24);
-  background:
-    linear-gradient(180deg, rgba(34, 211, 238, 0.12), rgba(34, 211, 238, 0.05)),
-    rgba(3, 7, 18, 0.62);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
-  transform: translateY(-1px);
-}
-
-.asset-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.asset-card__title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.asset-card:hover, .asset-card--active {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(34, 211, 238, 0.2);
+  transform: scale(1.01);
 }
 
 .asset-card__title {
-  color: #f8fbff;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
 }
 
 .asset-card__subtitle {
-  margin: 6px 0 0;
-  color: rgba(148, 163, 184, 0.8);
   font-size: 12px;
-}
-
-.asset-card__check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(148, 163, 184, 0.78);
-  font-size: 11px;
-}
-
-.asset-card__check input {
-  width: 14px;
-  height: 14px;
-  accent-color: #22d3ee;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 9999px;
-  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
-.status-dot--online {
-  background: #34d399;
-  box-shadow: 0 0 16px rgba(52, 211, 153, 0.75);
-}
-
-.status-dot--degraded {
-  background: #fbbf24;
-  box-shadow: 0 0 16px rgba(251, 191, 36, 0.72);
-}
-
-.status-dot--offline {
-  background: #fb7185;
-  box-shadow: 0 0 16px rgba(251, 113, 133, 0.68);
-}
-
-.asset-meta-chips,
-.asset-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.asset-chip,
-.asset-tag,
-.next-step-chip,
-.script-meta-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 9999px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.045);
-  color: rgba(226, 232, 240, 0.88);
-  font-size: 11px;
-}
-
-.asset-chip--brand,
-.script-meta-pill--brand {
-  border-color: rgba(34, 211, 238, 0.2);
-  background: rgba(34, 211, 238, 0.11);
-  color: rgba(165, 243, 252, 0.95);
-}
-
-.asset-card__foot {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 16px;
-  color: rgba(100, 116, 139, 0.92);
-  font-size: 11px;
-}
-
-.center-column,
-.right-column {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
+.status-dot--online { background: #10b981; box-shadow: 0 0 12px #10b981; }
+.status-dot--degraded { background: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
+.status-dot--offline { background: #ef4444; box-shadow: 0 0 12px #ef4444; }
 
 .device-spotlight {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) 260px;
-  gap: 18px;
-  padding: 22px;
+  padding: 24px 32px;
+  background: linear-gradient(to right, rgba(15, 23, 42, 0.5), transparent);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 28px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(2, 6, 23, 0.62)),
-    radial-gradient(circle at left center, rgba(56, 189, 248, 0.08), transparent 28%);
-  box-shadow: 0 18px 54px rgba(2, 8, 23, 0.35);
-}
-
-.device-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 32px;
 }
 
 .device-title-row h2 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 1.85rem;
-  font-weight: 900;
-  letter-spacing: -0.03em;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .device-badge {
-  padding: 7px 12px;
-  border-radius: 9999px;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.2);
-  color: rgba(165, 243, 252, 0.92);
-  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 10px;
   font-weight: 700;
-}
-
-.device-badge--muted {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(148, 163, 184, 0.12);
-  color: rgba(226, 232, 240, 0.86);
-}
-
-.device-copy {
-  margin: 12px 0 0;
-  color: rgba(191, 201, 220, 0.8);
-  font-size: 14px;
-}
-
-.device-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.device-spotlight__side {
-  display: grid;
-  gap: 10px;
+  text-transform: uppercase;
+  background: rgba(34, 211, 238, 0.1);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.2);
 }
 
 .status-box {
-  padding: 14px 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .status-box__label {
-  display: block;
-  color: rgba(148, 163, 184, 0.76);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-size: 10px;
   text-transform: uppercase;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.1em;
 }
 
 .status-box__value {
-  display: block;
-  margin-top: 10px;
-  color: #f8fbff;
-  font-size: 1rem;
-  font-weight: 800;
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
-.terminal-panel {
-  flex: 1;
+.status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.terminal-body {
-  display: grid;
-  min-height: 0;
-  gap: 14px;
-  padding: 18px 20px 20px;
-  grid-template-rows: minmax(0, 1fr) auto;
+.status-box__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.1em;
 }
 
-.terminal-screen--premium {
-  min-height: 0;
-  border-radius: 24px;
-  border: 1px solid rgba(34, 211, 238, 0.12);
-  background:
-    linear-gradient(180deg, rgba(1, 7, 18, 0.96), rgba(3, 10, 24, 0.84)),
-    radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 26%);
-  padding: 16px;
+.status-box__value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f1f5f9;
 }
 
 .terminal-stream {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 .terminal-entry {
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.terminal-entry--command {
-  border-color: rgba(34, 211, 238, 0.18);
-  background: rgba(34, 211, 238, 0.07);
-}
-
-.terminal-entry--ai {
-  border-color: rgba(139, 92, 246, 0.18);
-  background: rgba(139, 92, 246, 0.09);
-}
-
-.terminal-entry--warning {
-  border-color: rgba(245, 158, 11, 0.2);
-  background: rgba(245, 158, 11, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .terminal-entry__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-  color: rgba(148, 163, 184, 0.76);
+  color: #64748b;
   font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
 }
+
+.terminal-text {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.terminal-entry--command .terminal-text { border-left-color: #22d3ee; color: #22d3ee; }
+.terminal-entry--ai .terminal-text { border-left-color: #8b5cf6; color: #a78bfa; }
+.terminal-entry--warning .terminal-text { border-left-color: #ef4444; color: #fca5a5; }
 
 .terminal-input-shell {
-  padding: 16px;
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.quick-command-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  margin-top: 0;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
 }
 
 .quick-command-chip {
-  padding: 8px 12px;
-  border-radius: 9999px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(226, 232, 240, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 6px 14px;
+  border-radius: 99px;
   font-size: 11px;
+  color: #94a3b8;
   transition: all 0.2s ease;
 }
 
 .quick-command-chip:hover {
-  border-color: rgba(34, 211, 238, 0.22);
-  color: rgba(165, 243, 252, 0.96);
-}
-
-.terminal-compose-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.terminal-input,
-.assistant-intent__input,
-.record-filter-trigger {
-  border-color: rgba(148, 163, 184, 0.12);
-  background: rgba(0, 0, 0, 0.22);
-  color: #f8fbff;
-}
-
-.assistant-intent {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  background: rgba(34, 211, 238, 0.1);
+  border-color: rgba(34, 211, 238, 0.2);
+  color: #22d3ee;
 }
 
 .assistant-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px 20px;
   border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.assistant-toggle__title {
-  color: #f8fbff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.assistant-toggle__desc {
-  margin-top: 4px;
-  color: rgba(148, 163, 184, 0.78);
-  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .diagnosis-card {
-  padding: 16px;
+  padding: 24px;
   border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .diagnosis-card--summary {
-  border-color: rgba(34, 211, 238, 0.16);
-  background: rgba(34, 211, 238, 0.08);
+  background: linear-gradient(to bottom right, rgba(34, 211, 238, 0.05), transparent);
+  border-color: rgba(34, 211, 238, 0.15);
 }
 
-.diagnosis-card--suggestion {
-  border-color: rgba(139, 92, 246, 0.18);
-  background: rgba(139, 92, 246, 0.08);
-}
-
-.diagnosis-card--warning {
-  border-color: rgba(245, 158, 11, 0.18);
-  background: rgba(245, 158, 11, 0.08);
-}
-
-.diagnosis-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.diagnosis-card__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: rgba(240, 249, 255, 0.95);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.diagnosis-card__content {
-  margin: 0;
-  color: rgba(226, 232, 240, 0.88);
-  font-size: 13px;
-  line-height: 1.75;
-}
-
-.next-steps-row,
-.suggestion-stack,
-.script-stack,
-.record-stack,
-.conversation-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.conversation-bubble {
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.conversation-bubble--assistant {
-  background: rgba(139, 92, 246, 0.08);
-  border-color: rgba(139, 92, 246, 0.18);
-}
-
-.conversation-bubble--user {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.conversation-bubble__role {
-  display: inline-block;
-  margin-bottom: 6px;
-  color: rgba(148, 163, 184, 0.78);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.conversation-bubble__body {
-  color: #f8fbff;
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.suggestion-card,
-.script-card,
-.record-card {
-  padding: 14px;
+.suggestion-card, .script-card, .record-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(0, 0, 0, 0.16);
+  padding: 20px;
+  transition: all 0.25s ease;
 }
 
-.suggestion-card__head,
-.script-card__head,
-.record-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.suggestion-card:hover, .script-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-.suggestion-card__title,
-.script-card__title,
-.record-card__title {
-  color: #f8fbff;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.suggestion-card__reason,
-.script-card__desc,
-.record-card__summary,
-.record-card__target {
-  margin: 6px 0 0;
-  color: rgba(148, 163, 184, 0.78);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.suggestion-risk,
-.script-card__scope,
-.record-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 9999px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(226, 232, 240, 0.9);
-  font-size: 11px;
+.panel-btn--primary {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  color: #020617;
   font-weight: 700;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px -2px rgba(34, 211, 238, 0.3);
 }
 
-.suggestion-card__command {
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(2, 6, 23, 0.72);
-  color: rgba(125, 211, 252, 0.95);
-  font-size: 12px;
-  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+.panel-btn {
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
 }
 
-.suggestion-card__actions,
-.record-card__foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  color: rgba(100, 116, 139, 0.94);
-  font-size: 11px;
+.mini-pill {
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #22d3ee;
 }
 
-.records-panel {
-  flex: 1;
-  min-height: 0;
-}
-
-.records-scroll {
-  flex: 1;
-  min-height: 0;
-  padding: 16px 20px 20px;
-}
-
-.terminal-text {
-  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-@media (max-width: 1440px) {
-  .hero-panel {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 1600px) {
   .workbench-layout {
-    grid-template-columns: 290px minmax(0, 1fr) 360px;
+    grid-template-columns: 300px minmax(0, 1fr) 360px;
   }
 }
 
 @media (max-width: 1280px) {
   .workbench-layout {
     grid-template-columns: 1fr;
-    height: auto;
   }
-
-  .device-spotlight {
-    grid-template-columns: 1fr;
-  }
-
-  .records-panel,
-  .asset-scroll {
-    min-height: 320px;
+  .hero-panel {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 32px;
   }
 }
 </style>
