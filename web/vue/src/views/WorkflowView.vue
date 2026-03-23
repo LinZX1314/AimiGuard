@@ -7,6 +7,7 @@ import {
   type WorkflowRecord,
   type WorkflowRunDetail,
   type WorkflowRunRecord,
+  type WorkflowTemplate,
   type WorkflowTriggerType,
 } from '@/api/workflow'
 import WorkflowCanvas from '@/components/workflow/WorkflowCanvas.vue'
@@ -15,6 +16,7 @@ import WorkflowRunDialog from '@/components/workflow/WorkflowRunDialog.vue'
 import WorkflowRunDetailDrawer from '@/components/workflow/WorkflowRunDetailDrawer.vue'
 import WorkflowRunPanel from '@/components/workflow/WorkflowRunPanel.vue'
 import WorkflowSidebar from '@/components/workflow/WorkflowSidebar.vue'
+import WorkflowTemplateCenter from '@/components/workflow/WorkflowTemplateCenter.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -22,16 +24,20 @@ import {
   createWorkflowNode,
   defaultWorkflowCatalogNodes,
   normalizeWorkflowDefinition,
+  toPersistedWorkflowDefinition,
 } from '@/lib/workflow/defaults'
 
 const workflows = ref<WorkflowRecord[]>([])
 const runs = ref<WorkflowRunRecord[]>([])
+const templates = ref<WorkflowTemplate[]>([])
 const catalogNodes = ref<WorkflowCatalogNode[]>([...defaultWorkflowCatalogNodes])
 const selectedWorkflowId = ref<number | null>(null)
 const selectedNodeId = ref<string | null>(null)
 const selectedRunDetail = ref<WorkflowRunDetail | null>(null)
 const runDialogOpen = ref(false)
 const runDetailOpen = ref(false)
+const templateCenterOpen = ref(false)
+const templateLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const running = ref(false)
@@ -68,8 +74,16 @@ function buildWorkflowPayload(kind: WorkflowTriggerType = 'manual') {
       enabled: true,
       ...(kind === 'schedule' ? { interval_seconds: 60 } : {}),
     },
-    definition,
+    definition: toPersistedWorkflowDefinition(definition),
   }
+}
+
+function upsertWorkflow(workflow: WorkflowRecord) {
+  const normalized = normalizeWorkflowRecord(workflow)
+  workflows.value = [normalized, ...workflows.value.filter((item) => item.id !== normalized.id)]
+  selectedWorkflowId.value = normalized.id
+  selectedNodeId.value = null
+  return normalized
 }
 
 async function loadWorkflows() {
@@ -94,6 +108,13 @@ async function loadWorkflows() {
   }
 }
 
+async function loadTemplates() {
+  templateLoading.value = true
+  const data = await apiCall(() => workflowApi.templates(), { silent: true })
+  templateLoading.value = false
+  templates.value = data ?? []
+}
+
 async function loadRuns(workflowId: number) {
   const data = await apiCall(() => workflowApi.runs(workflowId), { silent: true })
   runs.value = data ?? []
@@ -103,11 +124,28 @@ async function handleCreateWorkflow(kind: WorkflowTriggerType = 'manual') {
   const created = await apiCall(() => workflowApi.create(buildWorkflowPayload(kind)))
   if (!created) return
 
-  const normalized = normalizeWorkflowRecord(created)
-  workflows.value = [normalized, ...workflows.value.filter((item) => item.id !== normalized.id)]
-  selectedWorkflowId.value = normalized.id
-  selectedNodeId.value = null
+  upsertWorkflow(created)
   runs.value = []
+}
+
+async function handleOpenTemplateCenter() {
+  templateCenterOpen.value = true
+  if (!templates.value.length) {
+    await loadTemplates()
+  }
+}
+
+function handleTemplateCenterOpenChange(value: boolean) {
+  templateCenterOpen.value = value
+}
+
+async function handleInstantiateTemplate(templateId: string) {
+  const created = await apiCall(() => workflowApi.instantiateTemplate(templateId, {}))
+  if (!created) return
+
+  upsertWorkflow(created)
+  runs.value = []
+  templateCenterOpen.value = false
 }
 
 function handleSelectWorkflow(workflow: WorkflowRecord) {
@@ -135,15 +173,14 @@ async function handleSaveWorkflow() {
       description: workflow.description,
       category: workflow.category,
       status: workflow.status,
-      definition: normalizeWorkflowDefinition(workflow.definition),
+      definition: toPersistedWorkflowDefinition(workflow.definition),
       trigger: workflow.trigger,
     }),
   )
   saving.value = false
 
   if (!saved) return
-  const normalized = normalizeWorkflowRecord(saved)
-  workflows.value = workflows.value.map((item) => (item.id === normalized.id ? normalized : item))
+  upsertWorkflow(saved)
 }
 
 async function handlePublishWorkflow() {
@@ -152,8 +189,7 @@ async function handlePublishWorkflow() {
 
   const saved = await apiCall(() => workflowApi.publish(workflow.id))
   if (!saved) return
-  const normalized = normalizeWorkflowRecord(saved)
-  workflows.value = workflows.value.map((item) => (item.id === normalized.id ? normalized : item))
+  upsertWorkflow(saved)
 }
 
 function handleOpenRunDialog() {
@@ -209,8 +245,9 @@ onMounted(async () => {
 
       <div class="flex flex-wrap items-center gap-2">
         <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('manual')">新建工作流</Button>
-        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('schedule')">定时模板</Button>
-        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('webhook')">Webhook模板</Button>
+        <Button variant="outline" class="cursor-pointer" @click="handleOpenTemplateCenter">模板中心</Button>
+        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('schedule')">快速定时流</Button>
+        <Button variant="outline" class="cursor-pointer" @click="handleCreateWorkflow('webhook')">快速Webhook流</Button>
         <Button variant="outline" class="cursor-pointer" :disabled="!selectedWorkflow" @click="handlePublishWorkflow">发布</Button>
         <Button class="cursor-pointer" :disabled="!selectedWorkflow || running" @click="handleOpenRunDialog">
           {{ running ? '运行中...' : '立即运行' }}
@@ -280,5 +317,12 @@ onMounted(async () => {
 
     <WorkflowRunDialog :open="runDialogOpen" :running="running" @update:open="handleRunDialogOpenChange" @confirm="handleRunWorkflow" />
     <WorkflowRunDetailDrawer :open="runDetailOpen" :run="selectedRunDetail" @update:open="handleRunDetailOpenChange" />
+    <WorkflowTemplateCenter
+      :open="templateCenterOpen"
+      :loading="templateLoading"
+      :templates="templates"
+      @update:open="handleTemplateCenterOpenChange"
+      @instantiate="handleInstantiateTemplate"
+    />
   </div>
 </template>

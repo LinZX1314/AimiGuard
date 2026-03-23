@@ -14,9 +14,14 @@ const emit = defineEmits<{
 }>()
 
 function statusVariant(status: string) {
-  if (status === 'success') return 'default'
+  if (status === 'success' || status === 'success_with_skips') return 'default'
   if (status === 'running') return 'secondary'
   return 'destructive'
+}
+
+function statusLabel(status: string) {
+  if (status === 'success_with_skips') return 'success (partial)'
+  return status
 }
 </script>
 
@@ -38,7 +43,7 @@ function statusVariant(status: string) {
           <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div class="space-y-2">
               <div class="flex flex-wrap items-center gap-2">
-                <Badge :variant="statusVariant(run.status)">{{ run.status }}</Badge>
+                <Badge :variant="statusVariant(run.status)">{{ statusLabel(run.status) }}</Badge>
                 <span class="text-xs text-muted-foreground">{{ run.trigger_type }}</span>
               </div>
               <div class="text-sm font-medium text-foreground">#{{ run.id }} · {{ run.summary || '暂无摘要' }}</div>

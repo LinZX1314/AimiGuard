@@ -4,13 +4,31 @@ import hmac
 import time
 import json
 
-from database.models import WorkflowModel, WorkflowRunModel
+from database.models import WorkflowModel, WorkflowRunModel, WorkflowWebhookModel
 from workflow.engine import ensure_workflow_webhook, instantiate_template, list_templates, run_workflow_by_id, workflow_catalog
 from .helpers import require_auth, ok, err, _body, _load_cfg
 
 
 workflow_bp = Blueprint('workflow', __name__, url_prefix='/api/v1/workflows')
 
+WEBHOOK_SIGNATURE_HINT = 'X-Workflow-Timestamp + X-Workflow-Signature (HMAC-SHA256)'
+
+
+def _decorate_workflow(workflow: dict | None) -> dict | None:
+    if not workflow:
+        return workflow
+
+    decorated = dict(workflow)
+    trigger = decorated.get('trigger', {})
+    if trigger.get('type') != 'webhook':
+        return decorated
+
+    token = ensure_workflow_webhook(decorated['id'])
+    webhook_meta = WorkflowWebhookModel.get_by_workflow_id(decorated['id']) or {}
+    decorated['webhook_token'] = token
+    decorated['webhook_secret'] = webhook_meta.get('secret')
+    decorated['webhook_signature_hint'] = WEBHOOK_SIGNATURE_HINT
+    return decorated
 
 
 @workflow_bp.route('/catalog', methods=['GET'])
@@ -32,32 +50,21 @@ def workflow_templates_instantiate(template_id: str):
         workflow = instantiate_template(template_id, _body())
     except ValueError as exc:
         return err(str(exc), 404)
-    trigger = workflow.get('trigger', {}) if workflow else {}
-    if workflow and trigger.get('type') == 'webhook':
-        workflow['webhook_token'] = ensure_workflow_webhook(workflow['id'])
-        workflow['webhook_signature_hint'] = 'X-Workflow-Timestamp + X-Workflow-Signature (HMAC-SHA256)'
-    return ok(workflow)
+    return ok(_decorate_workflow(workflow))
 
 
 @workflow_bp.route('', methods=['GET'])
 @require_auth
 def workflow_list():
-    return ok(WorkflowModel.list_all())
+    return ok([_decorate_workflow(item) for item in WorkflowModel.list_all()])
 
 
 @workflow_bp.route('', methods=['POST'])
 @require_auth
 def workflow_create():
-    body = _body()
-    workflow_id = WorkflowModel.create(body)
+    workflow_id = WorkflowModel.create(_body())
     workflow = WorkflowModel.get(workflow_id)
-    trigger = workflow.get('trigger', {}) if workflow else {}
-    if workflow and trigger.get('type') == 'webhook':
-        token = ensure_workflow_webhook(workflow_id)
-        workflow = WorkflowModel.get(workflow_id)
-        workflow['webhook_token'] = token
-        workflow['webhook_signature_hint'] = 'X-Workflow-Timestamp + X-Workflow-Signature (HMAC-SHA256)'
-    return ok(workflow)
+    return ok(_decorate_workflow(workflow))
 
 
 @workflow_bp.route('/<int:workflow_id>', methods=['GET'])
@@ -66,7 +73,7 @@ def workflow_detail(workflow_id: int):
     workflow = WorkflowModel.get(workflow_id)
     if not workflow:
         return err('工作流不存在', 404)
-    return ok(workflow)
+    return ok(_decorate_workflow(workflow))
 
 
 @workflow_bp.route('/<int:workflow_id>', methods=['PUT'])
@@ -75,11 +82,7 @@ def workflow_update(workflow_id: int):
     workflow = WorkflowModel.update(workflow_id, _body())
     if not workflow:
         return err('工作流不存在', 404)
-    trigger = workflow.get('trigger', {})
-    if trigger.get('type') == 'webhook':
-        workflow['webhook_token'] = ensure_workflow_webhook(workflow_id)
-        workflow['webhook_signature_hint'] = 'X-Workflow-Timestamp + X-Workflow-Signature (HMAC-SHA256)'
-    return ok(workflow)
+    return ok(_decorate_workflow(workflow))
 
 
 @workflow_bp.route('/<int:workflow_id>', methods=['DELETE'])
@@ -96,10 +99,7 @@ def workflow_publish(workflow_id: int):
     workflow = WorkflowModel.publish(workflow_id)
     if not workflow:
         return err('工作流不存在', 404)
-    if workflow.get('trigger', {}).get('type') == 'webhook':
-        workflow['webhook_token'] = ensure_workflow_webhook(workflow_id)
-        workflow['webhook_signature_hint'] = 'X-Workflow-Timestamp + X-Workflow-Signature (HMAC-SHA256)'
-    return ok(workflow)
+    return ok(_decorate_workflow(workflow))
 
 
 @workflow_bp.route('/<int:workflow_id>/run', methods=['POST'])
@@ -130,7 +130,8 @@ def workflow_webhook(token: str):
     body = _body()
     timestamp = str(request.headers.get('X-Workflow-Timestamp', '')).strip()
     signature = str(request.headers.get('X-Workflow-Signature', '')).strip()
-    secret = token
+    webhook_meta = WorkflowWebhookModel.get_by_token(token) or {}
+    secret = webhook_meta.get('secret') or token
 
     if timestamp and signature:
         try:

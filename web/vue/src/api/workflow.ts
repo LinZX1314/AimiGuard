@@ -15,6 +15,8 @@ export type WorkflowNodeKind =
 
 export interface WorkflowNodeData {
   kind: WorkflowNodeKind | string
+  nodeType?: string
+  category?: string
   label: string
   description?: string
   config?: Record<string, unknown>
@@ -50,6 +52,7 @@ export interface WorkflowRecord {
   definition: WorkflowDefinition
   trigger: Record<string, unknown>
   webhook_token?: string | null
+  webhook_secret?: string | null
   webhook_signature_hint?: string
   template_id?: string | null
   template_name?: string | null
