@@ -409,16 +409,74 @@ class AiModel:
     @staticmethod
     def get_reports(limit=50):
         reports = []
+        conn = None
         try:
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute('SELECT id, title, created_at FROM ai_chat_sessions WHERE is_drill_mode = 1 ORDER BY created_at DESC LIMIT ?', (limit,))
-            rows = cursor.fetchall()
-            conn.close()
-            for row in rows:
-                reports.append(dict(row))
+            cursor.execute(
+                'SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE is_drill_mode = 1 ORDER BY created_at DESC LIMIT ?',
+                (limit,),
+            )
+            sessions = [dict(row) for row in cursor.fetchall()]
+
+            for s in sessions:
+                cursor.execute(
+                    '''
+                    SELECT content, create_time FROM ai_chat_history
+                    WHERE session_id = ? AND role = 'tool'
+                    AND content LIKE '%"report":%'
+                    ORDER BY id DESC LIMIT 1
+                    ''',
+                    (s['id'],),
+                )
+                row = cursor.fetchone()
+                if row:
+                    try:
+                        data = json.loads(row['content'])
+                        cursor.execute(
+                            '''
+                            SELECT content FROM ai_chat_history
+                            WHERE session_id = ? AND role = 'user'
+                            ORDER BY id ASC LIMIT 1
+                            ''',
+                            (s['id'],),
+                        )
+                        user_row = cursor.fetchone()
+
+                        report_content = data.get('report', '')
+                        original_input = user_row['content'] if user_row else None
+
+                        if original_input and not data.get('is_html', False):
+                            report_content = f"> **原始演练输入**: {original_input}\n\n---\n\n" + report_content
+
+                        reports.append({
+                            'session_id': s['id'],
+                            'title': s['title'],
+                            'created_at': s['created_at'],
+                            'updated_at': s.get('updated_at'),
+                            'report': report_content,
+                            'summary': data.get('summary'),
+                            'is_html': data.get('is_html', False),
+                            'original_input': original_input,
+                        })
+                    except Exception as e:
+                        print(f"[AiModel.get_reports] 解析报告失败 session_id={s['id']}: {e}")
+                else:
+                    reports.append({
+                        'session_id': s['id'],
+                        'title': s['title'],
+                        'created_at': s['created_at'],
+                        'updated_at': s.get('updated_at'),
+                        'report': '',
+                        'summary': None,
+                        'is_html': False,
+                        'original_input': None,
+                    })
         except Exception:
             pass
+        finally:
+            if conn:
+                conn.close()
         return reports
 
     @staticmethod
