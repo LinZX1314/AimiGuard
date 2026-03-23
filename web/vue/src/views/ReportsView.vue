@@ -13,7 +13,8 @@ import {
   Trash2,
   FileText,
   Shield,
-  MessageSquare
+  MessageSquare,
+  MoreVertical
 } from 'lucide-vue-next'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,7 @@ const reports = ref<Report[]>([])
 const loading = ref(true)
 const searchTitle = ref('')
 const selectedReport = ref<Report | null>(null)
+const menuOpenId = ref<number | null>(null)
 
 async function loadReports() {
   loading.value = true
@@ -105,12 +107,47 @@ function openInNewTab(report: Report) {
 }
 
 const router = useRouter()
+const confirmDeleteId = ref<number | null>(null)
+
 function goToChat(sessionId: number) {
   router.push({ path: '/ai', query: { session_id: sessionId } })
 }
 
+function askDelete(report: Report) {
+  confirmDeleteId.value = report.session_id
+}
+
+async function confirmDelete() {
+  if (!confirmDeleteId.value) return
+  try {
+    await api.delete('/api/v1/ai/sessions/' + confirmDeleteId.value)
+    reports.value = reports.value.filter(r => r.session_id !== confirmDeleteId.value)
+    if (selectedReport.value?.session_id === confirmDeleteId.value) {
+      selectedReport.value = filteredReports.value[0] ?? null
+    }
+  } catch (e) {
+    console.error('Failed to delete report:', e)
+  } finally {
+    confirmDeleteId.value = null
+  }
+}
+
+function cancelDelete() {
+  confirmDeleteId.value = null
+}
+
+function toggleMenu(e: Event, sessionId: number) {
+  e.stopPropagation()
+  menuOpenId.value = menuOpenId.value === sessionId ? null : sessionId
+}
+
+function closeMenu() {
+  menuOpenId.value = null
+}
+
 onMounted(() => {
   loadReports()
+  document.addEventListener('click', closeMenu)
 })
 </script>
 
@@ -119,12 +156,6 @@ onMounted(() => {
     <!-- Left: Report List -->
     <div class="w-80 border-r border-border/50 flex flex-col bg-secondary/20 shrink-0">
       <div class="p-4 border-b border-border/50 bg-background/50 backdrop-blur-sm">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="p-2 bg-primary/10 rounded-lg">
-            <ClipboardList class="h-5 w-5 text-primary" />
-          </div>
-          <h2 class="text-lg font-bold">演练报告库</h2>
-        </div>
         <div class="relative">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
@@ -162,9 +193,33 @@ onMounted(() => {
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-mono text-muted-foreground">{{ report.session_id }}</span>
-                <Badge variant="outline" class="text-[10px] px-1.5 h-4 bg-background/50 border-primary/20 text-primary">
-                  演练模式
-                </Badge>
+                <div class="flex items-center gap-1">
+                  <Badge variant="outline" class="text-[10px] px-1.5 h-4 bg-background/50 border-primary/20 text-primary">
+                    演练模式
+                  </Badge>
+                  <div class="relative">
+                    <button
+                      class="p-1 rounded hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+                      :class="selectedReport?.session_id === report.session_id ? 'opacity-100' : ''"
+                      @click="toggleMenu($event, report.session_id)"
+                    >
+                      <MoreVertical class="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    <div
+                      v-if="menuOpenId === report.session_id"
+                      class="absolute right-0 top-full mt-1 w-36 bg-background rounded-xl border border-border shadow-xl z-50 py-1 overflow-hidden"
+                      @click.stop
+                    >
+                      <button
+                        class="w-full px-3 py-2 text-left text-sm hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 transition-colors"
+                        @click="askDelete(report); closeMenu()"
+                      >
+                        <Trash2 class="h-3.5 w-3.5" />
+                        删除报告
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <h3 class="font-bold text-sm line-clamp-1" :class="selectedReport?.session_id === report.session_id ? 'text-primary' : ''">
                 {{ report.title }}
@@ -262,6 +317,23 @@ onMounted(() => {
         <p class="text-sm max-w-md text-center opacity-60">
           这里记录了所有 AI 攻防指挥官执行的安全演练成果，请从左侧列表中选择查看详细的分析报告。
         </p>
+      </div>
+
+      <!-- 删除确认对话框 -->
+      <div v-if="confirmDeleteId" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="bg-background rounded-2xl border border-border shadow-2xl p-6 w-80 text-center space-y-4">
+          <div class="p-3 bg-destructive/10 rounded-full w-fit mx-auto">
+            <Trash2 class="h-6 w-6 text-destructive" />
+          </div>
+          <div>
+            <h3 class="font-bold text-lg">确认删除</h3>
+            <p class="text-sm text-muted-foreground mt-1">删除后无法恢复，确定要删除该报告吗？</p>
+          </div>
+          <div class="flex gap-3 justify-center">
+            <Button variant="outline" class="flex-1" @click="cancelDelete">取消</Button>
+            <Button variant="destructive" class="flex-1" @click="confirmDelete">删除</Button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
