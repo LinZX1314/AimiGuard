@@ -198,7 +198,7 @@ def _get_history(session_id: int) -> list:
 @require_auth
 def ai_sessions():
     """从数据库获取持久化的会话列表"""
-    sessions = AiModel.get_sessions()
+    sessions = AiModel.list_sessions()
     return ok(sessions)
 
 

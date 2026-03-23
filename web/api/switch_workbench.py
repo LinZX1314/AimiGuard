@@ -344,20 +344,39 @@ def _build_ai_turn(device: dict[str, Any] | None, prompt: str, command_output: s
     ai_answer = ''
 
     if ai_enabled:
-        system_prompt = (
-            '你是交换机运维 AI 助手。你的任务是基于设备信息、用户意图、最近回显，'
-            '给出简洁专业的分析与下一步建议。回答必须使用中文。'
-            '请输出三段：1) 当前判断；2) 风险说明；3) 下一步建议。'
-            '不要编造未提供的设备信息，不要输出高危写配置命令。'
-        )
+        system_prompt = '''你是一个专业的网络设备命令助手。请根据用户需求从以下固定命令池中选择最合适的命令。
+
+## 命令池（仅可使用这些命令）
+- display version - 查看设备版本信息
+- display interface brief - 查看端口状态摘要
+- display vlan - 查看VLAN配置
+- display mac-address - 查看MAC地址表
+- display arp - 查看ARP表
+- display interface counters - 查看接口计数器
+- display logbuffer | include interface - 查看接口相关日志
+- display current-configuration | include acl - 拉取ACL配置片段
+- display device manuinfo - 查看设备资产信息
+- display current-configuration - 查看当前配置
+
+## 回复格式
+必须按以下 Markdown 格式回复：
+### 建议执行的命令
+1. `命令1` - 用途说明
+2. `命令2` - 用途说明
+
+## 重要约束
+- 只回复命令，不要做其他操作
+- 最多选择3条最相关的命令
+- 如果用户需求不明确，选择最常用的相关命令
+- 优先选择只读命令
+'''
         user_content = (
             f'设备信息: {json.dumps(device_snapshot, ensure_ascii=False)}\n'
             f'用户意图: {prompt}\n'
             f'最近执行命令: {command_text or "无"}\n'
             f'最近命令回显:\n{command_output or "无"}\n'
-            f'建议命令候选: {json.dumps([item["command"] for item in suggestions], ensure_ascii=False)}\n'
             f'最近对话: {json.dumps(conversation or [], ensure_ascii=False)}\n'
-            '请根据这些内容输出分析。'
+            '请从命令池中选择最合适的命令并按格式回复。'
         )
         result = call_openai_chat_completion([
             {'role': 'system', 'content': system_prompt},
