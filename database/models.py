@@ -556,9 +556,9 @@ class AiModel:
         for s in sessions:
             # 为每个会话寻找报告内容（通常在 tool 消息中，或者寻找包含 "report" 的 JSON）
             cursor.execute('''
-                SELECT content, create_time FROM ai_chat_history 
-                WHERE session_id = ? AND role = 'tool' 
-                AND (content LIKE '%"report":%' OR content LIKE '%{"ok":true,"report":%')
+                SELECT content, create_time FROM ai_chat_history
+                WHERE session_id = ? AND role = 'tool'
+                AND content LIKE '%"report":%'
                 ORDER BY id DESC LIMIT 1
             ''', (s['id'],))
             row = cursor.fetchone()
@@ -590,8 +590,8 @@ class AiModel:
                         'is_html': data.get('is_html', False),
                         'original_input': original_input
                     })
-                except:
-                    pass
+                except Exception as e:
+                    print(f"[AiModel.get_reports] 解析报告失败 session_id={s['id']}: {e}")
         conn.close()
         return reports
 

@@ -1054,11 +1054,15 @@ def _generate_drill_report(state: DrillState) -> str:
 
 共采集 **{len(state.screenshot_results)}** 张截图
 
-| IP | 端口 | URL |
-|----|------|-----|
+| IP | 端口 | URL | 截图 |
+|----|------|-----|------|
 """
         for sr in state.screenshot_results:
-            report += f"| `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} |\n"
+            screenshot_url = sr.get('screenshot_url', '')
+            if screenshot_url:
+                report += f"| `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | ![截图]({screenshot_url}) |\n"
+            else:
+                report += f"| `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | 无 |\n"
 
     vulnerable_bf = [r for r in state.bruteforce_results if r.get('result', {}).get('vulnerable')]
     if vulnerable_bf:
