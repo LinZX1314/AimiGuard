@@ -192,7 +192,8 @@ async function scrollToBottom() {
         <Textarea
           v-model="inputText"
           placeholder="描述您的需求，例如：查看端口状态"
-          class="min-h-[48px] max-h-[120px] resize-none"
+          rows="4"
+          class="min-h-[88px] max-h-[150px] resize-none"
           @keydown.enter.prevent="handleSend"
         />
         <Button

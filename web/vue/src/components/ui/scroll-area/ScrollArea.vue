@@ -16,11 +16,11 @@ const delegatedProps = reactiveOmit(props, "class")
 </script>
 
 <template>
-  <ScrollAreaRoot v-bind="delegatedProps" :class="cn('relative overflow-hidden', props.class)">
-    <ScrollAreaViewport class="h-full w-full rounded-[inherit]">
+  <ScrollAreaRoot v-bind="delegatedProps" :class="cn('group/scrollarea relative overflow-hidden', props.class)">
+    <ScrollAreaViewport class="h-full w-full rounded-[inherit]! overflow-hidden!" style="overflow-x: hidden; overflow-y: auto;">
       <slot />
     </ScrollAreaViewport>
     <ScrollBar />
-    <ScrollAreaCorner />
+    <ScrollAreaCorner class="bg-transparent" />
   </ScrollAreaRoot>
 </template>

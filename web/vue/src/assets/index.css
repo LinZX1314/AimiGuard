@@ -24,6 +24,9 @@
     --border: 214 12% 58%;
     --input: 214 12% 63%;
     --ring: 216 88% 56%;
+    --scrollbar-track: 214 14% 69%;
+    --scrollbar-thumb: 214 18% 55%;
+    --scrollbar-thumb-hover: 214 24% 46%;
     --radius: 0.5rem;
   }
 
@@ -47,12 +50,17 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 180 100% 50%;
+    --scrollbar-track: 217 28% 16%;
+    --scrollbar-thumb: 180 64% 34%;
+    --scrollbar-thumb-hover: 180 82% 44%;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--scrollbar-thumb)) hsl(var(--scrollbar-track));
   }
 
   body {
@@ -66,6 +74,30 @@
       radial-gradient(circle at 86% 10%, rgba(94, 111, 135, 0.08) 0%, transparent 14%),
       linear-gradient(180deg, hsl(214 12% 84%), hsl(var(--background)) 38%, hsl(214 10% 76%));
     background-attachment: fixed;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--scrollbar-track) / 0.72);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, hsl(var(--scrollbar-thumb)), hsl(var(--scrollbar-thumb) / 0.78));
+    border-radius: 999px;
+    border: 2px solid hsl(var(--scrollbar-track) / 0.35);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, hsl(var(--scrollbar-thumb-hover)), hsl(var(--scrollbar-thumb)));
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 

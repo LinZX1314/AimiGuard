@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Activity, Server, Wifi } from 'lucide-vue-next'
+
+import DashboardDevicePanel from './DashboardDevicePanel.vue'
+import DashboardTopology from './DashboardTopology.vue'
 import DashboardWelcomeBanner from './DashboardWelcomeBanner.vue'
 import DashboardWorldMap from './DashboardWorldMap.vue'
-import DashboardTopology from './DashboardTopology.vue'
-import DashboardDevicePanel from './DashboardDevicePanel.vue'
-import { Activity, Wifi, Server } from 'lucide-vue-next'
 
 interface TopMetrics {
   hfish_total: number
@@ -35,6 +36,15 @@ interface ScreenPayload {
   }
 }
 
+interface HoneypotFeedItem {
+  id: string
+  ip: string
+  location: string
+  service: string
+  level: string
+  time: string
+}
+
 const props = defineProps<{
   payload: ScreenPayload
   loading: boolean
@@ -42,6 +52,9 @@ const props = defineProps<{
 }>()
 
 const containerRef = ref<HTMLElement>()
+const activeView = ref<'overview' | 'topology' | 'device'>('overview')
+const mockFeedRows = ref<HoneypotFeedItem[]>([])
+let mockFeedTimer = 0
 
 const animationState = ref({
   welcome: false,
@@ -54,19 +67,6 @@ const dashboardViews = [
   { key: 'device', label: '设备面板', icon: Server },
 ] as const
 
-const activeView = ref<(typeof dashboardViews)[number]['key']>('overview')
-const mockFeedRows = ref<HoneypotFeedItem[]>([])
-let mockFeedTimer = 0
-
-interface HoneypotFeedItem {
-  id: string
-  ip: string
-  location: string
-  service: string
-  level: string
-  time: string
-}
-
 const honeypotFeedItems = computed<HoneypotFeedItem[]>(() => {
   const realRows = props.payload.recent_attacks.map((item, idx) => ({
     id: `${item.attack_ip}-${item.create_time_str || idx}-${item.service_name || 'unknown'}`,
@@ -77,13 +77,12 @@ const honeypotFeedItems = computed<HoneypotFeedItem[]>(() => {
     time: item.create_time_str || '刚刚',
   }))
 
-  const withTs = realRows.map((item, index) => ({
-    ...item,
-    index,
-    ts: Number.isNaN(Date.parse(item.time)) ? -1 : Date.parse(item.time),
-  }))
-
-  const sortedRealRows = withTs
+  const sortedRealRows = realRows
+    .map((item, index) => ({
+      ...item,
+      index,
+      ts: Number.isNaN(Date.parse(item.time)) ? -1 : Date.parse(item.time),
+    }))
     .sort((a, b) => {
       if (a.ts === -1 && b.ts === -1) return a.index - b.index
       if (a.ts === -1) return 1
@@ -93,11 +92,7 @@ const honeypotFeedItems = computed<HoneypotFeedItem[]>(() => {
     .slice(0, 8)
     .map(({ index, ts, ...item }) => item)
 
-  if (sortedRealRows.length > 0) {
-    return sortedRealRows
-  }
-
-  return mockFeedRows.value.slice(0, 8)
+  return sortedRealRows.length ? sortedRealRows : mockFeedRows.value.slice(0, 8)
 })
 
 const honeypotLevelText = (level: string) => {
@@ -143,8 +138,13 @@ const deviceHeaderData = computed(() => {
 })
 
 onMounted(() => {
-  setTimeout(() => { animationState.value.welcome = true }, 200)
-  setTimeout(() => { animationState.value.overviewMap = true }, 400)
+  window.setTimeout(() => {
+    animationState.value.welcome = true
+  }, 200)
+
+  window.setTimeout(() => {
+    animationState.value.overviewMap = true
+  }, 400)
 
   if (!props.payload.recent_attacks.length) {
     const now = Date.now()
@@ -158,13 +158,14 @@ onMounted(() => {
     let cursor = 0
     mockFeedTimer = window.setInterval(() => {
       const row = mockSeeds[cursor % mockSeeds.length]
-
-      mockFeedRows.value = [{
-        ...row,
-        id: `${row.id}-${Date.now()}`,
-        time: new Date().toISOString(),
-      }, ...mockFeedRows.value].slice(0, 8)
-
+      mockFeedRows.value = [
+        {
+          ...row,
+          id: `${row.id}-${Date.now()}`,
+          time: new Date().toISOString(),
+        },
+        ...mockFeedRows.value,
+      ].slice(0, 8)
       cursor += 1
     }, 1800)
   }
@@ -206,11 +207,19 @@ onUnmounted(() => {
           >
             <DashboardWelcomeBanner v-if="activeView === 'overview'" :top-metrics="payload.top_metrics" :loading="loading" />
 
-            <div v-else-if="activeView === 'topology'" class="topology-detail-cards" aria-label="拓扑统计卡片">
-              <article v-for="card in topologySummaryCards" :key="card.label" class="topology-detail-card">
-                <span>{{ card.label }}</span>
-                <strong>{{ card.value }}</strong>
-              </article>
+            <div v-else-if="activeView === 'topology'" class="topology-view-hero" aria-label="拓扑概览">
+              <div class="topology-view-hero__copy">
+                <span class="topology-view-hero__eyebrow">RELATION MAP</span>
+                <strong>首页链路拓扑与关系图</strong>
+                <p>聚焦核心资产、攻击路径、阻断动作与节点联动状态。</p>
+              </div>
+
+              <div class="topology-detail-cards">
+                <article v-for="card in topologySummaryCards" :key="card.label" class="topology-detail-card">
+                  <span>{{ card.label }}</span>
+                  <strong>{{ card.value }}</strong>
+                </article>
+              </div>
             </div>
 
             <div v-else class="device-detail-strip" aria-label="设备面板详情卡片">
@@ -267,10 +276,9 @@ onUnmounted(() => {
             </template>
 
             <template v-else-if="activeView === 'topology'">
-              <div class="map-card view-main-card">
+              <div class="map-card view-main-card view-main-card--topology">
                 <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
               </div>
-              <div class="view-empty-pad" aria-hidden="true"></div>
             </template>
 
             <template v-else>
@@ -313,34 +321,83 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+.view-main-card--topology {
+  min-height: 720px;
+}
+
 .view-empty-pad {
   flex: 1;
   min-height: 0;
+}
+
+.topology-view-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgb(56 189 248 / 0.22);
+  background:
+    radial-gradient(circle at top left, rgb(34 211 238 / 0.14), transparent 38%),
+    linear-gradient(155deg, rgb(8 47 73 / 0.58), rgb(2 6 23 / 0.78));
+  box-shadow: 0 12px 26px rgb(2 6 23 / 0.18);
+}
+
+.topology-view-hero__copy {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+}
+
+.topology-view-hero__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(56 189 248 / 0.28);
+  background: rgb(14 116 144 / 0.18);
+  color: rgb(125 211 252 / 0.95);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.topology-view-hero__copy strong {
+  color: rgb(224 242 254);
+  font-size: 16px;
+}
+
+.topology-view-hero__copy p {
+  color: rgb(148 163 184);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .topology-detail-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+  flex: 1;
 }
 
 .topology-detail-card {
-  border-radius: 12px;
-  border: 1px solid rgb(56 189 248 / 0.25);
-  background: linear-gradient(155deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.75));
-  padding: 10px 12px;
   display: grid;
-  gap: 5px;
+  gap: 6px;
+  min-height: 84px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgb(56 189 248 / 0.24);
+  background: linear-gradient(180deg, rgb(15 23 42 / 0.68), rgb(2 6 23 / 0.54));
 }
 
 .topology-detail-card span {
   font-size: 11px;
-  color: rgb(125 211 252 / 0.86);
+  color: rgb(186 230 253);
 }
 
 .topology-detail-card strong {
-  font-size: 18px;
-  color: rgb(103 232 249);
+  font-size: 20px;
+  color: rgb(240 249 255);
 }
 
 .device-detail-strip {
@@ -411,21 +468,6 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-@media (max-width: 1200px) {
-  .topology-detail-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .device-detail-strip {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .device-detail-strip__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 .honeypot-feed-card {
   border-radius: 12px;
   border: 1px solid hsl(var(--border) / 0.72);
@@ -440,6 +482,7 @@ onUnmounted(() => {
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 10px;
+  font-weight: 700;
   letter-spacing: 0.5px;
   color: hsl(var(--foreground) / 0.92);
   border: 1px solid hsl(var(--border) / 0.78);
@@ -573,7 +616,8 @@ onUnmounted(() => {
 }
 
 .honeypot-feed__service {
-  color: hsl(var(--primary) / 0.86);
+  color: hsl(var(--foreground) / 0.88);
+  font-weight: 600;
 }
 
 .honeypot-feed__time {
@@ -609,6 +653,72 @@ onUnmounted(() => {
   transform: translateY(10px) scale(0.98);
 }
 
+.view-fade-enter-active,
+.view-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.view-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.view-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+:global(html:not(.dark)) .topology-view-hero {
+  border-color: hsl(var(--border) / 0.75);
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 42%),
+    linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.62));
+  box-shadow: 0 10px 22px hsl(var(--primary) / 0.06);
+}
+
+:global(html:not(.dark)) .topology-view-hero__eyebrow {
+  border-color: hsl(var(--border) / 0.72);
+  background: hsl(var(--secondary) / 0.9);
+  color: hsl(var(--foreground));
+}
+
+:global(html:not(.dark)) .topology-view-hero__copy strong,
+:global(html:not(.dark)) .topology-detail-card strong {
+  color: hsl(var(--foreground));
+}
+
+:global(html:not(.dark)) .topology-view-hero__copy p,
+:global(html:not(.dark)) .topology-detail-card span {
+  color: hsl(var(--muted-foreground));
+}
+
+:global(html:not(.dark)) .topology-detail-card {
+  border-color: hsl(var(--border) / 0.75);
+  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.72));
+  box-shadow: inset 0 1px 0 hsl(var(--background)), 0 8px 20px hsl(var(--primary) / 0.04);
+}
+
+@media (max-width: 1200px) {
+  .topology-view-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .topology-detail-cards {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .device-detail-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .device-detail-strip__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1024px) {
   .honeypot-feed__item {
     grid-template-columns: 50px 1fr 1fr;
@@ -621,23 +731,10 @@ onUnmounted(() => {
   }
 }
 
-.view-fade-enter-active,
-.view-fade-leave-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
-.view-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-.view-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-@media (max-width: 1279px) {
-}
-
 @media (max-width: 640px) {
+  .topology-detail-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .dashboard-center-panel::-webkit-scrollbar {

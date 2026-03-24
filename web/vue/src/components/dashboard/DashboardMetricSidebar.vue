@@ -130,34 +130,46 @@ const attackTypeWords = computed(() => {
 })
 
 const wordCloudOption = computed(() => {
-  // 主题感知色板：暗色用彩虹，亮色用蓝色系
+  // 现代渐变色彩方案 - 使用实际HSL值而非CSS变量
   const colors = [
-    'hsl(var(--primary))', 'hsl(260 60% 55%)', 'hsl(340 65% 55%)',
-    'hsl(25 95% 55%)', 'hsl(158 80% 45%)', 'hsl(185 80% 45%)',
+    '#6366f1', '#8b5cf6', '#ec4899', '#f97316',
+    '#10b981', '#06b6d4', '#3b82f6', '#a855f7',
   ]
   return {
-    tooltip: { show: true },
+    tooltip: {
+      show: true,
+      backgroundColor: 'hsl(var(--card))',
+      borderColor: 'hsl(var(--border))',
+      textStyle: { color: 'hsl(var(--foreground))' },
+      formatter: (params: any) => `${params.name}: ${params.value}次`
+    },
     series: [
       {
         type: 'wordCloud',
         shape: 'circle',
-        keepAspect: false,
+        keepAspect: true,
         left: 'center',
         top: 'center',
-        width: '100%',
-        height: '100%',
-        right: null,
-        bottom: null,
-        sizeRange: [12, 32],
-        rotationRange: [0, 0],
-        rotationStep: 45,
-        gridSize: 8,
+        width: '90%',
+        height: '90%',
+        sizeRange: [14, 36],
+        rotationRange: [-30, 30],
+        rotationStep: 15,
+        gridSize: 10,
         drawOutOfBound: false,
         layoutAnimation: true,
+        shrinkToFit: true,
         textStyle: {
-          fontWeight: 'bold',
+          fontWeight: '600',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
           color: function () {
             return colors[Math.floor(Math.random() * colors.length)]
+          }
+        },
+        emphasis: {
+          textStyle: {
+            shadowBlur: 12,
+            shadowColor: 'rgba(99, 102, 241, 0.5)'
           }
         },
         data: attackTypeWords.value.map(([name, value]) => ({
@@ -195,9 +207,9 @@ function getChainStatus(key: string): boolean {
       </div>
     </TechCard>
 
-    <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-[1.4] min-h-0">
-      <div class="flex flex-col gap-2 flex-1 min-h-0 h-full">
-        <div class="flex-1 min-h-0 relative w-full h-full">
+    <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-1 shrink-0">
+      <div class="flex flex-col gap-2 h-full min-h-0">
+        <div class="basis-[45%] min-h-[70px]">
           <Bar
             v-if="payload.hot_services.length"
             :data="serviceData"
@@ -216,8 +228,14 @@ function getChainStatus(key: string): boolean {
           <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
         </div>
 
-        <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
-          <v-chart class="h-full w-full absolute inset-0" :option="wordCloudOption" autoresize />
+        <div class="flex-1 min-h-[100px] relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur overflow-hidden" aria-label="攻击类型词云">
+          <v-chart
+            v-if="attackTypeWords.length"
+            class="h-full w-full absolute inset-0"
+            :option="wordCloudOption"
+            autoresize
+          />
+          <div v-else class="h-full flex items-center justify-center text-xs text-muted-foreground">暂无攻击数据</div>
         </div>
       </div>
     </TechCard>
@@ -244,5 +262,6 @@ function getChainStatus(key: string): boolean {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
 }
 </style>

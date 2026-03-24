@@ -60,15 +60,14 @@ function goToPage(p: number) {
 }
 
 function handlePageSizeChange(val: unknown) {
-  // Select 的值类型是 AcceptableValue，这里统一做字符串化处理
   if (val === null || val === undefined) return
   emit('update:pageSize', Number(String(val)))
-  emit('update:page', 1) // Reset to first page when page size changes
+  emit('update:page', 1)
 }
 </script>
 
 <template>
-  <div class="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-3 bg-muted/5 border-t border-border/20">
+  <div class="flex flex-col gap-4 border-t border-border/30 bg-gradient-to-r from-card/80 via-secondary/16 to-card/72 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="flex items-center gap-4 text-sm text-muted-foreground">
       <span>共 <span class="font-semibold text-foreground">{{ total }}</span> 条记录</span>
       <span v-if="total > 0">
@@ -76,11 +75,11 @@ function handlePageSizeChange(val: unknown) {
       </span>
     </div>
 
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2 rounded-full border border-border/60 bg-card/58 px-2.5 py-1 shadow-[0_8px_18px_rgba(67,84,109,0.06)]">
         <span class="text-xs text-muted-foreground">每页</span>
         <Select :model-value="String(pageSize)" @update:model-value="handlePageSizeChange">
-          <SelectTrigger class="w-20 h-8 bg-black/20 text-xs">
+          <SelectTrigger class="h-8 w-20 rounded-full border-border/60 bg-transparent text-xs shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -90,25 +89,32 @@ function handlePageSizeChange(val: unknown) {
         <span class="text-xs text-muted-foreground">条</span>
       </div>
 
-      <div class="flex items-center gap-1">
-        <Button variant="ghost" size="icon" class="h-8 w-8" :disabled="page === 1" @click="goToPage(1)">
+      <div class="flex items-center gap-1 rounded-full border border-border/60 bg-card/58 px-1.5 py-1 shadow-[0_8px_18px_rgba(67,84,109,0.06)]">
+        <Button variant="ghost" size="icon" class="h-8 w-8 rounded-full" :disabled="page === 1" @click="goToPage(1)">
           <ChevronsLeft class="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" class="h-8 w-8" :disabled="page === 1" @click="goToPage(page - 1)">
+        <Button variant="ghost" size="icon" class="h-8 w-8 rounded-full" :disabled="page === 1" @click="goToPage(page - 1)">
           <ChevronLeft class="h-4 w-4" />
         </Button>
 
         <template v-for="(p, idx) in pages" :key="idx">
-          <span v-if="p === '...'" class="px-2 text-muted-foreground text-xs">...</span>
-          <Button v-else variant="ghost" size="icon" class="h-8 w-8" :class="{ 'bg-primary text-primary-foreground hover:bg-primary': p === page }" @click="goToPage(p as number)">
+          <span v-if="p === '...'" class="px-2 text-xs text-muted-foreground">...</span>
+          <Button
+            v-else
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8 rounded-full"
+            :class="p === page ? 'bg-primary text-primary-foreground shadow-[0_8px_20px_hsl(var(--primary)/0.18)] hover:bg-primary/95' : 'hover:bg-secondary/55'"
+            @click="goToPage(p as number)"
+          >
             {{ p }}
           </Button>
         </template>
 
-        <Button variant="ghost" size="icon" class="h-8 w-8" :disabled="page === totalPages" @click="goToPage(page + 1)">
+        <Button variant="ghost" size="icon" class="h-8 w-8 rounded-full" :disabled="page === totalPages" @click="goToPage(page + 1)">
           <ChevronRight class="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" class="h-8 w-8" :disabled="page === totalPages" @click="goToPage(totalPages)">
+        <Button variant="ghost" size="icon" class="h-8 w-8 rounded-full" :disabled="page === totalPages" @click="goToPage(totalPages)">
           <ChevronsRight class="h-4 w-4" />
         </Button>
       </div>
