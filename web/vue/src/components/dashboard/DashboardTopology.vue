@@ -4,60 +4,134 @@ let hasTopologyLoadedOnce = false
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, withDefaults } from 'vue'
-
 import {
-  buildTopologyStageLinks,
-  buildTopologyStageNodes,
+  ArrowRight,
+  Cpu,
+  Database,
+  HardDrive,
+  Loader2,
+  MousePointer2,
+  MousePointerClick,
+  Plus,
+  Router,
+  Save,
+  Server,
+  ShieldCheck,
+  Trash2,
+  X,
+  Zap,
+} from 'lucide-vue-next'
+
+import { api, apiCall } from '@/api'
+import {
   createTopologyFixture,
-  getTopologySummary,
-  type TopologyFixture,
   type TopologyLinkType,
   type TopologyNodeType,
   type TopologyStatus,
 } from '@/lib/topology-state'
 
-interface RecentAttack {
-  attack_ip: string
-  ip_location?: string
-  service_name?: string
-  threat_level?: string
-  create_time_str?: string
-}
-
 interface RawTopologyNode {
   id: string
   label: string
-  type: string
-  status: string
+  type?: string
+  status?: string
+  x?: number
+  y?: number
 }
 
 interface RawTopologyLink {
+  source: string | { id: string }
+  target: string | { id: string }
+  type?: string
+}
+
+interface StageNode {
+  id: string
+  label: string
+  type: TopologyNodeType
+  status: TopologyStatus
+  x: number
+  y: number
+}
+
+interface StageLink {
   source: string
   target: string
-  type: string
+  type: TopologyLinkType
 }
 
 const props = withDefaults(defineProps<{
   topology?: {
-    nodes: RawTopologyNode[]
-    links: RawTopologyLink[]
+    nodes?: RawTopologyNode[]
+    links?: RawTopologyLink[]
   }
-  recentAttacks?: RecentAttack[]
+  recentAttacks?: Array<{ threat_level?: string }>
   loading?: boolean
 }>(), {
   recentAttacks: () => [],
   loading: false,
 })
 
-const CANVAS_WIDTH = 920
-const CANVAS_HEIGHT = 620
+const FIXTURE = createTopologyFixture()
+const nodes = ref<StageNode[]>([])
+const links = ref<StageLink[]>([])
+const isDataLoading = ref(!hasTopologyLoadedOnce)
+const isSaving = ref(false)
+const isEditMode = ref(false)
+const selectedNodeId = ref<string | null>(null)
+const isAddingNode = ref(false)
+const newNodeName = ref('')
+const newNodeType = ref<TopologyNodeType>('server')
+const mousePos = ref({ x: 0, y: 0 })
+const pan = ref({ x: 0, y: 0 })
+const panStart = ref({ x: 0, y: 0 })
+const zoom = ref(1)
+const isPanning = ref(false)
+const draggingId = ref<string | null>(null)
+const boardRef = ref<HTMLElement | null>(null)
+
+const nodeColors: Record<TopologyStatus, string> = {
+  online: '#00ff88',
+  offline: '#ff6b6b',
+  warning: '#fbbf24',
+  attack: '#f43f5e',
+}
+
+const nodeIcons: Record<TopologyNodeType, unknown> = {
+  firewall: ShieldCheck,
+  server: Server,
+  honeypot: Database,
+  router: Router,
+  switch: HardDrive,
+  edge: Cpu,
+}
+
+const selectedNode = computed(() => nodes.value.find((node) => node.id === selectedNodeId.value) || null)
+const nodeMap = computed(() => new Map(nodes.value.map((node) => [node.id, node])))
+const resolvedLinks = computed(() =>
+  links.value
+    .map((link) => {
+      const sourceNode = nodeMap.value.get(link.source)
+      const targetNode = nodeMap.value.get(link.target)
+      if (!sourceNode || !targetNode) return null
+      return { ...link, sourceNode, targetNode }
+    })
+    .filter((link): link is StageLink & { sourceNode: StageNode; targetNode: StageNode } => Boolean(link)),
+)
+const summary = computed(() => ({
+  nodeCount: nodes.value.length,
+  onlineCount: nodes.value.filter((node) => node.status === 'online').length,
+  warningCount: nodes.value.filter((node) => node.status === 'warning').length,
+  attackCount: nodes.value.filter((node) => node.status === 'attack').length,
+  linkCount: links.value.length,
+}))
 
 function normalizeNodeType(type?: string): TopologyNodeType {
   const value = (type || '').toLowerCase()
   if (value.includes('firewall') || value.includes('waf')) return 'firewall'
   if (value.includes('router') || value.includes('soc')) return 'router'
   if (value.includes('switch')) return 'switch'
-  if (value.includes('honeypot') || value.includes('trap') || value.includes('botnet')) return 'honeypot'
+  if (value.includes('honeypot') || value.includes('botnet') || value.includes('trap')) return 'honeypot'
   if (value.includes('edge') || value.includes('internet') || value.includes('gateway') || value.includes('出口')) return 'edge'
   return 'server'
 }
@@ -74,501 +148,896 @@ function normalizeLinkType(type?: string): TopologyLinkType {
   const value = (type || '').toLowerCase()
   if (value.includes('attack') || value.includes('threat')) return 'attack'
   if (value.includes('block') || value.includes('defense') || value.includes('intercept')) return 'blocked'
-  if (value.includes('uplink') || value.includes('backbone') || value.includes('core')) return 'uplink'
+  if (value.includes('uplink') || value.includes('core') || value.includes('backbone')) return 'uplink'
   return 'lan'
 }
 
-function stretchPoint(x: number, y: number) {
-  return {
-    x,
-    y: Math.round(Math.max(52, Math.min(CANVAS_HEIGHT - 52, 48 + y * 1.35))),
-  }
-}
-
-function createGeneratedPoint(index: number) {
-  const columns = [84, 178, 300, 430, 560, 700, 820, 878]
-  const rows = [88, 188, 288, 388, 488, 568]
+function createGridPosition(index: number) {
+  const columns = [120, 260, 410, 560, 710, 860]
+  const rows = [90, 210, 330, 450]
   return {
     x: columns[index % columns.length],
     y: rows[Math.floor(index / columns.length) % rows.length],
   }
 }
 
-function createStageFixture(): TopologyFixture {
-  const fixture = createTopologyFixture()
+function buildFixtureState() {
   return {
-    ...fixture,
-    nodes: fixture.nodes.map((node) =>
-      node.id === 'core-switch'
-        ? { ...node, label: '核心数据中心交换机 · SW-Core-01' }
-        : node,
-    ),
-    positions: Object.fromEntries(
-      Object.entries(fixture.positions).map(([id, point]) => [id, stretchPoint(point.x, point.y)]),
-    ),
+    nodes: FIXTURE.nodes.map((node, index) => {
+      const point = FIXTURE.positions[node.id] || createGridPosition(index)
+      return {
+        ...node,
+        x: point.x,
+        y: point.y,
+      } satisfies StageNode
+    }),
+    links: FIXTURE.links.map((link) => ({ ...link })),
   }
 }
 
-function buildTopologyState(raw?: { nodes: RawTopologyNode[]; links: RawTopologyLink[] }): TopologyFixture {
-  const fallback = createStageFixture()
-
+function buildStageState(raw?: { nodes?: RawTopologyNode[]; links?: RawTopologyLink[] }) {
   if (!raw?.nodes?.length) {
-    return fallback
+    return buildFixtureState()
   }
 
-  const nodes = raw.nodes.map((node, index) => ({
-    id: node.id,
-    label: node.id === 'core-switch' && !(node.label || '').includes('SW-Core')
-      ? `${node.label || '核心数据中心交换机'} · SW-Core-01`
-      : (node.label || `节点 ${index + 1}`),
-    type: normalizeNodeType(node.type),
-    status: normalizeStatus(node.status),
-  }))
+  const fallback = buildFixtureState()
+  const fallbackPositions = new Map(fallback.nodes.map((node) => [node.id, { x: node.x, y: node.y }]))
+  const nodeIds = new Set<string>()
 
-  const nodeIds = new Set(nodes.map((node) => node.id))
-  const links = (raw.links || [])
-    .filter((link) => nodeIds.has(link.source) && nodeIds.has(link.target))
-    .map((link) => ({
+  const nextNodes = raw.nodes.map((node, index) => {
+    const point = fallbackPositions.get(node.id) || createGridPosition(index)
+    const safeX = Number.isFinite(node.x) ? Number(node.x) : point.x
+    const safeY = Number.isFinite(node.y) ? Number(node.y) : point.y
+    nodeIds.add(node.id)
+
+    return {
+      id: node.id,
+      label: node.label || `节点 ${index + 1}`,
+      type: normalizeNodeType(node.type),
+      status: normalizeStatus(node.status),
+      x: safeX,
+      y: safeY,
+    } satisfies StageNode
+  })
+
+  const nextLinks: StageLink[] = []
+  for (const link of raw.links || []) {
+    const source = typeof link.source === 'string' ? link.source : link.source?.id
+    const target = typeof link.target === 'string' ? link.target : link.target?.id
+    if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) continue
+    nextLinks.push({
+      source,
+      target,
+      type: normalizeLinkType(link.type),
+    })
+  }
+
+  return {
+    nodes: nextNodes,
+    links: nextLinks.length ? nextLinks : fallback.links,
+  }
+}
+
+function replaceTopology(raw?: { nodes?: RawTopologyNode[]; links?: RawTopologyLink[] }) {
+  const state = buildStageState(raw)
+  nodes.value = state.nodes
+  links.value = state.links
+  selectedNodeId.value = state.nodes[0]?.id || null
+  zoom.value = 1
+  pan.value = { x: 0, y: 0 }
+  isDataLoading.value = false
+  hasTopologyLoadedOnce = true
+}
+
+function sanitizeForSave() {
+  return {
+    nodes: nodes.value.map((node) => ({
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      status: node.status,
+      x: Number(node.x.toFixed(2)),
+      y: Number(node.y.toFixed(2)),
+    })),
+    links: links.value.map((link) => ({
       source: link.source,
       target: link.target,
-      type: normalizeLinkType(link.type),
-    }))
-
-  return {
-    nodes,
-    links: links.length ? links : fallback.links.filter((link) => nodeIds.has(link.source) && nodeIds.has(link.target)),
-    positions: Object.fromEntries(
-      nodes.map((node, index) => [node.id, fallback.positions[node.id] || createGeneratedPoint(index)]),
-    ),
+      type: link.type,
+    })),
   }
 }
 
-const topologyState = ref<TopologyFixture>(createStageFixture())
-const selectedNodeId = ref<string | null>('core-switch')
-const boardRef = ref<HTMLElement | null>(null)
-const draggingNodeId = ref<string | null>(null)
-const isPanningBoard = ref(false)
-const panStartClient = ref({ x: 0, y: 0 })
-const panStartScroll = ref({ left: 0, top: 0 })
-const isDataLoading = ref(!hasTopologyLoadedOnce)
-let loadingTimer = 0
+async function fetchTopology() {
+  const data = await apiCall(() => api.get<{ nodes?: RawTopologyNode[]; links?: RawTopologyLink[] }>('/api/v1/topology'), {
+    errorMsg: '加载拓扑数据失败',
+  })
 
-const nodeLabels: Record<TopologyNodeType, string> = {
-  edge: 'ED',
-  router: 'RT',
-  firewall: 'FW',
-  server: 'SV',
-  switch: 'SW',
-  honeypot: 'HP',
+  replaceTopology(data && data.nodes?.length ? data : props.topology)
 }
 
-const nodeTypeText: Record<TopologyNodeType, string> = {
-  edge: '边界入口',
-  router: '调度中枢',
-  firewall: '边界防护',
-  server: '业务节点',
-  switch: '交换矩阵',
-  honeypot: '诱捕节点',
+async function handleSave() {
+  isSaving.value = true
+  const result = await apiCall(() => api.post('/api/v1/topology', sanitizeForSave()), {
+    errorMsg: '拓扑保存失败',
+  })
+  if (result) {
+    isEditMode.value = false
+    selectedNodeId.value = null
+  }
+  isSaving.value = false
 }
 
-const linkTypeText: Record<TopologyLinkType, string> = {
-  uplink: '骨干上联',
-  lan: '业务链路',
-  blocked: '阻断联动',
-  attack: '攻击路径',
+function toggleLink(sourceId: string, targetId: string) {
+  const existingIndex = links.value.findIndex((link) =>
+    (link.source === sourceId && link.target === targetId) ||
+    (link.source === targetId && link.target === sourceId),
+  )
+
+  if (existingIndex > -1) {
+    links.value.splice(existingIndex, 1)
+  } else {
+    links.value.push({ source: sourceId, target: targetId, type: 'lan' })
+  }
+}
+
+function getLocalPoint(event: MouseEvent) {
+  if (!boardRef.value) return { x: 0, y: 0 }
+  const rect = boardRef.value.getBoundingClientRect()
+  return {
+    x: (event.clientX - rect.left - pan.value.x) / zoom.value,
+    y: (event.clientY - rect.top - pan.value.y) / zoom.value,
+  }
+}
+
+function clampPosition(x: number, y: number) {
+  const width = boardRef.value?.clientWidth || 980
+  const height = boardRef.value?.clientHeight || 560
+  return {
+    x: Math.max(48, Math.min(width / zoom.value - 48, x)),
+    y: Math.max(64, Math.min(height / zoom.value - 64, y)),
+  }
+}
+
+function addNode() {
+  const label = newNodeName.value.trim()
+  if (!label) return
+
+  const width = boardRef.value?.clientWidth || 980
+  const height = boardRef.value?.clientHeight || 560
+  const center = clampPosition(width / 2 / zoom.value - pan.value.x / zoom.value, height / 2 / zoom.value - pan.value.y / zoom.value)
+  const id = `node-${Date.now()}`
+
+  nodes.value.push({
+    id,
+    label,
+    type: newNodeType.value,
+    status: 'online',
+    x: center.x,
+    y: center.y,
+  })
+
+  newNodeName.value = ''
+  isAddingNode.value = false
+  selectedNodeId.value = id
+}
+
+function deleteSelectedNode() {
+  if (!selectedNodeId.value) return
+  nodes.value = nodes.value.filter((node) => node.id !== selectedNodeId.value)
+  links.value = links.value.filter((link) => link.source !== selectedNodeId.value && link.target !== selectedNodeId.value)
+  selectedNodeId.value = nodes.value[0]?.id || null
+}
+
+function handleNodeClick(nodeId: string, event: MouseEvent) {
+  event.stopPropagation()
+
+  if (!isEditMode.value) {
+    selectedNodeId.value = nodeId
+    return
+  }
+
+  if (!selectedNodeId.value) {
+    selectedNodeId.value = nodeId
+  } else if (selectedNodeId.value === nodeId) {
+    selectedNodeId.value = null
+  } else {
+    toggleLink(selectedNodeId.value, nodeId)
+    selectedNodeId.value = nodeId
+  }
+}
+
+function handleMouseMove(event: MouseEvent) {
+  const point = getLocalPoint(event)
+  mousePos.value = point
+
+  if (draggingId.value) {
+    const node = nodes.value.find((item) => item.id === draggingId.value)
+    if (node) {
+      const next = clampPosition(point.x, point.y)
+      node.x = next.x
+      node.y = next.y
+    }
+    return
+  }
+
+  if (isPanning.value) {
+    pan.value = {
+      x: event.clientX - panStart.value.x,
+      y: event.clientY - panStart.value.y,
+    }
+  }
+}
+
+function handleMouseUp() {
+  draggingId.value = null
+  isPanning.value = false
+}
+
+function handleWheel(event: WheelEvent) {
+  event.preventDefault()
+  const nextZoom = event.deltaY > 0 ? zoom.value * 0.92 : zoom.value * 1.08
+  zoom.value = Math.max(0.45, Math.min(2.2, nextZoom))
+}
+
+function startDragging(nodeId: string, event: MouseEvent) {
+  event.stopPropagation()
+  draggingId.value = nodeId
+  selectedNodeId.value = nodeId
+}
+
+function handleExitEdit() {
+  isEditMode.value = false
+  isAddingNode.value = false
+  selectedNodeId.value = null
+  fetchTopology()
+}
+
+function handleBoardPointerDown(event: MouseEvent) {
+  isPanning.value = true
+  panStart.value = {
+    x: event.clientX - pan.value.x,
+    y: event.clientY - pan.value.y,
+  }
+  if (!isEditMode.value) {
+    selectedNodeId.value = null
+  }
 }
 
 watch(
   () => props.topology,
   (topology) => {
-    topologyState.value = buildTopologyState(topology)
-    if (!topologyState.value.nodes.some((node) => node.id === selectedNodeId.value)) {
-      selectedNodeId.value = topologyState.value.nodes.find((node) => node.id === 'core-switch')?.id || topologyState.value.nodes[0]?.id || null
+    if (topology?.nodes?.length) {
+      replaceTopology(topology)
     }
   },
   { immediate: true, deep: true },
 )
 
-const summary = computed(() => getTopologySummary(topologyState.value))
-const stageLinks = computed(() => buildTopologyStageLinks(topologyState.value, selectedNodeId.value))
-const stageNodes = computed(() =>
-  buildTopologyStageNodes(topologyState.value, selectedNodeId.value).map((node) => ({
-    ...node,
-    labelToken: nodeLabels[node.type],
-  })),
-)
-
-const selectedNode = computed(() =>
-  stageNodes.value.find((node) => node.id === selectedNodeId.value) || stageNodes.value[0] || null,
-)
-
-const selectedNodeLinks = computed(() => {
-  if (!selectedNode.value) return []
-  return stageLinks.value.filter((link) => link.sourceId === selectedNode.value?.id || link.targetId === selectedNode.value?.id)
-})
-
-const statCards = computed(() => [
-  { label: '节点总数', value: `${summary.value.nodeCount}` },
-  { label: '在线节点', value: `${summary.value.onlineCount}` },
-  { label: '威胁节点', value: `${summary.value.warningCount + summary.value.attackCount}` },
-  { label: '链路总数', value: `${summary.value.linkCount}` },
-])
-
-const relationCards = computed(() => {
-  const visibleLinks = selectedNodeLinks.value.length ? selectedNodeLinks.value : stageLinks.value.slice(0, 5)
-  const nodeMap = new Map(stageNodes.value.map((node) => [node.id, node]))
-
-  return visibleLinks.slice(0, 5).map((link) => {
-    const source = nodeMap.get(link.sourceId)
-    const target = nodeMap.get(link.targetId)
-    const relationNode = selectedNode.value?.id === link.sourceId ? target : source
-
-    return {
-      id: link.id,
-      badge: linkTypeText[link.type],
-      title: relationNode?.label || `${source?.label || link.sourceId} → ${target?.label || link.targetId}`,
-      description: `${source?.label || link.sourceId} → ${target?.label || link.targetId}`,
-      tone: `relation-${link.type}`,
-    }
-  })
-})
-
-const eventFeed = computed(() => {
-  if (props.recentAttacks.length) {
-    return props.recentAttacks.slice(0, 4).map((item, index) => ({
-      id: `${item.attack_ip || 'attack'}-${item.create_time_str || index}`,
-      level: (item.threat_level || 'medium').toLowerCase(),
-      title: item.service_name || '异常访问行为',
-      meta: `${item.attack_ip || '未知源'} · ${item.ip_location || '位置待解析'}`,
-      time: item.create_time_str || '刚刚',
-    }))
-  }
-
-  return relationCards.value.slice(0, 4).map((item, index) => ({
-    id: `${item.id}-${index}`,
-    level: index === 0 ? 'high' : index === 1 ? 'medium' : 'low',
-    title: item.badge,
-    meta: item.description,
-    time: '实时同步',
-  }))
-})
-
-const selectedNodeMeta = computed(() => {
-  if (!selectedNode.value) {
-    return [
-      { label: '节点类型', value: '--' },
-      { label: '关联链路', value: '--' },
-      { label: '关系态势', value: '--' },
-    ]
-  }
-
-  const riskCount = selectedNodeLinks.value.filter((link) => link.type === 'attack' || link.type === 'blocked').length
-
-  return [
-    { label: '节点类型', value: nodeTypeText[selectedNode.value.type] },
-    { label: '关联链路', value: `${selectedNodeLinks.value.length} 条` },
-    { label: '关系态势', value: riskCount > 0 ? `${riskCount} 条风险链路` : '链路稳定' },
-  ]
-})
-
-function buildMotionPath(link: { sourcePoint: { x: number; y: number }; targetPoint: { x: number; y: number } }) {
-  return `M ${link.sourcePoint.x} ${link.sourcePoint.y} L ${link.targetPoint.x} ${link.targetPoint.y}`
-}
-
-function selectNode(nodeId: string) {
-  selectedNodeId.value = nodeId
-}
-
-function updateNodePosition(nodeId: string, clientX: number, clientY: number) {
-  const board = boardRef.value
-  if (!board) return
-
-  const rect = board.getBoundingClientRect()
-  const scaleX = CANVAS_WIDTH / rect.width
-  const scaleY = CANVAS_HEIGHT / rect.height
-
-  const x = (clientX - rect.left) * scaleX
-  const y = (clientY - rect.top) * scaleY
-
-  const safeX = Math.max(42, Math.min(CANVAS_WIDTH - 42, x))
-  const safeY = Math.max(42, Math.min(CANVAS_HEIGHT - 42, y))
-
-  topologyState.value.positions[nodeId] = { x: safeX, y: safeY }
-}
-
-function handleNodePointerDown(nodeId: string, event: PointerEvent) {
-  draggingNodeId.value = nodeId
-  selectNode(nodeId)
-  isPanningBoard.value = false
-  ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
-  updateNodePosition(nodeId, event.clientX, event.clientY)
-}
-
-function handleBoardPointerDown(event: PointerEvent) {
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.topology-node')) {
-    return
-  }
-
-  const board = boardRef.value
-  if (!board) return
-
-  isPanningBoard.value = true
-  panStartClient.value = { x: event.clientX, y: event.clientY }
-  panStartScroll.value = { left: board.scrollLeft, top: board.scrollTop }
-  board.setPointerCapture?.(event.pointerId)
-}
-
-function handleGlobalPointerMove(event: PointerEvent) {
-  if (draggingNodeId.value) {
-    updateNodePosition(draggingNodeId.value, event.clientX, event.clientY)
-    return
-  }
-
-  if (!isPanningBoard.value || !boardRef.value) return
-
-  const dx = event.clientX - panStartClient.value.x
-  const dy = event.clientY - panStartClient.value.y
-  boardRef.value.scrollLeft = panStartScroll.value.left - dx
-  boardRef.value.scrollTop = panStartScroll.value.top - dy
-}
-
-function handleGlobalPointerUp() {
-  draggingNodeId.value = null
-  isPanningBoard.value = false
-}
-
 onMounted(() => {
-  window.addEventListener('pointermove', handleGlobalPointerMove)
-  window.addEventListener('pointerup', handleGlobalPointerUp)
-
-  if (!hasTopologyLoadedOnce) {
-    loadingTimer = window.setTimeout(() => {
-      isDataLoading.value = false
-      hasTopologyLoadedOnce = true
-    }, 1200)
-  } else {
-    isDataLoading.value = false
+  if (!props.topology?.nodes?.length) {
+    fetchTopology()
   }
+  window.addEventListener('mouseup', handleMouseUp)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('pointermove', handleGlobalPointerMove)
-  window.removeEventListener('pointerup', handleGlobalPointerUp)
-
-  if (loadingTimer) {
-    window.clearTimeout(loadingTimer)
-  }
+  window.removeEventListener('mouseup', handleMouseUp)
 })
 </script>
 
 <template>
   <div class="topology-stage-shell" aria-label="网络拓扑视图">
-    <div v-if="isDataLoading" class="topology-loading-view">
+    <div v-if="isDataLoading || props.loading" class="topology-loading-view">
       <div class="topology-loading-spinner"></div>
-      <p class="topology-loading-text">正在扫描网络拓扑图并同步链路关系...</p>
+      <p class="topology-loading-text">正在同步旧分支首页拓扑大屏...</p>
     </div>
 
     <template v-else>
-      <div class="topology-stage-grid">
-        <section class="topology-stage-main">
-          <div class="topology-stage-toolbar">
-            <div class="topology-stage-toolbar__copy">
-              <span class="topology-stage-toolbar__eyebrow">TOPOLOGY MATRIX</span>
-              <strong>首页链路拓扑与关系图谱</strong>
-              <p>围绕核心交换、边界防护、业务分区与蜜罐联动，展示资产间的实时连接、风险流向与阻断路径。</p>
-            </div>
-
-            <div class="topology-stage-stats">
-              <article v-for="card in statCards" :key="card.label" class="topology-stage-stat">
-                <span>{{ card.label }}</span>
-                <strong>{{ card.value }}</strong>
-              </article>
-            </div>
+      <div class="topology-toolbar">
+        <div v-if="isEditMode" class="toolbar-edit">
+          <div class="edit-guide">
+            <template v-if="!selectedNodeId">
+              <MousePointerClick class="h-4 w-4 text-cyan" />
+              第一步：选中起始设备
+            </template>
+            <template v-else>
+              <Zap class="h-4 w-4 text-cyan" />
+              第二步：点击另一台设备完成连线
+            </template>
           </div>
 
-          <div
-            ref="boardRef"
-            class="topology-stage-board"
-            :class="{ 'topology-stage-board--panning': isPanningBoard }"
-            aria-label="内网信任链路与告警链路拓扑图"
-            @pointerdown="handleBoardPointerDown"
-          >
-            <div class="topology-stage-board__aurora" aria-hidden="true"></div>
-            <div class="topology-stage-board__canvas">
-              <div class="topology-stage-board__grid" aria-hidden="true"></div>
-              <div class="topology-stage-board__radar" aria-hidden="true"></div>
+          <div class="v-divider"></div>
 
-              <svg class="topology-stage-board__svg" :viewBox="`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`" preserveAspectRatio="none">
-                <defs>
-                  <filter id="topologyGlow" x="-25%" y="-25%" width="150%" height="150%">
-                    <feGaussianBlur stdDeviation="4" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
+          <button class="btn-ghost" @click="isAddingNode = true">
+            <Plus class="h-4 w-4" />
+            放置新设备
+          </button>
 
-                <g v-for="link in stageLinks" :key="link.id">
-                  <line
-                    class="topology-link topology-link--shadow"
-                    :x1="link.sourcePoint.x"
-                    :y1="link.sourcePoint.y"
-                    :x2="link.targetPoint.x"
-                    :y2="link.targetPoint.y"
-                  />
+          <button v-if="selectedNodeId" class="btn-danger" @click="deleteSelectedNode">
+            <Trash2 class="h-4 w-4" />
+            删除选中设备
+          </button>
 
-                  <line
-                    class="topology-link"
-                    :class="`topology-link--${link.type}`"
-                    :x1="link.sourcePoint.x"
-                    :y1="link.sourcePoint.y"
-                    :x2="link.targetPoint.x"
-                    :y2="link.targetPoint.y"
-                    :stroke="link.color"
-                    :stroke-width="link.active ? 3.2 : 2"
-                    :stroke-dasharray="link.type === 'attack' ? '8 8' : link.type === 'blocked' ? '4 7' : undefined"
-                    :opacity="link.active ? 1 : 0.84"
-                    :filter="link.active ? 'url(#topologyGlow)' : undefined"
-                  />
+          <div class="v-divider"></div>
 
-                  <circle
-                    v-if="link.type !== 'lan'"
-                    class="topology-link__pulse"
-                    :r="link.type === 'attack' ? 3.6 : 3"
-                    :fill="link.color"
-                  >
-                    <animateMotion
-                      :dur="link.type === 'attack' ? '2.4s' : link.type === 'blocked' ? '3s' : '3.6s'"
-                      repeatCount="indefinite"
-                      :path="buildMotionPath(link)"
-                    />
-                  </circle>
-                </g>
-              </svg>
-
-              <button
-                v-for="node in stageNodes"
-                :key="node.id"
-                type="button"
-                class="topology-node"
-                :class="{ 'topology-node--selected': node.selected }"
-                :style="{
-                  left: `${node.point.x}px`,
-                  top: `${node.point.y}px`,
-                  '--topology-node-tone': node.tone,
-                }"
-                :aria-label="`${node.label} ${node.status}`"
-                :aria-pressed="node.selected"
-                @pointerdown="handleNodePointerDown(node.id, $event)"
-                @click="selectNode(node.id)"
-              >
-                <span class="topology-node__halo" aria-hidden="true"></span>
-                <span class="topology-node__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" class="topology-node__icon-svg">
-                    <path v-if="node.type === 'edge'" d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 2.2a5.8 5.8 0 0 1 4.73 2.44h-2.1c-.32-.92-.79-1.75-1.38-2.44H12Zm-2.2.43c-.6.66-1.07 1.47-1.4 2.36H6.33A5.8 5.8 0 0 1 9.8 6.63ZM6.2 12c0-.38.04-.74.11-1.1h2.11A12.4 12.4 0 0 0 8.3 12c0 .37.04.73.1 1.08H6.3A5.7 5.7 0 0 1 6.2 12Zm.13 2.98h2.08c.33.88.8 1.69 1.39 2.35a5.8 5.8 0 0 1-3.47-2.35ZM12 17.8h-.03c-.86-.73-1.5-1.73-1.9-2.82h3.84c-.4 1.1-1.05 2.1-1.91 2.82Zm2.56-.47c.58-.66 1.05-1.46 1.38-2.35h2.06a5.8 5.8 0 0 1-3.44 2.35ZM18.8 12c0 .37-.03.73-.1 1.08h-2.1c.07-.35.1-.71.1-1.08s-.03-.74-.1-1.1h2.1c.07.36.1.72.1 1.1Z" />
-                    <path v-else-if="node.type === 'firewall'" d="M12 3 18 6v5c0 4.2-2.55 7.45-6 9-3.45-1.55-6-4.8-6-9V6l6-3Z" />
-                    <path v-else-if="node.type === 'router'" d="M12 4l7 4v8l-7 4-7-4V8l7-4Z" />
-                    <path v-else-if="node.type === 'honeypot'" d="M12 4c3.8 0 6.5 2.35 6.5 5.3 0 3.86-3.17 7.7-6.5 10.7-3.33-3-6.5-6.84-6.5-10.7C5.5 6.35 8.2 4 12 4Z" />
-                    <rect v-else x="5" y="5" width="14" height="14" rx="3" />
-                  </svg>
-                </span>
-
-                <span class="topology-node__token">{{ node.labelToken }}</span>
-                <span class="topology-node__label">{{ node.label }}</span>
-                <span class="topology-node__status">{{ node.status }}</span>
-              </button>
-            </div>
-
-            <div class="topology-stage-board__legend">
-              <span><i style="background: hsl(var(--primary));"></i>骨干上联</span>
-              <span><i style="background: rgba(0, 255, 136, 0.58)"></i>内网链路</span>
-              <span><i style="background: rgba(0, 255, 136, 0.8)"></i>阻断联动</span>
-              <span><i style="background: rgba(255, 68, 68, 0.82)"></i>攻击链路</span>
-            </div>
+          <div class="action-group">
+            <button class="btn-primary btn-sm" :disabled="isSaving" @click="handleSave">
+              <Loader2 v-if="isSaving" class="h-3.5 w-3.5 animate-spin" />
+              <Save v-else class="h-3.5 w-3.5" />
+              确认发布
+            </button>
+            <button class="btn-ghost btn-sm" @click="handleExitEdit">
+              退出
+            </button>
           </div>
-        </section>
+        </div>
 
-        <aside class="topology-stage-sidepanel">
-          <section class="topology-panel">
-            <span class="topology-panel__eyebrow">FOCUS NODE</span>
-            <strong>{{ selectedNode?.label || '未选择节点' }}</strong>
-            <p>{{ selectedNode ? nodeTypeText[selectedNode.type] : '节点信息待加载' }}</p>
+        <button v-else class="topology-edit-entry" @click="isEditMode = true">
+          <Zap class="h-4 w-4" />
+          编辑拓扑
+        </button>
+      </div>
 
-            <div class="topology-panel__metrics">
-              <div v-for="item in selectedNodeMeta" :key="item.label" class="topology-panel__metric">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
+      <div
+        ref="boardRef"
+        class="topology-stage-board"
+        @mousemove="handleMouseMove"
+        @mouseleave="handleMouseUp"
+        @mouseup="handleMouseUp"
+        @wheel="handleWheel"
+      >
+        <div class="topology-stage-board__grid" aria-hidden="true"></div>
+
+        <svg
+          class="topology-stage-board__svg"
+          @mousedown.self="handleBoardPointerDown"
+        >
+          <g :transform="`translate(${pan.x}, ${pan.y}) scale(${zoom})`">
+            <line
+              v-if="isEditMode && selectedNode"
+              :x1="selectedNode.x"
+              :y1="selectedNode.y"
+              :x2="mousePos.x"
+              :y2="mousePos.y"
+              class="guide-link"
+            />
+
+            <line
+              v-for="(link, index) in resolvedLinks"
+              :key="`link-${index}`"
+              :x1="link.sourceNode.x"
+              :y1="link.sourceNode.y"
+              :x2="link.targetNode.x"
+              :y2="link.targetNode.y"
+              class="topology-link"
+              :class="`topology-link--${link.type}`"
+            />
+
+            <g v-for="node in nodes" :key="node.id" :transform="`translate(${node.x}, ${node.y})`">
+              <circle v-if="node.id === selectedNodeId" r="48" class="node-highlight-ring" />
+
+              <circle
+                r="38"
+                class="node-circle"
+                :class="{ 'node-circle--selected': node.id === selectedNodeId }"
+                :stroke="nodeColors[node.status]"
+                @mousedown="startDragging(node.id, $event)"
+                @click="handleNodeClick(node.id, $event)"
+              />
+
+              <foreignObject x="-22" y="-22" width="44" height="44" class="pointer-events-none">
+                <div class="node-icon-wrapper">
+                  <component
+                    :is="nodeIcons[node.type] || Server"
+                    class="h-full w-full"
+                    :style="{ color: node.id === selectedNodeId ? '#00d4ff' : (node.status === 'online' ? '#ffffff' : nodeColors[node.status]) }"
+                  />
+                </div>
+              </foreignObject>
+
+              <text y="58" text-anchor="middle" class="node-label">{{ node.label }}</text>
+            </g>
+          </g>
+        </svg>
+
+        <div class="topology-hint">
+          <span><MousePointer2 class="h-3 w-3" /> 拖拽空白区域平移</span>
+          <span><ArrowRight class="h-3 w-3" /> 滚轮缩放视图</span>
+          <span v-if="isEditMode" class="text-cyan"><ArrowRight class="h-3 w-3" /> 先点 A 再点 B 建链</span>
+        </div>
+
+        <div class="topology-legend">
+          <div class="legend-item"><i class="legend-dot online"></i>在线</div>
+          <div class="legend-item"><i class="legend-dot warning"></i>告警</div>
+          <div class="legend-item"><i class="legend-dot attack"></i>攻击链路</div>
+          <div class="legend-item"><i class="legend-dot lan"></i>常规链路</div>
+        </div>
+      </div>
+
+      <transition name="slide-right">
+        <div v-if="isAddingNode" class="node-addition-panel">
+          <div class="panel-header">
+            <h3>
+              <Plus class="h-5 w-5 text-cyan" />
+              资产入场
+            </h3>
+            <button class="btn-icon" @click="isAddingNode = false">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+
+          <div class="panel-body">
+            <div class="form-item">
+              <label>设备命名</label>
+              <input v-model="newNodeName" placeholder="例如: WebServer-01" @keyup.enter="addNode" />
+            </div>
+
+            <div class="form-item">
+              <label>选择设备类型</label>
+              <div class="type-grid">
+                <button
+                  v-for="(icon, type) in nodeIcons"
+                  :key="type"
+                  class="type-btn"
+                  :class="{ active: newNodeType === type }"
+                  @click="newNodeType = type"
+                >
+                  <component :is="icon" class="h-6 w-6" />
+                  <span>{{ type }}</span>
+                </button>
               </div>
             </div>
-          </section>
 
-          <section class="topology-panel">
-            <div class="topology-panel__heading">
-              <span class="topology-panel__eyebrow">RELATIONS</span>
-              <strong>关联关系</strong>
-            </div>
-
-            <ul class="topology-relation-list">
-              <li v-for="item in relationCards" :key="item.id" class="topology-relation-item" :class="item.tone">
-                <span class="topology-relation-item__badge">{{ item.badge }}</span>
-                <div class="topology-relation-item__body">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.description }}</p>
-                </div>
-              </li>
-            </ul>
-          </section>
-
-          <section class="topology-panel">
-            <div class="topology-panel__heading">
-              <span class="topology-panel__eyebrow">EVENT STREAM</span>
-              <strong>联动事件流</strong>
-            </div>
-
-            <ul class="topology-event-list">
-              <li v-for="item in eventFeed" :key="item.id" class="topology-event-item">
-                <span class="topology-event-item__level" :class="`level-${item.level}`">{{ item.level }}</span>
-                <div class="topology-event-item__body">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.meta }}</p>
-                </div>
-                <time>{{ item.time }}</time>
-              </li>
-            </ul>
-          </section>
-        </aside>
-      </div>
+            <button class="btn-primary btn-primary--wide" @click="addNode">执行部署</button>
+          </div>
+        </div>
+      </transition>
     </template>
   </div>
 </template>
 
 <style scoped>
+.topology-stage-shell {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(5, 11, 21, 0.98), rgba(7, 15, 30, 0.98));
+}
+
 .topology-loading-view {
   display: flex;
-  flex: 1;
-  min-height: 620px;
+  height: 100%;
+  min-height: 420px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 18px;
 }
 
 .topology-loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid rgba(6, 182, 212, 0.16);
-  border-top-color: rgb(34, 211, 238);
-  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  border: 4px solid rgba(0, 212, 255, 0.12);
+  border-top-color: rgba(0, 212, 255, 0.92);
+  border-radius: 999px;
   animation: spin 0.9s linear infinite;
 }
 
 .topology-loading-text {
-  font-size: 14px;
-  color: rgb(103 232 249 / 0.92);
-  letter-spacing: 0.04em;
-  animation: pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  color: rgba(165, 243, 252, 0.88);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.topology-toolbar {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.toolbar-edit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  background: rgba(8, 15, 29, 0.88);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.toolbar-edit {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.topology-edit-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 10px 14px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 999px;
+  background: rgba(8, 15, 29, 0.86);
+  color: rgba(226, 232, 240, 0.92);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.topology-edit-entry:hover {
+  transform: translateY(-1px);
+  background: rgba(12, 22, 40, 0.92);
+  border-color: rgba(34, 211, 238, 0.35);
+}
+
+.edit-guide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 2px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.text-cyan {
+  color: #00d4ff;
+}
+
+.v-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topology-stage-board {
+  position: relative;
+  height: 100%;
+  min-height: 420px;
+  cursor: grab;
+}
+
+.topology-stage-board:active {
+  cursor: grabbing;
+}
+
+.topology-stage-board__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.08) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black 60%, transparent 96%);
+  pointer-events: none;
+}
+
+.topology-stage-board__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.guide-link {
+  stroke: rgba(0, 212, 255, 0.44);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.topology-link {
+  transition: stroke 0.24s ease, opacity 0.24s ease;
+}
+
+.topology-link--uplink {
+  stroke: rgba(56, 189, 248, 0.78);
+  stroke-width: 2.4;
+}
+
+.topology-link--lan {
+  stroke: rgba(0, 212, 255, 0.34);
+  stroke-width: 1.7;
+}
+
+.topology-link--blocked {
+  stroke: rgba(0, 255, 136, 0.72);
+  stroke-width: 2.3;
+  stroke-dasharray: 8 7;
+}
+
+.topology-link--attack {
+  stroke: rgba(244, 63, 94, 0.92);
+  stroke-width: 2.8;
+  stroke-dasharray: 6 6;
+}
+
+.node-circle {
+  fill: rgba(10, 17, 33, 0.96);
+  stroke-width: 3;
+  cursor: pointer;
+  transition: stroke-width 0.24s ease, transform 0.24s ease;
+}
+
+.node-circle--selected {
+  stroke: #00d4ff !important;
+  stroke-width: 4.5;
+}
+
+.node-highlight-ring {
+  fill: none;
+  stroke: rgba(0, 212, 255, 0.9);
+  stroke-width: 2;
+  opacity: 0.52;
+  animation: pulse 2s ease-out infinite;
+}
+
+.node-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.node-label {
+  fill: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(5, 11, 21, 0.92);
+  stroke-width: 4px;
+}
+
+.topology-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  gap: 18px;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(8, 15, 29, 0.84);
+  color: rgba(125, 211, 252, 0.76);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+.topology-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topology-legend {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  display: grid;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background: rgba(8, 15, 29, 0.84);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 11px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.legend-dot.online {
+  color: #00ff88;
+  background: #00ff88;
+}
+
+.legend-dot.warning {
+  color: #fbbf24;
+  background: #fbbf24;
+}
+
+.legend-dot.attack {
+  color: #f43f5e;
+  background: #f43f5e;
+}
+
+.legend-dot.lan {
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.72);
+}
+
+.node-addition-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  padding: 26px;
+  border-left: 1px solid rgba(34, 211, 238, 0.12);
+  background: rgba(5, 11, 21, 0.98);
+  z-index: 30;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.panel-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f8fafc;
+  font-size: 17px;
+}
+
+.panel-body {
+  display: grid;
+  gap: 20px;
+}
+
+.form-item {
+  display: grid;
+  gap: 8px;
+}
+
+.form-item label {
+  color: rgba(148, 163, 184, 0.88);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.form-item input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 12px 14px;
+  color: #f8fafc;
+  outline: none;
+}
+
+.form-item input:focus {
+  border-color: rgba(34, 211, 238, 0.48);
+}
+
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.type-btn {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.58);
+  color: rgba(203, 213, 225, 0.74);
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.type-btn.active {
+  border-color: rgba(34, 211, 238, 0.42);
+  background: rgba(8, 47, 73, 0.72);
+  color: #67e8f9;
+}
+
+.type-btn span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.btn-primary,
+.btn-ghost,
+.btn-danger,
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+}
+
+.btn-primary {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #00d4ff, #67e8f9);
+  color: #082f49;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.btn-primary:hover,
+.btn-ghost:hover,
+.btn-danger:hover,
+.btn-icon:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.btn-primary--wide {
+  width: 100%;
+  justify-content: center;
+}
+
+.btn-ghost {
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.btn-danger {
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.2);
+  color: rgba(252, 165, 165, 0.96);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.btn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 12px;
 }
 
 @keyframes spin {
@@ -578,578 +1047,54 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0%,
+  0% {
+    transform: scale(0.8);
+    opacity: 0.56;
+  }
+
   100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.55;
+    transform: scale(1.24);
+    opacity: 0;
   }
 }
 
-.topology-stage-shell {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.24s ease;
 }
 
-.topology-stage-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 14px;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
+.slide-right-enter-from,
+.slide-right-leave-to {
+  transform: translateX(100%);
 }
 
-.topology-stage-main,
-.topology-stage-sidepanel {
-  min-height: 0;
-}
-
-.topology-stage-main {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-}
-
-.topology-stage-toolbar {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgb(56 189 248 / 0.16);
-  background:
-    radial-gradient(circle at top left, rgb(34 211 238 / 0.12), transparent 40%),
-    linear-gradient(155deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.78));
-}
-
-.topology-stage-toolbar__copy {
-  display: grid;
-  gap: 6px;
-  max-width: 380px;
-}
-
-.topology-stage-toolbar__eyebrow,
-.topology-panel__eyebrow {
-  display: inline-flex;
-  width: fit-content;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid rgb(56 189 248 / 0.28);
-  background: rgb(14 116 144 / 0.18);
-  color: rgb(125 211 252 / 0.95);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-}
-
-.topology-stage-toolbar__copy strong {
-  color: rgb(224 242 254);
-  font-size: 16px;
-}
-
-.topology-stage-toolbar__copy p {
-  color: rgb(148 163 184);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.topology-stage-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  flex: 1;
-}
-
-.topology-stage-stat {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-  min-height: 80px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgb(125 211 252 / 0.14);
-  background: linear-gradient(180deg, rgb(15 23 42 / 0.72), rgb(15 23 42 / 0.34));
-}
-
-.topology-stage-stat span {
-  font-size: 11px;
-  color: rgb(186 230 253);
-}
-
-.topology-stage-stat strong {
-  font-size: 20px;
-  color: rgb(240 249 255);
-}
-
-.topology-stage-board {
-  position: relative;
-  overflow: auto;
-  min-height: 620px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(10, 18, 36, 0.9), rgba(7, 13, 29, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 24px hsl(var(--primary) / 0.1);
-  cursor: grab;
-}
-
-.topology-stage-board--panning {
-  cursor: grabbing;
-}
-
-.topology-stage-board__aurora {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 16% 18%, rgb(56 189 248 / 0.18), transparent 24%),
-    radial-gradient(circle at 82% 16%, rgb(34 197 94 / 0.12), transparent 22%),
-    radial-gradient(circle at 74% 82%, rgb(14 165 233 / 0.12), transparent 28%);
-  pointer-events: none;
-}
-
-.topology-stage-board__canvas {
-  position: relative;
-  width: 920px;
-  height: 620px;
-}
-
-.topology-stage-board__grid,
-.topology-stage-board__radar,
-.topology-stage-board__svg {
-  position: absolute;
-  inset: 0;
-}
-
-.topology-stage-board__grid {
-  background-image:
-    linear-gradient(hsl(var(--primary) / 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--primary) / 0.08) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(circle at center, black 58%, transparent 96%);
-}
-
-.topology-stage-board__radar {
-  background:
-    radial-gradient(circle at center, rgb(34 211 238 / 0.12), transparent 36%),
-    radial-gradient(circle at center, transparent 52%, rgb(34 211 238 / 0.08) 53%, transparent 54%),
-    radial-gradient(circle at center, transparent 68%, rgb(34 211 238 / 0.06) 69%, transparent 70%);
-  opacity: 0.72;
-  pointer-events: none;
-}
-
-.topology-stage-board__svg {
-  width: 920px;
-  height: 620px;
-}
-
-.topology-link--shadow {
-  stroke: rgb(14 165 233 / 0.18);
-  stroke-width: 7;
-  opacity: 0.18;
-  filter: blur(6px);
-}
-
-.topology-link {
-  transition: opacity 180ms ease, stroke-width 180ms ease;
-}
-
-.topology-link__pulse {
-  filter: drop-shadow(0 0 6px currentColor);
-}
-
-.topology-node {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 96px;
-  min-height: 92px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: rgba(232, 234, 246, 0.94);
-  transform: translate(-50%, -50%);
-  cursor: grab;
-  transition: transform 160ms ease, filter 160ms ease;
-  user-select: none;
-}
-
-.topology-node:active {
-  cursor: grabbing;
-}
-
-.topology-node:hover,
-.topology-node--selected {
-  transform: translate(-50%, -50%) scale(1.05);
-  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--topology-node-tone) 28%, transparent));
-}
-
-.topology-node__halo,
-.topology-node__icon {
-  position: absolute;
-  top: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  border-radius: 999px;
-}
-
-.topology-node__halo {
-  width: 74px;
-  height: 74px;
-  border: 1px solid color-mix(in srgb, var(--topology-node-tone) 60%, transparent);
-  background: radial-gradient(circle, color-mix(in srgb, var(--topology-node-tone) 22%, transparent), transparent 72%);
-  box-shadow: 0 0 28px color-mix(in srgb, var(--topology-node-tone) 16%, transparent);
-}
-
-.topology-node__icon {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(10, 17, 33, 0.96));
-  border: 2px solid color-mix(in srgb, var(--topology-node-tone) 72%, rgba(255, 255, 255, 0.1));
-  color: var(--topology-node-tone);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 30px rgba(15, 23, 42, 0.4);
-}
-
-.topology-node__icon-svg {
-  width: 22px;
-  height: 22px;
-  fill: currentColor;
-}
-
-.topology-node__token,
-.topology-node__label,
-.topology-node__status {
-  position: relative;
-  z-index: 1;
-}
-
-.topology-node__token {
-  margin-top: 62px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.72);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--topology-node-tone);
-}
-
-.topology-node__label {
-  max-width: 140px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.topology-node__status {
-  color: rgba(191, 219, 254, 0.72);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.topology-stage-board__legend {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  display: grid;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid hsl(var(--primary) / 0.18);
-  background: rgba(5, 10, 24, 0.72);
-  backdrop-filter: blur(14px);
-}
-
-.topology-stage-board__legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: rgb(203 213 225 / 0.88);
-  font-size: 11px;
-}
-
-.topology-stage-board__legend i {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  display: inline-block;
-  box-shadow: 0 0 12px currentColor;
-}
-
-.topology-stage-sidepanel {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 12px;
-}
-
-.topology-panel {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgb(56 189 248 / 0.14);
-  background:
-    radial-gradient(circle at top right, rgb(56 189 248 / 0.08), transparent 34%),
-    linear-gradient(180deg, rgb(15 23 42 / 0.86), rgb(2 6 23 / 0.82));
-}
-
-.topology-panel strong {
-  color: rgb(226 232 240);
-  font-size: 15px;
-  line-height: 1.4;
-}
-
-.topology-panel p {
-  color: rgb(148 163 184 / 0.92);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.topology-panel__heading {
-  display: grid;
-  gap: 8px;
-}
-
-.topology-panel__metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.topology-panel__metric {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid rgb(125 211 252 / 0.1);
-  background: rgb(15 23 42 / 0.6);
-}
-
-.topology-panel__metric span {
-  color: rgb(125 211 252 / 0.78);
-  font-size: 10px;
-}
-
-.topology-panel__metric strong {
-  color: rgb(240 249 255);
-  font-size: 12px;
-}
-
-.topology-relation-list,
-.topology-event-list {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.topology-relation-item,
-.topology-event-item {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgb(148 163 184 / 0.12);
-  background: rgb(15 23 42 / 0.56);
-}
-
-.topology-relation-item {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.topology-relation-item__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 72px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgb(14 116 144 / 0.16);
-  color: rgb(125 211 252);
-  font-size: 10px;
-}
-
-.topology-relation-item__body,
-.topology-event-item__body {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.topology-relation-item__body strong,
-.topology-event-item__body strong {
-  font-size: 13px;
-}
-
-.topology-relation-item__body p,
-.topology-event-item__body p {
-  font-size: 11px;
-  color: rgb(148 163 184 / 0.92);
-}
-
-.topology-relation-item.relation-attack {
-  border-color: rgb(248 113 113 / 0.18);
-}
-
-.topology-relation-item.relation-blocked {
-  border-color: rgb(74 222 128 / 0.18);
-}
-
-.topology-event-item {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-
-.topology-event-item__level {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.topology-event-item__level.level-critical,
-.topology-event-item__level.level-high {
-  background: rgb(127 29 29 / 0.34);
-  color: rgb(252 165 165);
-}
-
-.topology-event-item__level.level-medium {
-  background: rgb(120 53 15 / 0.32);
-  color: rgb(253 186 116);
-}
-
-.topology-event-item__level.level-low {
-  background: rgb(22 101 52 / 0.28);
-  color: rgb(134 239 172);
-}
-
-.topology-event-item time {
-  color: rgb(125 211 252 / 0.76);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-:global(html:not(.dark)) .topology-stage-toolbar,
-:global(html:not(.dark)) .topology-panel,
-:global(html:not(.dark)) .topology-stage-stat,
-:global(html:not(.dark)) .topology-panel__metric {
-  border-color: hsl(var(--border) / 0.72);
-  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.68));
-  box-shadow: 0 10px 22px hsl(var(--primary) / 0.04);
-}
-
-:global(html:not(.dark)) .topology-stage-toolbar__eyebrow,
-:global(html:not(.dark)) .topology-panel__eyebrow,
-:global(html:not(.dark)) .topology-relation-item__badge {
-  border-color: hsl(var(--border) / 0.72);
-  background: hsl(var(--secondary) / 0.92);
-  color: hsl(var(--foreground));
-}
-
-:global(html:not(.dark)) .topology-stage-toolbar__copy strong,
-:global(html:not(.dark)) .topology-stage-stat strong,
-:global(html:not(.dark)) .topology-panel strong,
-:global(html:not(.dark)) .topology-panel__metric strong,
-:global(html:not(.dark)) .topology-relation-item__body strong,
-:global(html:not(.dark)) .topology-event-item__body strong,
-:global(html:not(.dark)) .topology-node__label {
-  color: hsl(var(--foreground));
-}
-
-:global(html:not(.dark)) .topology-stage-toolbar__copy p,
-:global(html:not(.dark)) .topology-stage-stat span,
-:global(html:not(.dark)) .topology-panel p,
-:global(html:not(.dark)) .topology-panel__metric span,
-:global(html:not(.dark)) .topology-relation-item__body p,
-:global(html:not(.dark)) .topology-event-item__body p,
-:global(html:not(.dark)) .topology-node__status,
-:global(html:not(.dark)) .topology-stage-board__legend span,
-:global(html:not(.dark)) .topology-event-item time {
-  color: hsl(var(--muted-foreground));
-}
-
-:global(html:not(.dark)) .topology-stage-board {
-  border-color: hsl(var(--border) / 0.72);
-  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.7));
-  box-shadow: inset 0 1px 0 hsl(var(--background)), 0 14px 30px hsl(var(--primary) / 0.05);
-}
-
-:global(html:not(.dark)) .topology-stage-board__grid {
-  background-image:
-    linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
-}
-
-:global(html:not(.dark)) .topology-stage-board__radar {
-  background:
-    radial-gradient(circle at center, hsl(var(--primary) / 0.08), transparent 36%),
-    radial-gradient(circle at center, transparent 52%, hsl(var(--primary) / 0.05) 53%, transparent 54%),
-    radial-gradient(circle at center, transparent 68%, hsl(var(--primary) / 0.04) 69%, transparent 70%);
-}
-
-:global(html:not(.dark)) .topology-stage-board__legend {
-  border-color: hsl(var(--border) / 0.75);
-  background: hsl(var(--background) / 0.88);
-}
-
-:global(html:not(.dark)) .topology-node__icon {
-  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.88));
-  box-shadow: inset 0 1px 0 hsl(var(--background)), 0 10px 20px hsl(var(--primary) / 0.08);
-}
-
-:global(html:not(.dark)) .topology-node__token {
-  background: hsl(var(--secondary) / 0.92);
-}
-
-@media (max-width: 1280px) {
-  .topology-stage-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .topology-stage-sidepanel {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: none;
-  }
-}
-
-@media (max-width: 960px) {
-  .topology-stage-toolbar {
+@media (max-width: 1024px) {
+  .toolbar-edit {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .topology-stage-stats,
-  .topology-panel__metrics,
-  .topology-stage-sidepanel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .topology-hint {
+    width: calc(100% - 36px);
+    justify-content: center;
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 720px) {
-  .topology-stage-stats,
-  .topology-panel__metrics,
-  .topology-stage-sidepanel {
-    grid-template-columns: minmax(0, 1fr);
+  .topology-toolbar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
   }
 
-  .topology-event-item {
-    grid-template-columns: minmax(0, 1fr);
+  .topology-legend {
+    left: 12px;
+    bottom: 12px;
   }
 
-  .topology-event-item time {
-    justify-self: start;
+  .node-addition-panel {
+    width: 100%;
   }
 }
 </style>

@@ -107,7 +107,7 @@ onUnmounted(() => {
 
 .dashboard-screen :deep(.dashboard-kpi-shell),
 .dashboard-screen :deep(.world-map-shell),
-.dashboard-screen :deep(.topology-stage-board),
+.dashboard-screen :deep(.topology-stage-shell),
 .dashboard-screen :deep(.device-panel-card),
 .dashboard-screen :deep(.topology-detail-card),
 .dashboard-screen :deep(.device-detail-strip) {

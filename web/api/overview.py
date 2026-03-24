@@ -2,7 +2,7 @@
 Overview Module - Dashboard and metrics endpoints
 """
 from flask import Blueprint
-from database.models import NmapModel, HFishModel, AiModel
+from database.models import NmapModel, HFishModel, AiModel, TopologyModel
 from database.db import get_connection
 from .helpers import require_auth, ok, _load_cfg
 
@@ -130,22 +130,27 @@ def overview_screen():
             'open_ports': ports,
         })
 
-    topology_nodes = [
-        {'id': 'internet', 'label': '互联网', 'type': 'edge', 'status': 'online'},
-        {'id': 'firewall', 'label': '主防火墙', 'type': 'firewall', 'status': 'online'},
-    ]
-    topology_links = [
-        {'source': 'internet', 'target': 'firewall', 'type': 'uplink'},
-    ]
-    for idx, sw in enumerate(active_switches):
-        sid = f"switch-{idx + 1}"
-        topology_nodes.append({
-            'id': sid,
-            'label': sw.get('host', f'交换机{idx + 1}'),
-            'type': 'switch',
-            'status': 'online' if sw.get('enabled', True) else 'offline',
-        })
-        topology_links.append({'source': 'firewall', 'target': sid, 'type': 'lan'})
+    stored_topology = TopologyModel.get_topology()
+    topology_nodes = stored_topology.get('nodes', [])
+    topology_links = stored_topology.get('links', [])
+
+    if not topology_nodes or not topology_links:
+        topology_nodes = [
+            {'id': 'internet', 'label': '互联网', 'type': 'edge', 'status': 'online'},
+            {'id': 'firewall', 'label': '主防火墙', 'type': 'firewall', 'status': 'online'},
+        ]
+        topology_links = [
+            {'source': 'internet', 'target': 'firewall', 'type': 'uplink'},
+        ]
+        for idx, sw in enumerate(active_switches):
+            sid = f"switch-{idx + 1}"
+            topology_nodes.append({
+                'id': sid,
+                'label': sw.get('host', f'交换机{idx + 1}'),
+                'type': 'switch',
+                'status': 'online' if sw.get('enabled', True) else 'offline',
+            })
+            topology_links.append({'source': 'firewall', 'target': sid, 'type': 'lan'})
 
     payload = {
         'top_metrics': {

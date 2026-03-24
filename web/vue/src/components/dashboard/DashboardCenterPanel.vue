@@ -103,7 +103,7 @@ const honeypotLevelText = (level: string) => {
   return '低危'
 }
 
-const topologySummaryCards = computed(() => {
+const topologyOverview = computed(() => {
   const nodes = props.payload.topology?.nodes || []
   const links = props.payload.topology?.links || []
   const onlineStatuses = new Set(['online', 'normal', 'active'])
@@ -112,12 +112,12 @@ const topologySummaryCards = computed(() => {
   const onlineCount = nodes.filter((n) => onlineStatuses.has((n.status || '').toLowerCase())).length
   const warningCount = nodes.filter((n) => warningStatuses.has((n.status || '').toLowerCase())).length
 
-  return [
-    { label: '节点总数', value: nodes.length || 0 },
-    { label: '在线节点', value: onlineCount },
-    { label: '告警节点', value: warningCount },
-    { label: '链路总数', value: links.length || 0 },
-  ]
+  return {
+    nodeCount: nodes.length || 0,
+    onlineCount,
+    warningCount,
+    linkCount: links.length || 0,
+  }
 })
 
 const deviceHeaderData = computed(() => {
@@ -207,22 +207,7 @@ onUnmounted(() => {
           >
             <DashboardWelcomeBanner v-if="activeView === 'overview'" :top-metrics="payload.top_metrics" :loading="loading" />
 
-            <div v-else-if="activeView === 'topology'" class="topology-view-hero" aria-label="拓扑概览">
-              <div class="topology-view-hero__copy">
-                <span class="topology-view-hero__eyebrow">RELATION MAP</span>
-                <strong>首页链路拓扑与关系图</strong>
-                <p>聚焦核心资产、攻击路径、阻断动作与节点联动状态。</p>
-              </div>
-
-              <div class="topology-detail-cards">
-                <article v-for="card in topologySummaryCards" :key="card.label" class="topology-detail-card">
-                  <span>{{ card.label }}</span>
-                  <strong>{{ card.value }}</strong>
-                </article>
-              </div>
-            </div>
-
-            <div v-else class="device-detail-strip" aria-label="设备面板详情卡片">
+            <div v-if="activeView === 'device'" class="device-detail-strip" aria-label="设备面板详情卡片">
               <div class="device-detail-strip__main">
                 <span class="device-detail-strip__eyebrow">SELECTED NODE</span>
                 <strong>{{ deviceHeaderData.title }}</strong>
@@ -276,6 +261,31 @@ onUnmounted(() => {
             </template>
 
             <template v-else-if="activeView === 'topology'">
+              <div class="topology-header-card" aria-label="拓扑头部卡片">
+                <div class="topology-header-card__copy">
+                  <span class="topology-header-card__eyebrow">TOPOLOGY WORKSPACE</span>
+                  <strong>首页拓扑大屏</strong>
+                  <p>
+                    节点 {{ topologyOverview.nodeCount }}
+                    <span class="topology-header-card__dot"></span>
+                    链路 {{ topologyOverview.linkCount }}
+                    <span class="topology-header-card__dot"></span>
+                    高危告警 {{ topologyOverview.warningCount }}
+                  </p>
+                </div>
+
+                <div class="topology-header-card__stats">
+                  <article class="topology-header-pill">
+                    <span>在线节点</span>
+                    <strong>{{ topologyOverview.onlineCount }}</strong>
+                  </article>
+                  <article class="topology-header-pill">
+                    <span>风险节点</span>
+                    <strong>{{ topologyOverview.warningCount }}</strong>
+                  </article>
+                </div>
+              </div>
+
               <div class="map-card view-main-card view-main-card--topology">
                 <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
               </div>
@@ -330,74 +340,83 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.topology-view-hero {
+.topology-header-card {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgb(56 189 248 / 0.22);
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid hsl(var(--border) / 0.5);
   background:
-    radial-gradient(circle at top left, rgb(34 211 238 / 0.14), transparent 38%),
-    linear-gradient(155deg, rgb(8 47 73 / 0.58), rgb(2 6 23 / 0.78));
-  box-shadow: 0 12px 26px rgb(2 6 23 / 0.18);
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 34%),
+    linear-gradient(135deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.72));
+  box-shadow: 0 14px 32px hsl(var(--primary) / 0.1);
 }
 
-.topology-view-hero__copy {
+.topology-header-card__copy {
   display: grid;
-  gap: 6px;
-  max-width: 360px;
+  gap: 5px;
+  min-width: 0;
 }
 
-.topology-view-hero__eyebrow {
+.topology-header-card__eyebrow {
   display: inline-flex;
   width: fit-content;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgb(56 189 248 / 0.28);
-  background: rgb(14 116 144 / 0.18);
-  color: rgb(125 211 252 / 0.95);
+  border: 1px solid hsl(var(--primary) / 0.24);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
   font-size: 10px;
   letter-spacing: 0.16em;
 }
 
-.topology-view-hero__copy strong {
-  color: rgb(224 242 254);
+.topology-header-card__copy strong {
+  color: hsl(var(--foreground));
   font-size: 16px;
 }
 
-.topology-view-hero__copy p {
-  color: rgb(148 163 184);
+.topology-header-card__copy p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
-  line-height: 1.55;
 }
 
-.topology-detail-cards {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.topology-header-card__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: hsl(var(--primary) / 0.55);
+}
+
+.topology-header-card__stats {
+  display: flex;
+  align-items: stretch;
   gap: 10px;
-  flex: 1;
 }
 
-.topology-detail-card {
+.topology-header-pill {
   display: grid;
-  gap: 6px;
-  min-height: 84px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgb(56 189 248 / 0.24);
-  background: linear-gradient(180deg, rgb(15 23 42 / 0.68), rgb(2 6 23 / 0.54));
+  gap: 4px;
+  min-width: 104px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border) / 0.52);
+  background: hsl(var(--background) / 0.46);
 }
 
-.topology-detail-card span {
+.topology-header-pill span {
+  color: hsl(var(--muted-foreground));
   font-size: 11px;
-  color: rgb(186 230 253);
 }
 
-.topology-detail-card strong {
-  font-size: 20px;
-  color: rgb(240 249 255);
+.topology-header-pill strong {
+  color: hsl(var(--foreground));
+  font-size: 18px;
 }
 
 .device-detail-strip {
@@ -668,45 +687,14 @@ onUnmounted(() => {
   transform: translateY(-8px);
 }
 
-:global(html:not(.dark)) .topology-view-hero {
-  border-color: hsl(var(--border) / 0.75);
-  background:
-    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 42%),
-    linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.62));
-  box-shadow: 0 10px 22px hsl(var(--primary) / 0.06);
-}
-
-:global(html:not(.dark)) .topology-view-hero__eyebrow {
-  border-color: hsl(var(--border) / 0.72);
-  background: hsl(var(--secondary) / 0.9);
-  color: hsl(var(--foreground));
-}
-
-:global(html:not(.dark)) .topology-view-hero__copy strong,
-:global(html:not(.dark)) .topology-detail-card strong {
-  color: hsl(var(--foreground));
-}
-
-:global(html:not(.dark)) .topology-view-hero__copy p,
-:global(html:not(.dark)) .topology-detail-card span {
-  color: hsl(var(--muted-foreground));
-}
-
-:global(html:not(.dark)) .topology-detail-card {
-  border-color: hsl(var(--border) / 0.75);
-  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.72));
-  box-shadow: inset 0 1px 0 hsl(var(--background)), 0 8px 20px hsl(var(--primary) / 0.04);
-}
-
 @media (max-width: 1200px) {
-  .topology-view-hero {
+  .topology-header-card {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .topology-detail-cards {
+  .topology-header-card__stats {
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .device-detail-strip {
@@ -732,8 +720,12 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
-  .topology-detail-cards {
-    grid-template-columns: minmax(0, 1fr);
+  .topology-header-card__stats {
+    flex-direction: column;
+  }
+
+  .topology-header-pill {
+    width: 100%;
   }
 }
 

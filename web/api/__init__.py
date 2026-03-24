@@ -13,6 +13,7 @@ from .system import system_bp
 from .nmap_routes import nmap_bp
 from .switch_workbench import switch_workbench_bp
 from .legacy import legacy_bp
+from .topology_routes import topology_bp
 
 
 def register_blueprints(app):
@@ -26,6 +27,7 @@ def register_blueprints(app):
     app.register_blueprint(nmap_bp)
     app.register_blueprint(switch_workbench_bp)
     app.register_blueprint(legacy_bp)
+    app.register_blueprint(topology_bp)
 
 
 # Export for external use
@@ -40,4 +42,5 @@ __all__ = [
     'system_bp',
     'switch_workbench_bp',
     'legacy_bp',
+    'topology_bp',
 ]
