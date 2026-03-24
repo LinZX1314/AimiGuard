@@ -49,7 +49,9 @@ function handleClear() {
 }
 
 function handleCommand(command: string) {
-  terminalRef.value?.sendCommand(command)
+  // Commands from terminal are handled directly in TelnetTerminal
+  // This is used for logging/analytics if needed
+  console.debug('Command sent:', command)
 }
 </script>
 

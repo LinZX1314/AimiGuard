@@ -155,11 +155,14 @@ IP信息：
 
             logger.info(f"封禁结果: {ban_result}")
 
-            # 检查封禁是否成功，并更新数据库状态
+            # 检查封禁是否成功（只要有一台交换机成功就认为成功）
             if ban_result.get('ok'):
                 ban_count += 1
                 AiModel.save_analysis(ip, analysis_text, '已封禁', status='approved')
-                logger.info(f"IP {ip} 封禁成功")
+                # 记录每台交换机的封禁结果
+                for r in ban_result.get('results', []):
+                    logger.info(f"  - {r.get('switch_name', r.get('host'))}: {'成功' if r.get('ok') else r.get('error', '失败')}")
+                logger.info(f"IP {ip} 封禁完成: {ban_result.get('message', '')}")
             else:
                 # 封禁失败，更新状态为失败
                 AiModel.save_analysis(ip, analysis_text, '封禁失败', status='error')

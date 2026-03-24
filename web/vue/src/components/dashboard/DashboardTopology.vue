@@ -375,8 +375,22 @@ function handleMouseUp() {
 
 function handleWheel(event: WheelEvent) {
   event.preventDefault()
-  const nextZoom = event.deltaY > 0 ? zoom.value * 0.92 : zoom.value * 1.08
-  zoom.value = Math.max(0.45, Math.min(2.2, nextZoom))
+  const board = boardRef.value
+  if (!board) return
+
+  const rect = board.getBoundingClientRect()
+  const mouseX = event.clientX - rect.left
+  const mouseY = event.clientY - rect.top
+
+  const factor = event.deltaY > 0 ? 0.92 : 1.08
+  const newZoom = Math.max(0.45, Math.min(2.2, zoom.value * factor))
+
+  // 以鼠标位置为中心缩放
+  pan.value = {
+    x: mouseX - (mouseX - pan.value.x) * (newZoom / zoom.value),
+    y: mouseY - (mouseY - pan.value.y) * (newZoom / zoom.value),
+  }
+  zoom.value = newZoom
 }
 
 function startDragging(nodeId: string, event: MouseEvent) {

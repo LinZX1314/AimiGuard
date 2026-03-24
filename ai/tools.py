@@ -277,78 +277,122 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
     if cfg is None:
         return {'ok': False, 'error': '缺少配置信息'}
 
-    # 从配置获取交换机信息
+    # 从配置获取所有已启用的交换机
     switches = _get_active_switches(cfg)
     if not switches:
         return {'ok': False, 'error': '未找到已启用的交换机配置'}
 
-    switch = switches[0]
-    host = switch.get('host', '')
-    port = switch.get('port', 23)
-    password = switch.get('password', '')
-    secret = switch.get('secret', password)
-    acl_number = switch.get('acl_number', 30)
-    action = args.get('action', 'ban')
-    target_ip = args.get('target_ip', '')
-    description = args.get('description', '')
+    results = []
+    success_count = 0
+    fail_count = 0
 
-    if not host or not password:
-        return {'ok': False, 'error': '缺少必要参数: host, password'}
+    # 遍历所有交换机执行封禁/解封操作
+    for switch in switches:
+        host = switch.get('host', '')
+        port = switch.get('port', 23)
+        password = switch.get('password', '')
+        secret = switch.get('secret', password)
+        acl_number = switch.get('acl_number', 30)
+        switch_name = switch.get('name', host)
 
-    if action in ['ban', 'unban'] and not target_ip:
-        return {'ok': False, 'error': '缺少目标IP: target_ip'}
+        if not host or not password:
+            results.append({
+                'host': host,
+                'switch_name': switch_name,
+                'ok': False,
+                'error': '缺少必要参数: host, password'
+            })
+            fail_count += 1
+            continue
 
-    rule_id = None
+        if action in ['ban', 'unban'] and not target_ip:
+            results.append({
+                'host': host,
+                'switch_name': switch_name,
+                'ok': False,
+                'error': '缺少目标IP: target_ip'
+            })
+            fail_count += 1
+            continue
 
-    # ban 前检查目标IP是否已存在（去重）
-    if action == 'ban':
-        existing_rules = SwitchAclModel.get_rules(host, acl_number)
-        for r in existing_rules:
-            if r.get('target_ip') == target_ip and r.get('action') == 'ban':
-                return {'ok': False, 'error': f'IP {target_ip} 已在封禁列表中，无需重复封禁'}
+        rule_id = None
 
-    try:
-        # 获取规则ID
+        # ban 前检查目标IP是否已存在（去重）
         if action == 'ban':
-            used_ids = set()
-            rules = SwitchAclModel.get_rules(host, acl_number)
-            for r in rules:
-                rid = r.get('rule_id')
-                if rid and 1 <= rid < 20000:
-                    used_ids.add(rid)
-
-            rule_id = 1
-            while rule_id in used_ids and rule_id < 20000:
-                rule_id += 1
-
-            if rule_id >= 20000:
-                return {'ok': False, 'error': '无可用规则ID（1-19999已用完）'}
-
-            rule_text = f'{rule_id} deny host {target_ip}'
-            SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
-
-        elif action == 'unban':
-            rules = SwitchAclModel.get_rules(host, acl_number)
-            for r in rules:
+            existing_rules = SwitchAclModel.get_rules(host, acl_number)
+            for r in existing_rules:
                 if r.get('target_ip') == target_ip and r.get('action') == 'ban':
-                    rule_id = r.get('rule_id')
-                    break
+                    results.append({
+                        'host': host,
+                        'switch_name': switch_name,
+                        'ok': False,
+                        'error': f'IP {target_ip} 已在封禁列表中，无需重复封禁'
+                    })
+                    fail_count += 1
+                    continue
 
-            if rule_id is None:
-                return {'ok': False, 'error': f'未找到IP {target_ip} 的封禁规则'}
+        try:
+            # 获取规则ID
+            if action == 'ban':
+                used_ids = set()
+                rules = SwitchAclModel.get_rules(host, acl_number)
+                for r in rules:
+                    rid = r.get('rule_id')
+                    if rid and 1 <= rid < 20000:
+                        used_ids.add(rid)
 
-            SwitchAclModel.remove_rule(host, acl_number, target_ip)
-        else:
-            return {'ok': False, 'error': f'未知操作: {action}'}
+                rule_id = 1
+                while rule_id in used_ids and rule_id < 20000:
+                    rule_id += 1
 
-        # 构建命令序列，一次性发送
-        if action == 'ban':
-            cmd = f'{rule_id} deny host {target_ip}'
-        else:
-            cmd = f'no {rule_id}'
+                if rule_id >= 20000:
+                    results.append({
+                        'host': host,
+                        'switch_name': switch_name,
+                        'ok': False,
+                        'error': '无可用规则ID（1-19999已用完）'
+                    })
+                    fail_count += 1
+                    continue
 
-        # 一次性发送所有命令
-        commands = f'''{password}
+                rule_text = f'{rule_id} deny host {target_ip}'
+                SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
+
+            elif action == 'unban':
+                rules = SwitchAclModel.get_rules(host, acl_number)
+                for r in rules:
+                    if r.get('target_ip') == target_ip and r.get('action') == 'ban':
+                        rule_id = r.get('rule_id')
+                        break
+
+                if rule_id is None:
+                    results.append({
+                        'host': host,
+                        'switch_name': switch_name,
+                        'ok': False,
+                        'error': f'未找到IP {target_ip} 的封禁规则'
+                    })
+                    fail_count += 1
+                    continue
+
+                SwitchAclModel.remove_rule(host, acl_number, target_ip)
+            else:
+                results.append({
+                    'host': host,
+                    'switch_name': switch_name,
+                    'ok': False,
+                    'error': f'未知操作: {action}'
+                })
+                fail_count += 1
+                continue
+
+            # 构建命令序列
+            if action == 'ban':
+                cmd = f'{rule_id} deny host {target_ip}'
+            else:
+                cmd = f'no {rule_id}'
+
+            commands = f'''{password}
 en
 {secret}
 config
@@ -359,36 +403,52 @@ exit
 wr
 '''
 
-        tn = telnetlib.Telnet(host, port, 30)
-        time.sleep(3)
+            tn = telnetlib.Telnet(host, port, 30)
+            time.sleep(3)
 
-        # 读取欢迎信息
-        tn.read_very_eager()
+            tn.read_very_eager()
 
-        # 一次性发送命令，每个命令之间等待
-        for line in commands.strip().split('\n'):
-            tn.write((line + '\r').encode('utf-8'))
-            time.sleep(1.5)
+            for line in commands.strip().split('\n'):
+                tn.write((line + '\r').encode('utf-8'))
+                time.sleep(1.5)
 
-        # 等待命令执行完成
-        time.sleep(5)
-        output = tn.read_very_eager().decode('utf-8', errors='ignore')
+            time.sleep(5)
+            output = tn.read_very_eager().decode('utf-8', errors='ignore')
 
-        tn.close()
+            tn.close()
 
-        return {
-            'ok': True,
-            'host': host,
-            'acl_number': acl_number,
-            'action': action,
-            'target_ip': target_ip if action != 'ban' else None,
-            'rule_id': rule_id if action in ['ban', 'unban'] else None,
-            'message': f"{'封禁' if action == 'ban' else '解封'}成功",
-            'debug': output[:500],
-        }
+            results.append({
+                'host': host,
+                'switch_name': switch_name,
+                'ok': True,
+                'acl_number': acl_number,
+                'action': action,
+                'target_ip': target_ip if action == 'ban' else None,
+                'rule_id': rule_id if action in ['ban', 'unban'] else None,
+                'message': f"{'封禁' if action == 'ban' else '解封'}成功",
+            })
+            success_count += 1
 
-    except Exception as e:
-        return {'ok': False, 'error': f'ACL配置失败: {e}'}
+        except Exception as e:
+            results.append({
+                'host': host,
+                'switch_name': switch_name,
+                'ok': False,
+                'error': f'ACL配置失败: {e}'
+            })
+            fail_count += 1
+
+    # 返回汇总结果
+    return {
+        'ok': success_count > 0,
+        'total': len(switches),
+        'success_count': success_count,
+        'fail_count': fail_count,
+        'action': action,
+        'target_ip': target_ip if action == 'ban' else None,
+        'results': results,
+        'message': f"{'封禁' if action == 'ban' else '解封'}完成: 成功 {success_count}/{len(switches)} 台交换机"
+    }
 
 
 @tool_registry.register(

@@ -65,6 +65,8 @@ function initTerminal() {
   terminal.writeln('')
 
   terminal.onData((data: string) => {
+    if (store.connectionStatus !== 'connected') return
+
     if (data === '\r') {
       if (commandBuffer.trim()) {
         executeCommand(commandBuffer.trim())
@@ -101,7 +103,7 @@ function handleSendToTerminal(event: CustomEvent<{ command: string }>) {
 }
 
 async function executeCommand(command: string) {
-  if (!currentDevice) return
+  if (!currentDevice || store.connectionStatus !== 'connected') return
 
   terminal?.writeln('')
   emit('command-sent', command)
@@ -147,6 +149,17 @@ async function connect(device: SwitchWorkbenchDevice) {
       command: 'display version',
       source: 'manual',
     })
+
+    if (result.status === 'failed') {
+      store.setConnectionStatus('disconnected')
+      terminal?.writeln(`\r\n\x1b[31m[连接失败] ${result.output || '无法连接到设备'}\x1b[0m`)
+      terminal?.write('\r\n> ')
+      store.appendTerminalMessage({
+        type: 'system',
+        content: `连接失败: ${result.output || '无法连接到设备'}`,
+      })
+      return
+    }
 
     store.setConnectionStatus('connected')
     terminal?.writeln('\x1b[32m[已连接]\x1b[0m')
