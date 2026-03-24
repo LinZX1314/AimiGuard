@@ -96,8 +96,7 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-screen :deep(.tech-card-dashboard-clear) {
-  background: linear-gradient(180deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.84));
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--card) / 0.92));
   box-shadow: 0 12px 28px hsl(var(--primary) / 0.08);
 }
 
@@ -111,25 +110,12 @@ onUnmounted(() => {
 .dashboard-screen :deep(.device-panel-card),
 .dashboard-screen :deep(.topology-detail-card),
 .dashboard-screen :deep(.device-detail-strip) {
-  background: linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.38));
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--secondary) / 0.6));
   box-shadow: 0 14px 32px hsl(var(--primary) / 0.08);
 }
 
 .dashboard-screen :deep(.dashboard-kpi-shell::before) {
   opacity: 0.12;
-}
-
-.dashboard-screen :deep(.kpi-chip),
-.dashboard-screen :deep(.topology-stage-board__legend),
-.dashboard-screen :deep(.world-map-shell__status),
-.dashboard-screen :deep(.device-panel-card__eyebrow),
-.dashboard-screen :deep(.device-detail-strip__eyebrow),
-.dashboard-screen :deep(.topology-stage-board__grid),
-.dashboard-screen :deep(.world-map-shell__loading) {
-  background: hsl(var(--secondary) / 0.4);
-  backdrop-filter: blur(8px);
-  box-shadow: none;
 }
 
 .dashboard-screen :deep(.map-card),

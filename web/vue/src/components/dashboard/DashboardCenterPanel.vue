@@ -188,7 +188,7 @@ onUnmounted(() => {
     <div class="dashboard-center-panel__inner h-full flex flex-col p-3 md:p-3.5">
       <!-- Topbar: 仅保留当前页面视图切换 -->
       <div class="mb-2.5 flex items-start justify-start shrink-0">
-<div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-primary/20 shadow-lg shadow-primary/5">
+<div class="flex items-center gap-1 rounded-lg bg-card/90 p-1 border border-primary/20 shadow-lg shadow-primary/5">
           <button
             v-for="view in dashboardViews"
             :key="view.key"

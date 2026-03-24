@@ -204,7 +204,7 @@ onMounted(() => {
 
     <!-- replace switch-modal with Dialog from UI -->
     <Dialog :open="!!selectedPort" @update:open="(val) => { if (!val) closeModal() }">
-<DialogContent class="sm:max-w-[425px] border-primary/30 bg-white/95 backdrop-blur-xl text-slate-800">
+<DialogContent class="sm:max-w-[425px] border-primary/30 bg-white text-slate-800">
         <DialogHeader>
           <DialogTitle>{{ selectedPort?.name }} 配置</DialogTitle>
           <DialogDescription class="text-primary/70">

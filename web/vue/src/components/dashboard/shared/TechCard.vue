@@ -29,7 +29,7 @@ cyan: isDark.value ? 'before:from-primary/60' : 'before:from-primary/40',
     :class="[
       'relative rounded-xl overflow-hidden transition-all duration-300',
       isDark
-        ? 'bg-gradient-to-br from-card/20 to-card/10 border border-border/15 backdrop-blur-md'
+        ? 'bg-card/20 border border-border/15'
         : 'bg-gradient-to-br from-card/96 to-secondary/35 border border-border/55 shadow-[0_12px_28px_hsl(var(--primary)/0.08)]',
       'before:absolute before:inset-[-1px] before:rounded-xl before:p-[1px]',
       'before:bg-gradient-to-br before:to-transparent before:opacity-20',

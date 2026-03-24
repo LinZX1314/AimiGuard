@@ -216,7 +216,7 @@ function getChainStatus(key: string): boolean {
           <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
         </div>
 
-        <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur" aria-label="攻击类型词云">
+        <div class="flex-[1.2] min-h-0 relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20" aria-label="攻击类型词云">
           <v-chart class="h-full w-full absolute inset-0" :option="wordCloudOption" autoresize />
         </div>
       </div>

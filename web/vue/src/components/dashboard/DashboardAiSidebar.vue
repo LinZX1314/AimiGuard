@@ -501,7 +501,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 历史记录面板 -->
-    <div v-if="showHistory" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
+    <div v-if="showHistory" class="absolute inset-0 z-20 bg-background/98 flex flex-col animate-in slide-in-from-right duration-300">
       <div class="flex items-center justify-between px-4 py-3 border-b border-primary/20">
         <h3 class="text-sm font-semibold text-foreground">历史记录</h3>
         <button @click="showHistory = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
@@ -528,7 +528,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 设置面板 -->
-    <div v-if="showSettings" class="absolute inset-0 z-20 bg-background/95 backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-300">
+    <div v-if="showSettings" class="absolute inset-0 z-20 bg-background/98 flex flex-col animate-in slide-in-from-right duration-300">
       <div class="flex items-center justify-between px-4 py-3 border-b border-primary/20">
         <h3 class="text-sm font-semibold text-foreground">设置</h3>
         <button @click="showSettings = false" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">

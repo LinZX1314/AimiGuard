@@ -637,6 +637,28 @@ class ScreenshotModel:
         conn.close()
 
 
+class TopologyModel:
+    """Topology persistence model (JSON based)"""
+    TOPOLOGY_FILE = os.path.join(BASE_DIR, "database", "topology.json")
+
+    @staticmethod
+    def get_topology():
+        if not os.path.exists(TopologyModel.TOPOLOGY_FILE):
+            return {"nodes": [], "links": []}
+        try:
+            with open(TopologyModel.TOPOLOGY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {"nodes": [], "links": []}
+
+    @staticmethod
+    def save_topology(data):
+        os.makedirs(os.path.dirname(TopologyModel.TOPOLOGY_FILE), exist_ok=True)
+        with open(TopologyModel.TOPOLOGY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+
+
 __all__ = [
     'NmapModel',
     'ScannerModel',
@@ -646,6 +668,7 @@ __all__ = [
     'SwitchAclModel',
     'SwitchWorkbenchModel',
     'ScreenshotModel',
+    'TopologyModel',
     'WorkflowModel',
     'WorkflowRunModel',
     'WorkflowWebhookModel',
