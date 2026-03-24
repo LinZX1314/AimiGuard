@@ -4,37 +4,37 @@
 
 @layer base {
   :root {
-    /* 亮色主题：蓝色点缀 + 灰蓝层次背景 */
-    --background: 213 30% 94%;    /* 淡蓝灰底色，与白色卡片拉开层次 */
+    /* 亮色主题：进一步压暗的灰蓝科技风 */
+    --background: 214 16% 80%;
     --foreground: 222 47% 11%;
-    --card: 0 0% 100%;           /* 白色卡片 */
+    --card: 214 14% 83%;
     --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
+    --popover: 214 13% 82%;
     --popover-foreground: 222 47% 11%;
-    --primary: 217 91% 60%;      /* 品牌蓝 #3B82F6 */
+    --primary: 216 88% 56%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 35% 82%;    /* 次级区域，蓝色更明显的中灰蓝 */
+    --secondary: 214 12% 73%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 215 15% 91%;
-    --muted-foreground: 215 16% 55%;
-    --accent: 217 91% 60%;       /* 强调蓝 */
+    --muted: 214 10% 76%;
+    --muted-foreground: 215 18% 34%;
+    --accent: 211 46% 52%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 30% 82%;
-    --input: 214 30% 84%;
-    --ring: 217 91% 60%;
+    --border: 214 12% 58%;
+    --input: 214 12% 63%;
+    --ring: 216 88% 56%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222 47% 4%; /* 深邃夜空蓝/黑，比纯黑更有质感 */
+    --background: 222 47% 4%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 6%; /* 提亮一点点 */
+    --card: 222 47% 6%;
     --card-foreground: 210 40% 98%;
     --popover: 222 47% 6%;
     --popover-foreground: 210 40% 98%;
-    --primary: 180 100% 50%; /* Electric Cyan */
+    --primary: 180 100% 50%;
     --primary-foreground: 180 100% 10%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -48,19 +48,132 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 180 100% 50%;
   }
-
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+
+  html:not(.dark) body {
+    background-image:
+      radial-gradient(circle at 12% 14%, hsl(var(--primary) / 0.045) 0%, transparent 16%),
+      radial-gradient(circle at 86% 10%, rgba(94, 111, 135, 0.08) 0%, transparent 14%),
+      linear-gradient(180deg, hsl(214 12% 84%), hsl(var(--background)) 38%, hsl(214 10% 76%));
+    background-attachment: fixed;
   }
 }
 
-/* 动态呼吸光晕层 */
+@layer utilities {
+  html:not(.dark) [class~='bg-background'] {
+    background-color: hsl(var(--background)) !important;
+  }
+
+  html:not(.dark) [class~='bg-card'] {
+    background-color: hsl(var(--card) / 0.88) !important;
+  }
+
+  html:not(.dark) [class~='bg-popover'] {
+    background-color: hsl(var(--popover) / 0.9) !important;
+  }
+
+  html:not(.dark) [class*='bg-background/50'] {
+    background-color: hsl(var(--card) / 0.42) !important;
+  }
+
+  html:not(.dark) [class*='bg-background/60'] {
+    background-color: hsl(var(--card) / 0.5) !important;
+  }
+
+  html:not(.dark) [class*='bg-background/70'] {
+    background-color: hsl(var(--card) / 0.58) !important;
+  }
+
+  html:not(.dark) [class*='bg-background/95'] {
+    background-color: hsl(var(--card) / 0.78) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/40'] {
+    background-color: hsl(var(--card) / 0.38) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/60'] {
+    background-color: hsl(var(--card) / 0.5) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/70'] {
+    background-color: hsl(var(--card) / 0.58) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/75'] {
+    background-color: hsl(var(--card) / 0.62) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/80'] {
+    background-color: hsl(var(--card) / 0.66) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/85'] {
+    background-color: hsl(var(--card) / 0.72) !important;
+  }
+
+  html:not(.dark) [class*='bg-card/95'] {
+    background-color: hsl(var(--card) / 0.8) !important;
+  }
+
+  html:not(.dark) [class*='bg-secondary/20'] {
+    background-color: hsl(var(--secondary) / 0.22) !important;
+  }
+
+  html:not(.dark) [class*='bg-secondary/30'] {
+    background-color: hsl(var(--secondary) / 0.28) !important;
+  }
+
+  html:not(.dark) [class*='bg-secondary/35'] {
+    background-color: hsl(var(--secondary) / 0.32) !important;
+  }
+
+  html:not(.dark) [class*='bg-secondary/40'] {
+    background-color: hsl(var(--secondary) / 0.36) !important;
+  }
+
+  html:not(.dark) [class*='bg-slate-50'],
+  html:not(.dark) [class*='bg-slate-100'],
+  html:not(.dark) [class*='bg-white'] {
+    background-color: hsl(var(--card) / 0.78) !important;
+  }
+
+  html:not(.dark) [class*='border-slate-200'],
+  html:not(.dark) [class*='border-slate-300'],
+  html:not(.dark) [class*='border-white'] {
+    border-color: hsl(var(--border) / 0.75) !important;
+  }
+
+  html:not(.dark) [class*='from-white'],
+  html:not(.dark) [class*='to-white'],
+  html:not(.dark) [class*='via-white/80'] {
+    background-image: linear-gradient(135deg, hsl(var(--card) / 0.82), hsl(var(--secondary) / 0.42), hsl(var(--muted) / 0.3)) !important;
+  }
+
+  html:not(.dark) [class*='hover:bg-white/5']:hover,
+  html:not(.dark) [class*='hover:bg-white/[0.02]']:hover,
+  html:not(.dark) [class*='hover:bg-slate-100']:hover,
+  html:not(.dark) [class*='hover:bg-white/80']:hover {
+    background-color: hsl(var(--secondary) / 0.34) !important;
+  }
+
+  html:not(.dark) [class*='shadow-sm'],
+  html:not(.dark) [class*='shadow-lg'],
+  html:not(.dark) [class*='shadow-2xl'] {
+    box-shadow: 0 10px 26px rgba(67, 84, 109, 0.12) !important;
+  }
+}
+
 body::after {
   content: '';
   position: fixed;
@@ -68,8 +181,10 @@ body::after {
   pointer-events: none;
   z-index: -2;
   opacity: 0;
-  /* 亮色模式：减弱光晕强度，避免中心区域发白 */
-  background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 72%);
+  background:
+    radial-gradient(circle at 18% 18%, hsl(var(--primary) / 0.04) 0%, transparent 20%),
+    radial-gradient(circle at 82% 14%, rgba(94, 111, 135, 0.05) 0%, transparent 16%),
+    radial-gradient(circle at 50% 52%, rgba(59, 130, 246, 0.018) 0%, transparent 46%);
   animation: none;
 }
 
@@ -84,16 +199,21 @@ html.ai-chat-background-disabled body::after {
 }
 
 html.app-immersive-active.dark body::after {
-  /* 暗色模式：赛博朋克深邃青蓝光晕，扩大范围，增强可见度 */
-background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, transparent 80%);
+  background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, transparent 80%);
 }
 
 @keyframes ambient-glow {
-  0% { transform: scale(1); opacity: 0.5; }
-  100% { transform: scale(1.2); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 0.28;
+  }
+
+  100% {
+    transform: scale(1.12);
+    opacity: 0.5;
+  }
 }
 
-/* 3D 透视网格地板 - 科幻虚拟地台效果 */
 .perspective-floor {
   position: fixed;
   bottom: 0;
@@ -104,7 +224,6 @@ background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.2) 0%, tra
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  /* 默认隐藏，通过动画渐入 */
   opacity: 0;
   animation: floor-fade-in 1.5s ease-out forwards;
   mask-image: linear-gradient(to top, black 10%, transparent 95%);
@@ -115,10 +234,14 @@ html.app-immersive-active .perspective-floor {
   animation: floor-fade-in 1.2s ease-out forwards;
 }
 
-/* 网格渐入动画 - 平滑不透明度过渡 */
 @keyframes floor-fade-in {
-  from { opacity: 0; }
-  to { opacity: 0.92; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0.5;
+  }
 }
 
 .perspective-floor__grid {
@@ -129,34 +252,30 @@ html.app-immersive-active .perspective-floor {
   height: 200%;
   background-size: 60px 60px;
   background-position: 0 0;
-  /* 亮色模式：低对比度网格线 */
   background-image:
-    linear-gradient(to right, rgba(51, 65, 85, 0.18) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(51, 65, 85, 0.18) 1px, transparent 1px);
-  /* 提高模糊，禁用炫光(drop-shadow) */
+    linear-gradient(to right, rgba(71, 85, 105, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(71, 85, 105, 0.08) 1px, transparent 1px);
   filter: blur(1.2px);
-  /* 使用 background-position 动画代替 transform 位移，彻底消除接缝 */
   transform: rotateX(60deg);
   animation: grid-scroll 4s linear infinite;
 }
 
 .dark .perspective-floor__grid {
-  /* 暗色模式：赛博青色网格线 */
   background-image:
-linear-gradient(to right, hsl(var(--primary) / 0.25) 1px, transparent 1px),
-  linear-gradient(to bottom, hsl(var(--primary) / 0.25) 1px, transparent 1px);
+    linear-gradient(to right, hsl(var(--primary) / 0.25) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--primary) / 0.25) 1px, transparent 1px);
   filter: blur(1.2px);
 }
 
-/* 用 background-position 实现完美无缝循环：每帧移动整个网格单元 */
 @keyframes grid-scroll {
-  from { background-position: 0 0; }
-  to { background-position: 0 60px; }
-}
+  from {
+    background-position: 0 0;
+  }
 
-/* -------------------------------------------------------------------------- */
-/* Theme Transition API (View Transitions)                                    */
-/* -------------------------------------------------------------------------- */
+  to {
+    background-position: 0 60px;
+  }
+}
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -177,29 +296,33 @@ linear-gradient(to right, hsl(var(--primary) / 0.25) 1px, transparent 1px),
   from {
     clip-path: circle(0% at var(--click-x, 50%) var(--click-y, 50%));
   }
+
   to {
     clip-path: circle(150% at var(--click-x, 50%) var(--click-y, 50%));
   }
 }
 
-/* fade-slide - 页面切换滑动动画 */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: opacity 0.25s ease, transform 0.25s ease;
   will-change: opacity, transform;
 }
+
 .fade-slide-enter-from {
   opacity: 0;
   transform: translate3d(-15px, 0, 0);
 }
+
 .fade-slide-enter-to {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
+
 .fade-slide-leave-from {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
+
 .fade-slide-leave-to {
   opacity: 0;
   transform: translate3d(15px, 0, 0);
@@ -211,72 +334,58 @@ html.view-transitioning body * {
   animation-duration: 0s !important;
 }
 
-/* login-fade - 登录页 ↔ 主布局平滑过渡 */
 .login-fade-enter-active {
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .login-fade-leave-active {
   transition: opacity 0.3s ease-in, transform 0.3s ease-in;
 }
+
 .login-fade-enter-from {
   opacity: 0;
   transform: scale(1.03);
 }
+
 .login-fade-enter-to {
   opacity: 1;
   transform: scale(1);
 }
+
 .login-fade-leave-from {
   opacity: 1;
   transform: scale(1);
 }
+
 .login-fade-leave-to {
   opacity: 0;
   transform: scale(0.97);
 }
 
-/* page-fade - 主布局出入场 */
 .page-fade-enter-active {
   transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .page-fade-leave-active {
   transition: opacity 0.2s ease-in, transform 0.2s ease-in;
 }
+
 .page-fade-enter-from {
   opacity: 0;
   transform: translate3d(0, 10px, 0);
 }
+
 .page-fade-enter-to {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
+
 .page-fade-leave-from {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
+
 .page-fade-leave-to {
   opacity: 0;
   transform: translate3d(0, -10px, 0);
 }
-
-/* Themes from Reference */
-:root {
-  --cyber-cyan: #00d4ff;
-  --cyber-green: #00ff88;
-  --cyber-orange: #ff7f24;
-  --cyber-yellow: #ffd700;
-  --cyber-red: #ff4444;
-  --cyber-purple: #9ca3af;
-}
-
-.honeypot-feed__list::-webkit-scrollbar {
-    width: 6px;
-}
-.honeypot-feed__list::-webkit-scrollbar-track {
-    background: transparent;
-}
-.honeypot-feed__list::-webkit-scrollbar-thumb {
-    background: rgba(59, 130, 246, 0.25);
-    border-radius: 999px;
-}
-

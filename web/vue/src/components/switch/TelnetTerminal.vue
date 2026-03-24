@@ -64,15 +64,13 @@ function initTerminal() {
   terminal.writeln('\x1b[33m提示: 请先选择设备并点击"连接"\x1b[0m')
   terminal.writeln('')
 
-  terminal.onData((data) => {
-    // Handle backspace
+  terminal.onData((data: string) => {
     if (data === '\r') {
       if (commandBuffer.trim()) {
         executeCommand(commandBuffer.trim())
       }
       commandBuffer = ''
     } else if (data === '\x7f') {
-      // Backspace
       if (commandBuffer.length > 0) {
         commandBuffer = commandBuffer.slice(0, -1)
         terminal?.write('\b \b')
@@ -111,7 +109,7 @@ async function executeCommand(command: string) {
   try {
     const result = await switchWorkbenchApi.runCommand({
       device_id: currentDevice.id,
-      command: command,
+      command,
       source: 'manual',
     })
 
@@ -144,7 +142,6 @@ async function connect(device: SwitchWorkbenchDevice) {
   terminal?.writeln(`\r\n\x1b[33m[连接中] ${device.name} (${device.host}:${device.port})...\x1b[0m`)
 
   try {
-    // Test connection by running a simple command
     const result = await switchWorkbenchApi.runCommand({
       device_id: device.id,
       command: 'display version',

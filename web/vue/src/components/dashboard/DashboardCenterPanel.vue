@@ -43,7 +43,6 @@ const props = defineProps<{
 
 const containerRef = ref<HTMLElement>()
 
-// 入场动画状态
 const animationState = ref({
   welcome: false,
   overviewMap: false,
@@ -78,7 +77,6 @@ const honeypotFeedItems = computed<HoneypotFeedItem[]>(() => {
     time: item.create_time_str || '刚刚',
   }))
 
-  // 按时间倒序排列，解析失败时保持原有顺序
   const withTs = realRows.map((item, index) => ({
     ...item,
     index,
@@ -145,11 +143,9 @@ const deviceHeaderData = computed(() => {
 })
 
 onMounted(() => {
-  // 启动入场动画序列
   setTimeout(() => { animationState.value.welcome = true }, 200)
   setTimeout(() => { animationState.value.overviewMap = true }, 400)
 
-  // 无真实数据时，模拟“加载后逐条新增”的历史告警效果
   if (!props.payload.recent_attacks.length) {
     const now = Date.now()
     const mockSeeds: HoneypotFeedItem[] = [
@@ -163,7 +159,6 @@ onMounted(() => {
     mockFeedTimer = window.setInterval(() => {
       const row = mockSeeds[cursor % mockSeeds.length]
 
-      // 新数据插入头部，形成倒序时间列表和自然位移动画
       mockFeedRows.value = [{
         ...row,
         id: `${row.id}-${Date.now()}`,
@@ -184,18 +179,16 @@ onUnmounted(() => {
 
 <template>
   <div ref="containerRef" class="dashboard-center-panel flex-1 min-h-0 relative rounded-lg border border-border/20">
-    <!-- 主内容区域 -->
     <div class="dashboard-center-panel__inner h-full flex flex-col p-3 md:p-3.5">
-      <!-- Topbar: 仅保留当前页面视图切换 -->
       <div class="mb-2.5 flex items-start justify-start shrink-0">
-<div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-primary/20 shadow-lg shadow-primary/5">
+        <div class="flex items-center gap-1 rounded-lg bg-card/75 p-1 backdrop-blur-sm border border-primary/20 shadow-lg shadow-primary/5">
           <button
             v-for="view in dashboardViews"
             :key="view.key"
             @click="activeView = view.key"
             class="group relative flex items-center gap-2 overflow-hidden rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-300"
             :class="activeView === view.key
-? 'text-primary bg-primary/10 border border-primary/30 shadow-inner'
+              ? 'text-primary bg-primary/10 border border-primary/30 shadow-inner'
               : 'text-muted-foreground hover:text-foreground'"
           >
             <span v-if="activeView === view.key" class="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent animate-pulse" />
@@ -205,10 +198,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 主内容区域切换 -->
       <transition name="view-fade" mode="out-in">
         <div class="flex-1 min-h-0 flex flex-col gap-3">
-          <!-- 三个标签统一动画，但顶部信息按各自页面内容显示 -->
           <div
             class="shrink-0 transition-all duration-700 ease-out"
             :class="animationState.welcome ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'"
@@ -242,7 +233,6 @@ onUnmounted(() => {
             class="view-stage-shell flex-1 flex flex-col transition-all duration-700 ease-out"
             :class="animationState.overviewMap ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'"
           >
-            <!-- 总览视图 -->
             <template v-if="activeView === 'overview'">
               <div class="map-card view-main-card">
                 <DashboardWorldMap
@@ -270,14 +260,12 @@ onUnmounted(() => {
                     <span class="honeypot-feed__time">{{ item.time }}</span>
                   </div>
                 </TransitionGroup>
-                <!-- 无数据时的占位 -->
                 <div v-if="!honeypotFeedItems.length" class="honeypot-feed__empty">
                   等待捕获数据…
                 </div>
               </div>
             </template>
 
-            <!-- 拓扑视图：与总览保持相同主体高度，下方无内容时保留空白区 -->
             <template v-else-if="activeView === 'topology'">
               <div class="map-card view-main-card">
                 <DashboardTopology :topology="payload.topology" :recent-attacks="payload.recent_attacks" :loading="loading" />
@@ -285,7 +273,6 @@ onUnmounted(() => {
               <div class="view-empty-pad" aria-hidden="true"></div>
             </template>
 
-            <!-- 设备视图：与总览保持相同主体高度，下方无内容时保留空白区 -->
             <template v-else>
               <div class="map-card view-main-card">
                 <DashboardDevicePanel :hide-summary-card="true" />
@@ -441,8 +428,9 @@ onUnmounted(() => {
 
 .honeypot-feed-card {
   border-radius: 12px;
-  border: 1px solid rgb(34 211 238 / 0.2);
-  background: linear-gradient(145deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.45));
+  border: 1px solid hsl(var(--border) / 0.72);
+  background: linear-gradient(155deg, hsl(var(--card) / 0.82), hsl(var(--secondary) / 0.4), hsl(var(--muted) / 0.26));
+  box-shadow: 0 10px 24px rgba(67, 84, 109, 0.12);
   padding: 8px 10px 8px;
 }
 
@@ -453,9 +441,9 @@ onUnmounted(() => {
   border-radius: 999px;
   font-size: 10px;
   letter-spacing: 0.5px;
-  color: rgb(165 243 252 / 0.95);
-  border: 1px solid rgb(34 211 238 / 0.32);
-  background: rgb(8 47 73 / 0.68);
+  color: hsl(var(--foreground) / 0.92);
+  border: 1px solid hsl(var(--border) / 0.78);
+  background: linear-gradient(135deg, hsl(var(--secondary) / 0.72), hsl(var(--card) / 0.84));
 }
 
 .honeypot-feed__list {
@@ -472,12 +460,12 @@ onUnmounted(() => {
 }
 
 .honeypot-feed__list::-webkit-scrollbar-track {
-  background: rgb(15 23 42 / 0.45);
+  background: hsl(var(--muted) / 0.5);
   border-radius: 999px;
 }
 
 .honeypot-feed__list::-webkit-scrollbar-thumb {
-  background: rgb(34 211 238 / 0.45);
+  background: hsl(var(--primary) / 0.35);
   border-radius: 999px;
 }
 
@@ -488,13 +476,39 @@ onUnmounted(() => {
   gap: 10px;
   font-size: 11px;
   border-radius: 10px;
+  border: 1px solid hsl(var(--border) / 0.68);
+  background: linear-gradient(140deg, hsl(var(--card) / 0.82), hsl(var(--secondary) / 0.34));
+  color: hsl(var(--foreground) / 0.92);
+  padding: 7px 10px;
+  box-shadow: 0 8px 18px rgba(67, 84, 109, 0.1);
+  animation: honeypot-item-pop 0.4s ease both;
+}
+
+:global(.dark) .honeypot-feed-card {
+  border: 1px solid rgb(34 211 238 / 0.2);
+  background: linear-gradient(145deg, rgb(8 47 73 / 0.5), rgb(2 6 23 / 0.45));
+  box-shadow: none;
+}
+
+:global(.dark) .honeypot-feed__title {
+  color: rgb(165 243 252 / 0.95);
+  border: 1px solid rgb(34 211 238 / 0.32);
+  background: rgb(8 47 73 / 0.68);
+}
+
+:global(.dark) .honeypot-feed__list::-webkit-scrollbar-track {
+  background: rgb(15 23 42 / 0.45);
+}
+
+:global(.dark) .honeypot-feed__list::-webkit-scrollbar-thumb {
+  background: rgb(34 211 238 / 0.45);
+}
+
+:global(.dark) .honeypot-feed__item {
   border: 1px solid rgb(34 211 238 / 0.2);
   background: linear-gradient(135deg, rgb(4 47 74 / 0.84), rgb(2 6 23 / 0.8));
   color: rgb(224 242 254);
-  padding: 7px 10px;
   box-shadow: 0 10px 28px rgb(2 6 23 / 0.45);
-  /* 逐条弹入动画 */
-  animation: honeypot-item-pop 0.4s ease both;
 }
 
 @keyframes honeypot-item-pop {
@@ -514,7 +528,7 @@ onUnmounted(() => {
   justify-content: center;
   min-height: 60px;
   font-size: 11px;
-  color: rgb(125 211 252 / 0.5);
+  color: hsl(var(--muted-foreground) / 0.72);
   letter-spacing: 1px;
 }
 
@@ -559,12 +573,12 @@ onUnmounted(() => {
 }
 
 .honeypot-feed__service {
-  color: rgb(165 243 252 / 0.95);
+  color: hsl(var(--primary) / 0.86);
 }
 
 .honeypot-feed__time {
   text-align: right;
-  color: rgb(125 211 252 / 0.88);
+  color: hsl(var(--muted-foreground) / 0.88);
 }
 
 .honeypot-list-enter-active,
@@ -621,11 +635,9 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1279px) {
-  /* No overrides needed since we use flexbox now */
 }
 
 @media (max-width: 640px) {
-  /* On very small max-width devices, we probably want scroll if it's too squished, but we assume landscape self-adaptation */
 }
 
 .dashboard-center-panel::-webkit-scrollbar {
