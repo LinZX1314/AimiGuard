@@ -330,8 +330,6 @@ onMounted(async () => {
             @update="handleUpdateDefinition"
             @select-node="(nodeId) => { selectedNodeId = nodeId }"
           />
-
-          <WorkflowRunPanel :runs="runs" :loading="loadingRunDetail && !selectedRunDetail" @select-run="openRunDetail" />
         </template>
 
         <Card v-else class="border-border/60 bg-card/80">
@@ -341,13 +339,15 @@ onMounted(async () => {
         </Card>
       </div>
 
-      <div>
+      <div class="space-y-4">
         <WorkflowInspector
           v-if="selectedWorkflow"
           :definition="selectedWorkflow.definition"
           :selected-node-id="selectedNodeId"
           @update="handleUpdateDefinition"
         />
+
+        <WorkflowRunPanel v-if="selectedWorkflow" :runs="runs" :loading="loadingRunDetail && !selectedRunDetail" @select-run="openRunDetail" />
 
         <Card v-else class="border-border/60 bg-card/80">
           <CardContent class="py-12 text-center text-sm text-muted-foreground">
