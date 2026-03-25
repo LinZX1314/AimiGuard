@@ -35,6 +35,119 @@ def _safe_parse_json(result_str):
     return result_str if isinstance(result_str, dict) else {'ok': False, 'error': str(result_str)}
 
 
+def _analyze_document(doc_content: str) -> dict:
+    """
+    解析安全演练文档，提取结构化信息
+
+    返回:
+        {
+            'summary': str,           # 文档摘要
+            'target_network': str,     # 目标网络
+            'key_services': list,     # 重点服务
+            'requirements': str,      # 演练要求
+            'action_plan': str,       # 行动计划
+        }
+    """
+    # ── 提取目标网络/IP段 ────────────────────────────────────────────────
+    ip_patterns = [
+        r'(?:目标|扫描范围|网络(?:地址|段)?)[\s:：]*([^\s\n,，]+(?:/[0-9]+)?)',
+        r'(?:IP|ip)[\s:：]*([^\s\n,，]+(?:/[0-9]+)?)',
+        r'((?:192\.168|10\.|172\.(?:1[6-9]|2[0-9]|3[01]))(?:[0-9.]+(?:/[0-9]+)?)?)',
+        r'((?:172\.(?:1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+(?:/[0-9]+)?))',
+    ]
+
+    target_network = ''
+    for pattern in ip_patterns:
+        match = re.search(pattern, doc_content)
+        if match:
+            target_network = match.group(1).strip()
+            break
+
+    # 如果没找到，尝试查找整个网段格式
+    if not target_network:
+        cidr_match = re.search(r'(\d+\.\d+\.\d+\.\d+/\d+)', doc_content)
+        if cidr_match:
+            target_network = cidr_match.group(1)
+
+    # ── 提取重点服务 ────────────────────────────────────────────────────
+    service_keywords = {
+        'web': ['web', 'http', 'https', '网站', '80', '443', '8080', '8443'],
+        'ssh': ['ssh', '22', '远程登录', 'linux', '服务器'],
+        'rdp': ['rdp', '3389', '远程桌面', 'windows'],
+        'mysql': ['mysql', '3306', '数据库', 'db', 'mariadb'],
+        'redis': ['redis', '6379', '缓存'],
+        'mongodb': ['mongodb', '27017', 'nosql'],
+        'ftp': ['ftp', '21', '文件传输'],
+        'smb': ['smb', '445', '139', '共享', 'samba'],
+        'telnet': ['telnet', '23'],
+        'dns': ['dns', '53', '域名'],
+        'mail': ['mail', 'smtp', '110', '143', '邮件'],
+    }
+
+    found_services = []
+    doc_lower = doc_content.lower()
+    for service, keywords in service_keywords.items():
+        if any(kw.lower() in doc_lower for kw in keywords):
+            found_services.append(service)
+
+    # 如果没找到明确服务，默认检查常见服务
+    if not found_services:
+        found_services = ['web', 'ssh', 'rdp', 'mysql']
+
+    # ── 提取演练要求 ────────────────────────────────────────────────────
+    requirement_patterns = [
+        r'(?:演练|测试|检测|要求|目标)[\s:：]*(.{10,200}?)(?:\n|$)',
+        r'需[要求]?.{10,100}',
+        r'请.{10,100}',
+    ]
+
+    requirements = ''
+    for pattern in requirement_patterns:
+        match = re.search(pattern, doc_content)
+        if match:
+            req = match.group(1).strip()
+            if len(req) > 10:
+                requirements = req
+                break
+
+    if not requirements:
+        requirements = '全面检测网络安全漏洞，发现问题如实记录'
+
+    # ── 生成行动计划 ────────────────────────────────────────────────────
+    action_plan_lines = [
+        f"1. drill_analyze_and_plan → 分析 {target_network or '目标网络'}",
+        f"2. drill_network_scan → 扫描网络",
+    ]
+
+    if 'ssh' in found_services:
+        action_plan_lines.append("3. drill_bruteforce_ssh → SSH检测")
+    if 'rdp' in found_services:
+        action_plan_lines.append("4. drill_bruteforce_rdp → RDP检测")
+    if 'mysql' in found_services:
+        action_plan_lines.append("5. drill_bruteforce_mysql → MySQL检测")
+
+    action_plan_lines.extend([
+        "6. drill_honeypot_audit → 蜜罐审计",
+        "7. drill_generate_report → 生成报告",
+    ])
+
+    action_plan = '\n'.join(action_plan_lines)
+
+    # ── 生成摘要 ────────────────────────────────────────────────────────
+    summary = f"""目标网络：{target_network or '未明确指定'}
+重点服务：{', '.join(found_services)}
+演练要求：{requirements}
+已制定{len(action_plan_lines)}步行动计划"""
+
+    return {
+        'summary': summary,
+        'target_network': target_network,
+        'key_services': found_services,
+        'requirements': requirements,
+        'action_plan': action_plan,
+    }
+
+
 # ─── 演练状态 ────────────────────────────────────────────────────────────────
 
 class DrillState:
@@ -105,38 +218,45 @@ class DrillState:
 # ─── 工具执行器映射 ──────────────────────────────────────────────────────────
 
 def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: DrillState) -> dict:
-    """
-    执行演练专用工具的核心逻辑
-    包含 drill_* 前缀的工具和现有系统工具的桥接
-    """
+    """执行演练专用工具"""
     import threading
     from datetime import datetime
 
-    # ── drill_analyze_document ───────────────────────────────────────────────
-    if tool_name == 'drill_analyze_document':
-        # 文档分析不需要真正执行，由 AI 直接处理
-        return {'ok': True, 'message': '请直接分析以下文档内容，提取目标网络、扫描范围和演练要求。'}
+    # ── drill_analyze_and_plan ──────────────────────────────────────────────
+    if tool_name == 'drill_analyze_and_plan':
+        doc_content = arguments.get('document_content', state.document_content)
+        if not doc_content:
+            doc_content = state.document_content
 
-    # ── drill_plan_actions ───────────────────────────────────────────────────
-    if tool_name == 'drill_plan_actions':
-        return {'ok': True, 'message': '请基于分析结果制定行动计划。'}
+        if not doc_content:
+            return {'ok': False, 'error': '无文档内容'}
 
-    # ── drill_network_scan ───────────────────────────────────────────────────
+        analysis = _analyze_document(doc_content)
+        state.document_summary = analysis['summary']
+        state.target_network = analysis['target_network']
+        state.action_plan = analysis['action_plan']
+
+        return {
+            'ok': True,
+            'target_network': analysis['target_network'],
+            'key_services': analysis['key_services'],
+            'action_plan': analysis['action_plan'],
+        }
+
+    # ── drill_network_scan ─────────────────────────────────────────────────
     if tool_name == 'drill_network_scan':
         target = arguments.get('target', '')
         ports = arguments.get('ports', '21,22,23,80,81,135,139,443,445,1433,3306,5432,6379,8080,8443')
-        threads = arguments.get('threads', 6000)
 
         if not target:
-            return {'ok': False, 'error': '缺少扫描目标'}
+            return {'ok': False, 'error': '缺少目标'}
 
         state.target_network = target
 
-        # 调用已有的 fscan 工具
         result_str = execute_existing_tool('run_fscan', {
             'target': target,
             'port': ports,
-            'threads': threads,
+            'threads': arguments.get('threads', 6000),
         }, cfg)
 
         result = _safe_parse_json(result_str)
@@ -148,21 +268,21 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
                 'result': result,
             })
 
-            # 智能分析：提取可疑服务
+            # 提取发现的主机和漏洞
             hosts = result.get('主机列表', [])
             vuln_list = result.get('漏洞列表', [])
-            findings = []
+
             for h in hosts:
                 ports_str = h.get('ports', '')
                 if ports_str:
-                    findings.append({
+                    state.add_result('finding', {
                         'ip': h.get('ip'),
                         'ports': ports_str,
                         'type': 'open_ports',
                         'severity': 'info',
                     })
             for v in vuln_list:
-                findings.append({
+                state.add_result('finding', {
                     'ip': v.get('ip'),
                     'port': v.get('port'),
                     'service': v.get('service'),
@@ -170,22 +290,17 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
                     'type': 'vulnerability',
                     'severity': 'high',
                 })
-            for f in findings:
-                state.add_result('finding', f)
-
-            host_count = result.get('发现主机', 0)
-            result['analysis'] = f'发现 {host_count} 台存活主机，已记录到演练状态'
 
         return result
 
-    # ── drill_web_screenshot ─────────────────────────────────────────────────
+    # ── drill_web_screenshot ────────────────────────────────────────────────
     if tool_name == 'drill_web_screenshot':
         url = arguments.get('url', '')
         ip = arguments.get('ip', '')
         port = arguments.get('port', 80)
 
         if not url or not ip:
-            return {'ok': False, 'error': '缺少 url 或 ip 参数'}
+            return {'ok': False, 'error': '缺少参数'}
 
         result_str = execute_existing_tool('take_screenshot', {
             'url': url,
@@ -203,18 +318,10 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
                 'url': url,
                 'screenshot_url': result.get('screenshot_url', ''),
             })
-            state.add_result('finding', {
-                'ip': ip,
-                'port': port,
-                'url': url,
-                'type': 'web_service',
-                'severity': 'info',
-                'description': '发现 Web 服务，已采集截图',
-            })
 
         return result
 
-    # ── 弱口令检测 ──────────────────────────────────────────────────────────
+    # ── 弱口令检测 ─────────────────────────────────────────────────────────
     if tool_name in ('drill_bruteforce_ssh', 'drill_bruteforce_rdp', 'drill_bruteforce_mysql'):
         target_ip = arguments.get('target_ip', '')
         port = arguments.get('port', 22 if 'ssh' in tool_name else (3389 if 'rdp' in tool_name else 3306))
@@ -222,7 +329,6 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
         if not target_ip:
             return {'ok': False, 'error': '缺少目标IP'}
 
-        # 调用 bruteforce 模块
         from .bruteforce import run_bruteforce
         result = run_bruteforce(tool_name, target_ip, port)
 
@@ -253,22 +359,28 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
         service_name = arguments.get('service_name')
         limit = arguments.get('limit', 50)
 
-        result_str = execute_existing_tool('get_honeypot_logs', {
+        logs_str = execute_existing_tool('get_honeypot_logs', {
             'service_name': service_name,
             'limit': limit,
         }, cfg)
+        logs_result = _safe_parse_json(logs_str)
 
-        result = _safe_parse_json(result_str)
+        stats_str = execute_existing_tool('get_honeypot_stats', {}, cfg)
+        stats_result = _safe_parse_json(stats_str)
 
-        if result.get('ok'):
+        if logs_result.get('ok'):
             state.add_result('honeypot', {
                 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'service': service_name or '全部',
-                'count': result.get('总数', 0),
-                'records': result.get('攻击记录', [])[:10],
+                'count': logs_result.get('总数', 0),
+                'records': logs_result.get('攻击记录', [])[:10],
+                'total_attacks': stats_result.get('总攻击次数', 0),
+                'top_services': stats_result.get('热门攻击服务', [])[:10],
+                'top_sources': stats_result.get('攻击来源Top10', []),
+                'trend': stats_result.get('7天攻击趋势', {}),
             })
 
-            records = result.get('攻击记录', [])
+            records = logs_result.get('攻击记录', [])
             for rec in records:
                 state.add_result('finding', {
                     'ip': rec.get('攻击IP'),
@@ -279,40 +391,20 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
                     'location': rec.get('来源地区'),
                 })
 
-        return result
+        return {'ok': logs_result.get('ok', False), 'logs': logs_result, 'stats': stats_result}
 
-    if tool_name == 'drill_honeypot_stats':
-        result_str = execute_existing_tool('get_honeypot_stats', {}, cfg)
-
-        result = _safe_parse_json(result_str)
-
-        return result
-
-    # ── 封禁IP ───────────────────────────────────────────────────────────────
-    if tool_name == 'drill_ban_ip':
-        target_ip = arguments.get('target_ip', '')
-        reason = arguments.get('reason', '演练中发现的可疑IP')
-
-        if not target_ip:
-            return {'ok': False, 'error': '缺少目标IP'}
-
-        result_str = execute_existing_tool('switch_acl_config', {
-            'action': 'ban',
-            'target_ip': target_ip,
-            'description': reason,
-        }, cfg)
-
-        result = _safe_parse_json(result_str)
-
-        if result.get('ok'):
-            state.add_result('ban', {
-                'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'ip': target_ip,
-                'reason': reason,
-                'result': result,
-            })
-
-        return result
+    # ── 本机IP查询 ──────────────────────────────────────────────────────────
+    if tool_name == 'drill_get_local_ip':
+        import socket
+        lan_ip = '无法获取'
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+        return {'ok': True, 'lan_ip': f"{lan_ip}/24"}
 
     # ── 报告生成 ────────────────────────────────────────────────────────────
     if tool_name == 'drill_generate_report':
@@ -331,13 +423,6 @@ def _execute_drill_tool(tool_name: str, arguments: dict, cfg: dict, state: Drill
             'ok': True,
             'report': report,
             'summary': state.get_exec_summary(),
-        }
-
-    # ── 状态查询 ────────────────────────────────────────────────────────────
-    if tool_name == 'drill_get_status':
-        return {
-            'ok': True,
-            **state.to_dict(),
         }
 
     # ── 未知工具 ────────────────────────────────────────────────────────────
@@ -456,7 +541,7 @@ def _generate_markdown_report(state: DrillState, exec_summary: str, scan_results
         for h in hosts[:20]:
             report += f"- `{h.get('ip', 'N/A')}` - 端口: {h.get('ports', 'N/A')}\n"
 
-    report += """
+    report += f"""
 ---
 
 ## 五、Web 截图采集
@@ -465,7 +550,7 @@ def _generate_markdown_report(state: DrillState, exec_summary: str, scan_results
 
 | # | IP | 端口 | URL | 采集时间 |
 |---|----|------|-----|----------|
-""".format(len=len(state.screenshot_results))
+"""
 
     for i, sr in enumerate(state.screenshot_results, 1):
         report += f"| {i} | `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | {sr.get('time', 'N/A')} |\n"
@@ -581,79 +666,22 @@ def _generate_markdown_report(state: DrillState, exec_summary: str, scan_results
 
 # ─── 系统提示词 ─────────────────────────────────────────────────────────────
 
-DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，是一个专业的网络安全 Agent，专精安全演练与渗透测试。
+DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent。
 
-## 核心能力
-你具备调用多种安全工具的能力，在安全演练中扮演"智能渗透测试 Agent"的角色。
+## 工作流
+1. drill_analyze_and_plan → 分析文档
+2. drill_network_scan → 扫描网络
+3. drill_bruteforce_ssh/rdp/mysql → 弱口令检测
+4. drill_honeypot_audit → 蜜罐审计
+5. drill_generate_report → 生成报告
 
-## 你的工具集
-- `drill_analyze_document`: 分析安全演练文档
-- `drill_plan_actions`: 制定演练行动计划
-- `drill_network_scan`: 网络资产探测与端口扫描
-- `drill_web_screenshot`: Web 服务截图采集
-- `drill_bruteforce_ssh`: SSH 弱口令检测
-- `drill_bruteforce_rdp`: RDP 弱口令检测
-- `drill_bruteforce_mysql`: MySQL 弱口令检测
-- `drill_honeypot_audit`: 蜜罐日志审计
-- `drill_honeypot_stats`: 蜜罐态势统计
-- `drill_ban_ip`: 封禁恶意IP
-- `drill_generate_report`: 生成演练报告
-- `drill_get_status`: 查询当前演练进度
+## 决策规则
+- 扫描发现端口 22 → drill_bruteforce_ssh
+- 扫描发现端口 3389 → drill_bruteforce_rdp
+- 扫描发现端口 3306 → drill_bruteforce_mysql
+- 所有检测完成后 → drill_generate_report
 
-## 演练工作流（Agent 循环）
-
-### 第一步：文档分析
-当用户提供演练文档后：
-1. 先用 `drill_analyze_document` 分析文档，提取：
-   - 目标网络范围（IP/网段）
-   - 重点检查的服务（Web、SSH、数据库等）
-   - 演练的具体要求
-
-### 第二步：制定计划
-使用 `drill_plan_actions` 制定行动计划，包括：
-- 扫描阶段：先 Ping 探测存活主机，再端口扫描
-- 服务枚举：重点端口的详细探测
-- 漏洞检测：弱口令测试、Web 截图等
-- 分析报告：汇总发现
-
-### 第三步：执行循环
-按照计划逐步执行，每一步：
-1. AI 决策：决定调用哪个工具
-2. 工具执行：获取实时结果
-3. 结果分析：判断是否需要下一步
-4. 继续循环直到任务完成
-
-### 第四步：生成报告
-所有演练步骤完成后：
-1. 调用 `drill_get_status` 汇总所有结果
-2. 调用 `drill_generate_report` 生成完整报告
-3. 用中文向用户展示报告摘要
-
-## 重要原则
-1. **循序渐进**：先扫描网络，再深入服务，最后弱口令检测
-2. **实事求是**：发现的漏洞如实记录，不夸大不缩小
-3. **自动决策**：根据扫描结果自动决定下一步（如发现SSH服务→尝试弱口令）
-4. **证据保存**：截图和扫描结果自动保存
-5. **防御响应**：发现攻击者IP时，主动封禁
-
-## Agent 循环终止条件
-- 已调用 `drill_generate_report` 生成了报告
-- 已执行超过 30 步（防止无限循环）
-- 所有计划步骤已完成
-
-## 报告要求
-生成中文报告，包含：
-1. 执行摘要（时间、步骤、目标）
-2. 文档分析结果
-3. 发现的安全问题（按严重级别分类）
-4. 扫描结果详情
-5. Web 截图证据
-6. 弱口令检测结果
-7. 蜜罐审计结果
-8. 修复建议
-
-现在，请分析用户提供的演练文档，开始执行安全演练任务。
-"""
+现在开始执行演练。"""
 
 
 # ─── 主执行器 ────────────────────────────────────────────────────────────────
@@ -661,20 +689,18 @@ DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，是一个专业的网络安
 def create_drill_stream(
     document_content: str,
     cfg: dict,
-    yield_func: callable,
     state: DrillState | None = None,
-) -> DrillState:
+) -> Generator[str, None, DrillState]:
     """
-    创建演练 Agent 流式执行器。
+    创建演练 Agent 流式执行器（生成器）。
 
     参数:
         document_content: 演练文档内容
         cfg: 系统配置
-        yield_func: 用于向客户端发送 SSE 数据的回调函数，签名为 yield_func(data: dict)
         state: 演练状态（可外部传入，用于支持断点续传）
 
     返回:
-        DrillState: 最终的演练状态
+        Generator[str, None, DrillState]: 生成 SSE 数据行的生成器
     """
     if state is None:
         state = DrillState()
@@ -707,14 +733,9 @@ def create_drill_stream(
         unified_log('DrillExecutor', f'=== Agent Step {state.step_count}/{state.max_steps} ===', 'INFO')
 
         # 发送步骤开始信息
-        yield_func({
-            'drill_step': {
-                'step': state.step_count,
-                'max_steps': state.max_steps,
-                'status': 'thinking',
-                'message': f'🧠 AI 正在分析并决策下一步行动... (第 {state.step_count} 步)',
-            }
-        })
+        yield json.dumps({
+            'content': f'🤔 AI 正在分析并决策下一步行动... (第 {state.step_count} 步)'
+        }) + '\n\n'
 
         # LLM 决策：是否调用工具
         tool_calls = []
@@ -724,15 +745,12 @@ def create_drill_stream(
             build_openai_messages(history), cfg, tools=tools
         ):
             if error:
-                yield_func({'error': error})
-                return state
+                yield json.dumps({'error': error}) + '\n\n'
+                return
 
             if chunk:
                 text_chunks.append(chunk)
-                yield_func({'content': chunk, 'drill_step': {
-                    'step': state.step_count,
-                    'status': 'thinking',
-                }})
+                yield json.dumps({'content': chunk}) + '\n\n'
 
             if tool_call:
                 tool_calls.append(tool_call)
@@ -756,19 +774,13 @@ def create_drill_stream(
             unified_log('DrillExecutor', f'🤖 执行工具: {tool_name} | 参数: {json.dumps(tool_args, ensure_ascii=False)[:200]}', 'INFO')
 
             # 发送工具调用开始
-            yield_func({
+            yield json.dumps({
                 'tool_call': {
                     'id': tc['id'],
                     'name': tool_name,
                     'arguments': tool_args,
-                    'status': 'executing',
-                    'drill_step': {
-                        'step': state.step_count,
-                        'status': 'executing',
-                        'tool': tool_name,
-                    },
                 }
-            })
+            }) + '\n\n'
 
             # 保存 AI 的 tool_call 消息（仅在第一个工具时附带 content，避免重复追加）
             if tc is tool_calls[0]:
@@ -796,20 +808,14 @@ def create_drill_stream(
 
             # 发送给前端（截断过长的结果）
             display_result = result_str[:2000] + '...' if len(result_str) > 2000 else result_str
-            yield_func({
+            yield json.dumps({
                 'tool_result': {
                     'id': tc['id'],
                     'name': tool_name,
                     'result': display_result,
-                    'status': 'done',
                     'full_result': result_str,
-                    'drill_step': {
-                        'step': state.step_count,
-                        'status': 'done',
-                        'tool': tool_name,
-                    },
                 }
-            })
+            }) + '\n\n'
 
             # 保存工具结果到历史
             history.append({
@@ -821,20 +827,16 @@ def create_drill_stream(
             # 检查是否已生成报告（演练完成）
             if tool_name == 'drill_generate_report' and tool_result.get('ok'):
                 state.is_complete = True
-                yield_func({
-                    'drill_complete': {
-                        'report': tool_result.get('report', ''),
-                        'summary': state.get_exec_summary(),
-                        'findings_count': len(state.findings),
-                    }
-                })
+                yield json.dumps({
+                    'content': f'✅ 演练完成，共发现 {len(state.findings)} 个安全问题'
+                }) + '\n\n'
                 break
 
     # ─── 循环结束 ────────────────────────────────────────────────────────────
     if not state.is_complete and state.step_count >= state.max_steps:
-        yield_func({
-            'drill_warning': '演练达到最大步数限制，自动结束',
-        })
+        yield json.dumps({
+            'content': '⚠️ 演练达到最大步数限制，自动结束'
+        }) + '\n\n'
 
     unified_log('DrillExecutor', f'演练完成 | 总步骤: {state.step_count} | 发现: {len(state.findings)}项 | 截图: {len(state.screenshot_results)}张', 'INFO')
 
