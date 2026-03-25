@@ -8,18 +8,20 @@ import sys
 import urllib3
 import requests
 import threading
+from pathlib import Path
 
 # 禁用 SSL 证书校验警告（蜜罐内网自签名证书场景）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 添加项目根目录到 sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(PROJECT_ROOT))
 from database.db import get_connection
 from database.models import HFishModel
 from utils.logger import log
 
 # 配置文件路径 (从程序所在目录的上一级读取)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = str(PROJECT_ROOT)
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 

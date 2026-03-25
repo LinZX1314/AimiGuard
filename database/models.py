@@ -435,6 +435,16 @@ class AiModel:
         return {row['ip']: dict(row) for row in rows}
 
     @staticmethod
+    def get_analysis_by_ip(ip):
+        """按 IP 获取单条 AI 分析记录（兼容旧调用）。"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM ai_analysis_logs WHERE ip = ? LIMIT 1', (ip,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    @staticmethod
     def create_session(title='新对话', context_type=None, context_id=None, is_drill_mode=0):
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn = get_connection()

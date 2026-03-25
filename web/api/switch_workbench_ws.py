@@ -126,15 +126,15 @@ def register_handlers():
         session_key = _session_key(payload.get('session_id'))
         host = str(raw_device.get('host') or raw_device.get('ip') or '').strip()
         if not host:
-            emit('terminal_error', {'message': '缺少主机地址'}, room=session_key)
+            emit('terminal_error', {'message': '缺少主机地址'})
             return
         if telnetlib is None:
-            emit('terminal_error', {'message': 'Telnet 依赖不可用'}, room=session_key)
+            emit('terminal_error', {'message': 'Telnet 依赖不可用'})
             return
 
         raw_id = raw_device.get('id')
         if not raw_id and host:
-            emit('terminal_error', {'message': '缺少设备标识，禁止直连未登记主机'}, room=session_key)
+            emit('terminal_error', {'message': '缺少设备标识，禁止直连未登记主机'})
             return
 
         resolved_device = None
@@ -144,15 +144,15 @@ def register_handlers():
             resolved_device = None
 
         if not resolved_device:
-            emit('terminal_error', {'message': '未找到已登记的交换机设备'}, room=session_key)
+            emit('terminal_error', {'message': '未找到已登记的交换机设备'})
             return
 
         device = resolved_device
         password = device.get('_password', '')
-
         if not password:
-
+            emit('terminal_error', {'message': '当前交换机未配置 Telnet 密码'})
             return
+
 
         _close_connection(session_key)
         try:
@@ -183,17 +183,17 @@ def register_handlers():
             paging_cmd = paging_disable or ('screen-length disable' if 'huawei' in vendor or 'h3c' in vendor else 'terminal length 0')
             if paging_cmd:
                 tn.write((paging_cmd + '\r').encode('utf-8'))
-            _emit_room('terminal_connected', {
+            emit('terminal_connected', {
                 'device': {
                     'id': device['id'],
                     'name': device['name'],
                     'host': device['host'],
                     'port': device['port'],
                 }
-            }, session_key)
+            })
         except Exception as exc:
             _close_connection(session_key)
-            emit('terminal_error', {'message': f'连接失败: {exc}'}, room=session_key)
+            emit('terminal_error', {'message': f'连接失败: {exc}'})
 
     @socketio.on('send_command', namespace=_NAMESPACE)
     def handle_send_command(data):
@@ -206,14 +206,14 @@ def register_handlers():
         with _telnet_lock:
             conn = _telnet_connections.get(session_key)
         if not conn:
-            emit('terminal_error', {'message': '未连接到设备'}, room=session_key)
+            emit('terminal_error', {'message': '未连接到设备'})
             return
         try:
             conn['tn'].write(command.encode('utf-8'))
         except Exception as exc:
-            emit('terminal_error', {'message': f'命令发送失败: {exc}'}, room=session_key)
+            emit('terminal_error', {'message': f'命令发送失败: {exc}'})
             _close_connection(session_key)
-            emit('terminal_disconnected', {'message': '终端连接已断开'}, room=session_key)
+            emit('terminal_disconnected', {'message': '终端连接已断开'})
 
     @socketio.on('disconnect_device', namespace=_NAMESPACE)
     def handle_disconnect_device(data):

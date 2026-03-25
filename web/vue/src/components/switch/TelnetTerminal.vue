@@ -20,6 +20,7 @@ let currentDevice: SwitchWorkbenchDevice | null = null
 let commandBuffer = ''
 let socketBound = false
 let connectingDevice: SwitchWorkbenchDevice | null = null
+let connectTimeoutId: number | null = null
 
 const terminalOptions = {
   theme: {
@@ -33,11 +34,39 @@ const terminalOptions = {
   scrollback: 10000,
 }
 
+function clearConnectTimeout() {
+  if (connectTimeoutId !== null) {
+    window.clearTimeout(connectTimeoutId)
+    connectTimeoutId = null
+  }
+}
+
+function startConnectTimeout() {
+  clearConnectTimeout()
+  connectTimeoutId = window.setTimeout(() => {
+    if (store.connectionStatus !== 'connecting') return
+    handleTerminalError({ message: '连接超时，请检查设备可达性、Telnet 配置或后端服务状态' })
+  }, 12000)
+}
+
 const handleSocketConnected = () => {
-  switchWorkbenchTerminal.join(store.terminalSession.sessionId)
+  if (store.connectionStatus === 'connecting') {
+    switchWorkbenchTerminal.join(store.terminalSession.sessionId)
+  }
+}
+
+const handleSocketJoined = (payload: { session_id: string }) => {
+  const rawSessionId = store.terminalSession.sessionId
+  if (!payload.session_id || (!payload.session_id.endsWith(`:${rawSessionId}`) && payload.session_id !== rawSessionId)) {
+    return
+  }
+  if (store.connectionStatus === 'connecting' && connectingDevice) {
+    switchWorkbenchTerminal.connectDevice(connectingDevice, rawSessionId)
+  }
 }
 
 const handleTerminalConnected = (_payload: { device: { id: number; name: string; host: string; port: number } }) => {
+  clearConnectTimeout()
   currentDevice = connectingDevice ?? currentDevice
   connectingDevice = null
   store.setConnectionStatus('connected')
@@ -65,6 +94,7 @@ const handleTerminalOutput = (payload: { output: string }) => {
 }
 
 const handleTerminalError = (payload: { message: string }) => {
+  clearConnectTimeout()
   const message = payload.message || '终端执行失败'
   terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
   store.appendTerminalMessage({
@@ -73,11 +103,13 @@ const handleTerminalError = (payload: { message: string }) => {
   })
   if (store.connectionStatus === 'connecting') {
     connectingDevice = null
+    currentDevice = null
     store.setConnectionStatus('disconnected')
   }
 }
 
 const handleSocketConnectError = (error: Error) => {
+  clearConnectTimeout()
   const message = error?.message || 'Socket 连接失败'
   terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
   store.appendTerminalMessage({
@@ -85,6 +117,7 @@ const handleSocketConnectError = (error: Error) => {
     content: `错误: ${message}`,
   })
   connectingDevice = null
+  currentDevice = null
   store.setConnectionStatus('disconnected')
 }
 
@@ -94,7 +127,9 @@ const handleSocketDisconnected = (reason: string) => {
 }
 
 const handleTerminalDisconnected = (payload: { message: string }) => {
+  clearConnectTimeout()
   store.setConnectionStatus('disconnected')
+  connectingDevice = null
   currentDevice = null
   commandBuffer = ''
   const message = payload.message || '已断开连接'
@@ -109,6 +144,7 @@ function bindSocketEvents() {
   if (socketBound) return
   socketBound = true
   switchWorkbenchTerminal.on('connected', handleSocketConnected)
+  switchWorkbenchTerminal.on('joined', handleSocketJoined)
   switchWorkbenchTerminal.on('terminal_connected', handleTerminalConnected)
   switchWorkbenchTerminal.on('terminal_output', handleTerminalOutput)
   switchWorkbenchTerminal.on('terminal_error', handleTerminalError)
@@ -121,6 +157,7 @@ function unbindSocketEvents() {
   if (!socketBound) return
   socketBound = false
   switchWorkbenchTerminal.off('connected', handleSocketConnected)
+  switchWorkbenchTerminal.off('joined', handleSocketJoined)
   switchWorkbenchTerminal.off('terminal_connected', handleTerminalConnected)
   switchWorkbenchTerminal.off('terminal_output', handleTerminalOutput)
   switchWorkbenchTerminal.off('terminal_error', handleTerminalError)
@@ -139,6 +176,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   disconnect(false)
+  switchWorkbenchTerminal.leave(store.terminalSession.sessionId)
+  switchWorkbenchTerminal.disconnect()
   unbindSocketEvents()
   terminal?.dispose()
 })
@@ -214,25 +253,36 @@ function handleResize() {
 }
 
 async function connect(device: SwitchWorkbenchDevice) {
-  if (store.connectionStatus === 'connecting') return
+  if (store.connectionStatus !== 'disconnected') return
 
+  connectingDevice = device
   currentDevice = device
   commandBuffer = ''
   store.rotateTerminalSession()
   store.setConnectionStatus('connecting')
+  startConnectTimeout()
 
   terminal?.writeln(`\r\n\x1b[33m[连接中] ${device.name} (${device.host}:${device.port})...\x1b[0m`)
 
-  switchWorkbenchTerminal.connect()
-  switchWorkbenchTerminal.join(store.terminalSession.sessionId)
-  switchWorkbenchTerminal.connectDevice(device, store.terminalSession.sessionId)
+  try {
+    switchWorkbenchTerminal.connect()
+    if (switchWorkbenchTerminal.isConnected()) {
+      switchWorkbenchTerminal.join(store.terminalSession.sessionId)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '终端连接失败'
+    handleSocketConnectError(new Error(message))
+  }
 }
 
 function disconnect(graceful = true) {
+  clearConnectTimeout()
   if (store.connectionStatus !== 'disconnected') {
     switchWorkbenchTerminal.disconnectDevice(store.terminalSession.sessionId, graceful)
+    switchWorkbenchTerminal.leave(store.terminalSession.sessionId)
   }
   store.setConnectionStatus('disconnected')
+  connectingDevice = null
   currentDevice = null
   commandBuffer = ''
 }

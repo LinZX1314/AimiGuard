@@ -1,7 +1,7 @@
 {
   "jwt_secret": "uNs6GAbbQaqw9Cx5qc9we9X7J27fCR0_W0G_3k0s6go",
   "hfish": {
-    "host_port": "192.168.0.5:4433",
+    "host_port": "192.168.0.4:4433",
     "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
     "sync_interval": 6,
     "sync_enabled": true,
@@ -9,7 +9,7 @@
   },
   "ai": {
     "enabled": true,
-    "auto_ban": true,
+    "auto_ban": false,
     "api_url": "https://npi.linzzx.top",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
     "model": "MiniMax-M2.7",

@@ -27,12 +27,32 @@ def get_fscan_executable():
     """检测可用的 fscan 可执行文件路径。"""
     import shutil
 
+    project_root = get_project_root()
+    env_fscan = os.environ.get('FSCAN_PATH', '').strip().strip('"')
+    local_candidates = [
+        os.path.join(project_root, 'lib', 'fscan.exe'),
+        os.path.join(project_root, 'bin', 'fscan.exe'),
+        os.path.join(project_root, 'plugin', 'bin', 'fscan.exe'),
+    ]
+
+    if env_fscan:
+        if os.path.isfile(env_fscan):
+            log("Fscan", f"使用环境变量 FSCAN_PATH: {env_fscan}", "INFO")
+            return env_fscan
+        log("Fscan", f"环境变量 FSCAN_PATH 指向文件不存在: {env_fscan}", "WARN")
+
+    for candidate in local_candidates:
+        if os.path.isfile(candidate):
+            log("Fscan", f"使用本地 fscan: {candidate}", "INFO")
+            return candidate
+
     fscan_path = shutil.which('fscan')
     if fscan_path:
-        log("Fscan", f"找到 fscan: {fscan_path}", "INFO")
+        log("Fscan", f"使用系统 PATH 中 fscan: {fscan_path}", "INFO")
         return fscan_path
 
-    log("Fscan", "未找到 fscan！请确保已安装并添加到 PATH。", "ERROR")
+    fallback_dirs = ' | '.join(sorted({os.path.dirname(p) for p in local_candidates}))
+    log("Fscan", f"未找到 fscan！可将 fscan.exe 放到: {fallback_dirs}，或配置 FSCAN_PATH，或加入系统 PATH。", "ERROR")
     return None
 
 

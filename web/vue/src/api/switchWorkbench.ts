@@ -120,6 +120,7 @@ export interface SwitchWorkbenchTerminalEventMap {
 export interface SwitchWorkbenchTerminalClient {
   connect(): void
   disconnect(): void
+  isConnected(): boolean
   join(sessionId?: string): void
   leave(sessionId?: string): void
   connectDevice(device: SwitchWorkbenchDevice, sessionId?: string): void
@@ -140,12 +141,18 @@ function buildTerminalClient(): SwitchWorkbenchTerminalClient {
 
   return {
     connect() {
+      const token = getToken() || ''
+      socket.auth = { token }
+      ;((socket.io.opts as any).extraHeaders) = token ? { Authorization: `Bearer ${token}` } : undefined
       if (!socket.connected) {
         socket.connect()
       }
     },
     disconnect() {
       socket.disconnect()
+    },
+    isConnected() {
+      return socket.connected
     },
     join(sessionId) {
       socket.emit('join', { session_id: sessionId })
@@ -154,7 +161,10 @@ function buildTerminalClient(): SwitchWorkbenchTerminalClient {
       socket.emit('leave', { session_id: sessionId })
     },
     connectDevice(device, sessionId) {
-      socket.emit('connect_device', { session_id: sessionId, device })
+      socket.emit('connect_device', {
+        session_id: sessionId,
+        device: { id: device.id },
+      })
     },
     sendCommand(command, sessionId) {
       socket.emit('send_command', { session_id: sessionId, command })
