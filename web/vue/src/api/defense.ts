@@ -16,9 +16,23 @@ export interface SwitchStatuses {
   online: number
 }
 
+export interface HFishSyncResult {
+  success: boolean
+  total?: number
+  new?: number
+  ban_count?: number
+  error_code?: string
+  error?: string
+}
+
 export const defenseApi = {
   async testHFish(): Promise<{ reachable: boolean; host_port?: string }> {
     const res: any = await api.post('/api/v1/defense/hfish/test', {})
+    return res?.data ?? res
+  },
+
+  async triggerHFishSync(): Promise<HFishSyncResult> {
+    const res: any = await api.post('/api/v1/defense/hfish/sync', {})
     return res?.data ?? res
   },
 

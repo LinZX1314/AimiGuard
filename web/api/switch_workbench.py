@@ -93,7 +93,7 @@ def _normalize_switch(sw: dict[str, Any], index: int, probe: bool = False) -> di
         'online': online,
         'status': status,
         'acl_number': int(sw.get('acl_number', 30) or 30),
-        'readonly_only': _as_bool(sw.get('readonly_only', True)),
+        'readonly_only': _as_bool(sw.get('readonly_only', False)),
         'tags': tags,
         'notes': str(sw.get('notes', '')).strip(),
         'last_seen': datetime.now().strftime('%Y-%m-%d %H:%M:%S') if online else '离线',
@@ -123,7 +123,7 @@ def _serialize_switch_config(sw: dict[str, Any], index: int) -> dict[str, Any] |
         'secret': str(sw.get('secret', sw.get('password', ''))).strip(),
         'acl_number': int(sw.get('acl_number', 30) or 30),
         'enabled': _as_bool(sw.get('enabled', True)),
-        'readonly_only': _as_bool(sw.get('readonly_only', True)),
+        'readonly_only': _as_bool(sw.get('readonly_only', False)),
         'notes': str(sw.get('notes', '')).strip(),
         'paging_disable': str(sw.get('paging_disable', '')).strip(),
         'tags': tags,
@@ -154,7 +154,7 @@ def _normalize_config_payload_item(raw: dict[str, Any], index: int) -> dict[str,
         'secret': str(raw.get('secret', raw.get('password', ''))).strip(),
         'acl_number': int(raw.get('acl_number', 30) or 30),
         'enabled': _as_bool(raw.get('enabled', True)),
-        'readonly_only': _as_bool(raw.get('readonly_only', True)),
+        'readonly_only': _as_bool(raw.get('readonly_only', False)),
         'notes': str(raw.get('notes', '')).strip(),
         'paging_disable': str(raw.get('paging_disable', '')).strip(),
         'tags': tags,
@@ -598,8 +598,6 @@ def workbench_run_command():
     if not device:
         return err('未找到目标交换机', 404)
 
-    if device.get('readonly_only', True) and not _is_readonly_command(command):
-        return err('当前工作台仅允许执行只读巡检命令', 403)
 
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     status = 'success'

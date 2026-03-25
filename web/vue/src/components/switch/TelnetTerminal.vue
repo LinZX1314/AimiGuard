@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useSwitchWorkbenchStore } from '@/stores/switchWorkbench'
-import { switchWorkbenchApi } from '@/api/switchWorkbench'
+import { switchWorkbenchTerminal } from '@/api/switchWorkbench'
 import type { SwitchWorkbenchDevice } from '@/api/switchWorkbench'
 
 const emit = defineEmits<{
@@ -18,6 +18,8 @@ let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let currentDevice: SwitchWorkbenchDevice | null = null
 let commandBuffer = ''
+let socketBound = false
+let connectingDevice: SwitchWorkbenchDevice | null = null
 
 const terminalOptions = {
   theme: {
@@ -31,20 +33,130 @@ const terminalOptions = {
   scrollback: 10000,
 }
 
+const handleSocketConnected = () => {
+  switchWorkbenchTerminal.join(store.terminalSession.sessionId)
+}
+
+const handleTerminalConnected = (_payload: { device: { id: number; name: string; host: string; port: number } }) => {
+  currentDevice = connectingDevice ?? currentDevice
+  connectingDevice = null
+  store.setConnectionStatus('connected')
+  terminal?.writeln('\x1b[32m[已连接]\x1b[0m')
+  terminal?.writeln('')
+  store.appendTerminalMessage({
+    type: 'system',
+    content: `已连接到 ${currentDevice?.name || '交换机'}`,
+  })
+
+  const pendingCommand = store.terminalSession.pendingCommand.trim()
+  if (pendingCommand) {
+    store.setPendingTerminalCommand('')
+    sendCommand(pendingCommand)
+  }
+}
+
+const handleTerminalOutput = (payload: { output: string }) => {
+  if (!payload.output) return
+  terminal?.write(payload.output)
+  store.appendTerminalMessage({
+    type: 'received',
+    content: payload.output,
+  })
+}
+
+const handleTerminalError = (payload: { message: string }) => {
+  const message = payload.message || '终端执行失败'
+  terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
+  store.appendTerminalMessage({
+    type: 'system',
+    content: `错误: ${message}`,
+  })
+  if (store.connectionStatus === 'connecting') {
+    connectingDevice = null
+    store.setConnectionStatus('disconnected')
+  }
+}
+
+const handleSocketConnectError = (error: Error) => {
+  const message = error?.message || 'Socket 连接失败'
+  terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
+  store.appendTerminalMessage({
+    type: 'system',
+    content: `错误: ${message}`,
+  })
+  connectingDevice = null
+  store.setConnectionStatus('disconnected')
+}
+
+const handleSocketDisconnected = (reason: string) => {
+  if (store.connectionStatus === 'disconnected') return
+  handleTerminalDisconnected({ message: `Socket 已断开: ${reason}` })
+}
+
+const handleTerminalDisconnected = (payload: { message: string }) => {
+  store.setConnectionStatus('disconnected')
+  currentDevice = null
+  commandBuffer = ''
+  const message = payload.message || '已断开连接'
+  terminal?.writeln(`\r\n\x1b[33m[${message}]\x1b[0m`)
+  store.appendTerminalMessage({
+    type: 'system',
+    content: message,
+  })
+}
+
+function bindSocketEvents() {
+  if (socketBound) return
+  socketBound = true
+  switchWorkbenchTerminal.on('connected', handleSocketConnected)
+  switchWorkbenchTerminal.on('terminal_connected', handleTerminalConnected)
+  switchWorkbenchTerminal.on('terminal_output', handleTerminalOutput)
+  switchWorkbenchTerminal.on('terminal_error', handleTerminalError)
+  switchWorkbenchTerminal.on('terminal_disconnected', handleTerminalDisconnected)
+  switchWorkbenchTerminal.on('connect_error', handleSocketConnectError)
+  switchWorkbenchTerminal.on('disconnect', handleSocketDisconnected)
+}
+
+function unbindSocketEvents() {
+  if (!socketBound) return
+  socketBound = false
+  switchWorkbenchTerminal.off('connected', handleSocketConnected)
+  switchWorkbenchTerminal.off('terminal_connected', handleTerminalConnected)
+  switchWorkbenchTerminal.off('terminal_output', handleTerminalOutput)
+  switchWorkbenchTerminal.off('terminal_error', handleTerminalError)
+  switchWorkbenchTerminal.off('terminal_disconnected', handleTerminalDisconnected)
+  switchWorkbenchTerminal.off('connect_error', handleSocketConnectError)
+  switchWorkbenchTerminal.off('disconnect', handleSocketDisconnected)
+}
+
 onMounted(async () => {
   await nextTick()
   initTerminal()
-
-  window.addEventListener('send-to-terminal', handleSendToTerminal as EventListener)
+  bindSocketEvents()
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('send-to-terminal', handleSendToTerminal as EventListener)
   window.removeEventListener('resize', handleResize)
-  disconnect()
+  disconnect(false)
+  unbindSocketEvents()
   terminal?.dispose()
 })
+
+watch(
+  () => store.terminalSession.pendingCommand,
+  (command) => {
+    if (!command) return
+    if (store.connectionStatus === 'connected') {
+      store.setPendingTerminalCommand('')
+      sendCommand(command)
+      return
+    }
+    if (store.connectionStatus === 'disconnected' && store.selectedDevice) {
+      connect(store.selectedDevice)
+    }
+  }
+)
 
 function initTerminal() {
   if (!terminalContainer.value) return
@@ -69,8 +181,15 @@ function initTerminal() {
 
     if (data === '\r') {
       if (commandBuffer.trim()) {
-        executeCommand(commandBuffer.trim())
+        sendCommand(commandBuffer.trim())
+      } else {
+        switchWorkbenchTerminal.sendCommand('\r', store.terminalSession.sessionId)
+        terminal?.write('\r\n')
       }
+      commandBuffer = ''
+    } else if (data === '\u0003') {
+      switchWorkbenchTerminal.sendCommand('\u0003', store.terminalSession.sessionId)
+      terminal?.write('^C')
       commandBuffer = ''
     } else if (data === '\x7f') {
       if (commandBuffer.length > 0) {
@@ -94,116 +213,50 @@ function handleResize() {
   }
 }
 
-function handleSendToTerminal(event: CustomEvent<{ command: string }>) {
-  const { command } = event.detail
-  if (store.connectionStatus === 'connected') {
-    terminal?.write(`\r\n`)
-    executeCommand(command)
-  }
-}
-
-async function executeCommand(command: string) {
-  if (!currentDevice || store.connectionStatus !== 'connected') return
-
-  terminal?.writeln('')
-  emit('command-sent', command)
-
-  try {
-    const result = await switchWorkbenchApi.runCommand({
-      device_id: currentDevice.id,
-      command,
-      source: 'manual',
-    })
-
-    if (result.output) {
-      terminal?.writeln(result.output)
-      store.appendTerminalMessage({
-        type: 'received',
-        content: result.output,
-      })
-    }
-
-    if (result.analysis) {
-      terminal?.writeln(`\x1b[36m[AI] ${result.analysis}\x1b[0m`)
-    }
-  } catch (e: any) {
-    terminal?.writeln(`\x1b[31m[错误] ${e.message || '命令执行失败'}\x1b[0m`)
-    store.appendTerminalMessage({
-      type: 'system',
-      content: `错误: ${e.message || '命令执行失败'}`,
-    })
-  }
-
-  terminal?.write('\r\n> ')
-}
-
 async function connect(device: SwitchWorkbenchDevice) {
+  if (store.connectionStatus === 'connecting') return
+
   currentDevice = device
+  commandBuffer = ''
+  store.rotateTerminalSession()
   store.setConnectionStatus('connecting')
 
   terminal?.writeln(`\r\n\x1b[33m[连接中] ${device.name} (${device.host}:${device.port})...\x1b[0m`)
 
-  try {
-    const result = await switchWorkbenchApi.runCommand({
-      device_id: device.id,
-      command: 'display version',
-      source: 'manual',
-    })
-
-    if (result.status === 'failed') {
-      store.setConnectionStatus('disconnected')
-      terminal?.writeln(`\r\n\x1b[31m[连接失败] ${result.output || '无法连接到设备'}\x1b[0m`)
-      terminal?.write('\r\n> ')
-      store.appendTerminalMessage({
-        type: 'system',
-        content: `连接失败: ${result.output || '无法连接到设备'}`,
-      })
-      return
-    }
-
-    store.setConnectionStatus('connected')
-    terminal?.writeln('\x1b[32m[已连接]\x1b[0m')
-    terminal?.writeln('')
-
-    if (result.output) {
-      terminal?.writeln(result.output)
-    }
-
-    terminal?.write('\r\n> ')
-
-    store.appendTerminalMessage({
-      type: 'system',
-      content: `已连接到 ${device.name}`,
-    })
-  } catch (e: any) {
-    store.setConnectionStatus('disconnected')
-    terminal?.writeln(`\r\n\x1b[31m[连接失败] ${e.message || '无法连接到设备'}\x1b[0m`)
-    terminal?.write('\r\n> ')
-
-    store.appendTerminalMessage({
-      type: 'system',
-      content: `连接失败: ${e.message || '无法连接到设备'}`,
-    })
-  }
+  switchWorkbenchTerminal.connect()
+  switchWorkbenchTerminal.join(store.terminalSession.sessionId)
+  switchWorkbenchTerminal.connectDevice(device, store.terminalSession.sessionId)
 }
 
-function disconnect() {
+function disconnect(graceful = true) {
+  if (store.connectionStatus !== 'disconnected') {
+    switchWorkbenchTerminal.disconnectDevice(store.terminalSession.sessionId, graceful)
+  }
   store.setConnectionStatus('disconnected')
   currentDevice = null
-  terminal?.writeln('\r\n\x1b[33m[已断开连接]\x1b[0m')
+  commandBuffer = ''
 }
 
 function sendCommand(command: string) {
-  if (store.connectionStatus === 'connected') {
-    terminal?.write(`\r\n`)
-    executeCommand(command)
-  }
+  const trimmed = command.trim()
+  if (!trimmed || store.connectionStatus !== 'connected') return
+
+  terminal?.write('\r\n')
+  emit('command-sent', trimmed)
+  store.setLastTerminalCommand(trimmed)
+  store.appendTerminalMessage({
+    type: 'sent',
+    content: trimmed,
+  })
+  switchWorkbenchTerminal.sendCommand(`${trimmed}\r`, store.terminalSession.sessionId)
 }
 
 function clear() {
   terminal?.clear()
   terminal?.writeln('\x1b[36m=== 终端已清除 ===\x1b[0m')
-  terminal?.write('\r\n> ')
+  if (store.connectionStatus === 'connected') {
+    terminal?.write('\r\n')
+  }
 }
 
 defineExpose({

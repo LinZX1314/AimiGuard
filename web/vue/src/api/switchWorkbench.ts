@@ -1,4 +1,5 @@
-import { api } from './index'
+import { io, type Socket } from 'socket.io-client'
+import { api, getToken } from './index'
 
 export interface SwitchWorkbenchDevice {
   id: number
@@ -104,6 +105,77 @@ export interface SwitchWorkbenchAiTurn {
   next_steps: string[]
   suggested_commands: SwitchWorkbenchAiSuggestion[]
 }
+
+export interface SwitchWorkbenchTerminalEventMap {
+  connected: (payload: { status: string }) => void
+  joined: (payload: { session_id: string }) => void
+  terminal_connected: (payload: { device: { id: number; name: string; host: string; port: number } }) => void
+  terminal_output: (payload: { output: string }) => void
+  terminal_error: (payload: { message: string }) => void
+  terminal_disconnected: (payload: { message: string }) => void
+  connect_error: (error: Error) => void
+  disconnect: (reason: string) => void
+}
+
+export interface SwitchWorkbenchTerminalClient {
+  connect(): void
+  disconnect(): void
+  join(sessionId?: string): void
+  leave(sessionId?: string): void
+  connectDevice(device: SwitchWorkbenchDevice, sessionId?: string): void
+  sendCommand(command: string, sessionId?: string): void
+  disconnectDevice(sessionId?: string, graceful?: boolean): void
+  on<K extends keyof SwitchWorkbenchTerminalEventMap>(event: K, handler: SwitchWorkbenchTerminalEventMap[K]): void
+  off<K extends keyof SwitchWorkbenchTerminalEventMap>(event: K, handler?: SwitchWorkbenchTerminalEventMap[K]): void
+}
+
+function buildTerminalClient(): SwitchWorkbenchTerminalClient {
+  const socket: Socket = io('/ws/switch-workbench/telnet', {
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
+    autoConnect: false,
+    auth: { token: getToken() || '' },
+    extraHeaders: getToken() ? { Authorization: `Bearer ${getToken()}` } : undefined,
+  })
+
+  return {
+    connect() {
+      if (!socket.connected) {
+        socket.connect()
+      }
+    },
+    disconnect() {
+      socket.disconnect()
+    },
+    join(sessionId) {
+      socket.emit('join', { session_id: sessionId })
+    },
+    leave(sessionId) {
+      socket.emit('leave', { session_id: sessionId })
+    },
+    connectDevice(device, sessionId) {
+      socket.emit('connect_device', { session_id: sessionId, device })
+    },
+    sendCommand(command, sessionId) {
+      socket.emit('send_command', { session_id: sessionId, command })
+    },
+    disconnectDevice(sessionId, graceful = true) {
+      socket.emit('disconnect_device', { session_id: sessionId, graceful })
+    },
+    on(event, handler) {
+      ;(socket as any).on(event, handler)
+    },
+    off(event, handler) {
+      if (handler) {
+        ;(socket as any).off(event, handler)
+      } else {
+        ;(socket as any).off(event)
+      }
+    },
+  }
+}
+
+export const switchWorkbenchTerminal = buildTerminalClient()
 
 export const switchWorkbenchApi = {
   devices(probe = true) {

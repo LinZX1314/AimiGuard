@@ -72,7 +72,7 @@ def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
         api_key: API密钥
 
     返回:
-        处理后的攻击详情列表
+        成功时返回处理后的攻击详情列表，失败时返回 {success: False, error_code, error}
     """
     urls = []
     base_url = (api_base_url or '').strip().rstrip('/')
@@ -92,11 +92,12 @@ def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
     urls = list(dict.fromkeys(urls))
     if not urls:
         log("HFish", _format_error(host_port, "地址配置无效"), "ERROR")
-        return None
+        return {"success": False, "error_code": "invalid_config", "error": "地址配置无效"}
 
     all_logs = []
     page_no = 1
     page_size = 10000
+    last_error = {"success": False, "error_code": "sync_failed", "error": "所有协议尝试均失败"}
 
     while True:
         payload = json.dumps({
@@ -122,6 +123,23 @@ def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
             for attempt in range(max_retries):
                 try:
                     response = requests.post(url, headers=headers, data=payload, verify=False, timeout=60)
+
+                    if response.status_code == 401:
+                        message = "认证失败(401)，请检查 API Key"
+                        log("HFish", _format_error(host_port, message), "WARN")
+                        last_error = {"success": False, "error_code": "unauthorized", "error": message}
+                        break
+                    if response.status_code == 403:
+                        message = "访问被拒绝(403)，当前密钥无权限"
+                        log("HFish", _format_error(host_port, message), "WARN")
+                        last_error = {"success": False, "error_code": "forbidden", "error": message}
+                        break
+                    if response.status_code == 404:
+                        message = f"接口不存在(404): {url}"
+                        log("HFish", _format_error(host_port, message), "WARN")
+                        last_error = {"success": False, "error_code": "not_found", "error": message}
+                        break
+
                     response.raise_for_status()
                     data = response.json()
 
@@ -137,6 +155,7 @@ def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
                         for item in detail_list:
                             # 1. 时间戳转换
                             if "create_time" in item:
+                                item["create_time_timestamp"] = item["create_time"]
                                 item["create_time_str"] = timestamp_to_time(item["create_time"])
                                 del item["create_time"]
 
@@ -165,35 +184,46 @@ def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):
                         continue
                     if "10061" in raw or "ConnectionRefusedError" in raw or "积极拒绝" in raw:
                         err_msg = "连接被拒绝，目标主机未响应（请确认 HFish 服务已启动）"
+                        err_code = "connection_refused"
                     elif "Name or service not known" in raw or "nodename nor servname" in raw:
                         err_msg = "无法解析主机名，请检查地址配置"
+                        err_code = "invalid_host"
                     else:
                         err_msg = raw[:80] + "..." if len(raw) > 80 else raw
+                        err_code = "connection_error"
                     # 继续尝试下一个URL
                     log("HFish", _format_error(host_port, err_msg), "WARN")
+                    last_error = {"success": False, "error_code": err_code, "error": err_msg}
                     break
 
                 except requests.exceptions.Timeout:
                     if attempt < max_retries - 1:
                         time.sleep(2)
                         continue
-                    log("HFish", _format_error(host_port, "请求超时，HFish 服务响应过慢"), "WARN")
+                    message = "请求超时，HFish 服务响应过慢"
+                    log("HFish", _format_error(host_port, message), "WARN")
+                    last_error = {"success": False, "error_code": "timeout", "error": message}
                     break
 
                 except requests.exceptions.HTTPError as e:
-                    log("HFish", _format_error(host_port, f"HTTP 错误 {e.response.status_code}: {str(e)}"), "WARN")
+                    status_code = e.response.status_code if e.response is not None else 'unknown'
+                    message = f"HTTP 错误 {status_code}: {str(e)}"
+                    log("HFish", _format_error(host_port, message), "WARN")
+                    last_error = {"success": False, "error_code": "http_error", "error": message}
                     break
 
                 except Exception as e:
-                    log("HFish", _format_error(host_port, str(e)), "WARN")
+                    message = str(e)
+                    log("HFish", _format_error(host_port, message), "WARN")
+                    last_error = {"success": False, "error_code": "unexpected_error", "error": message}
                     break
 
             if request_ok:
                 break
 
         if not data:
-            log("HFish", _format_error(host_port, "所有协议尝试均失败"), "ERROR")
-            return None
+            log("HFish", _format_error(host_port, last_error['error']), "ERROR")
+            return last_error
 
         if "data" not in data or "detail_list" not in data.get("data", {}):
             break
@@ -255,22 +285,24 @@ def main():
     def sync_once():
         """执行一次同步"""
         try:
+            probe_result = get_attack_logs(0, 0, host_port, api_key, api_base_url)
+            if isinstance(probe_result, dict) and probe_result.get('success') is False:
+                log("HFish", f"同步失败[{probe_result.get('error_code', 'sync_failed')}]: {probe_result.get('error', '未知错误')}", "ERROR")
+                return
+
             last_timestamp = HFishModel.get_last_timestamp()
-            if last_timestamp == 0:
-                start_time = 0
-            else:
-                start_time = last_timestamp
+            start_time = last_timestamp if last_timestamp else 0
 
             log("HFish", f"开始同步，从时间戳 {start_time} 开始")
 
-            logs = get_attack_logs(start_time, 0, host_port, api_key, api_base_url)
+            logs_result = probe_result if start_time == 0 else get_attack_logs(start_time, 0, host_port, api_key, api_base_url)
 
-            if logs is None:
-                log("HFish", "同步失败，跳过本次同步")
+            if isinstance(logs_result, dict) and logs_result.get('success') is False:
+                log("HFish", f"同步失败[{logs_result.get('error_code', 'sync_failed')}]: {logs_result.get('error', '未知错误')}", "ERROR")
                 return
-            elif logs:
-                new_count = HFishModel.save_logs(logs)
-                log("HFish", f"同步完成: 获取 {len(logs)} 条, 新增 {new_count} 条")
+            elif logs_result:
+                new_count = HFishModel.save_logs(logs_result)
+                log("HFish", f"同步完成: 获取 {len(logs_result)} 条, 新增 {new_count} 条")
             else:
                 log("HFish", "无新数据")
 

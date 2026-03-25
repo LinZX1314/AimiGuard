@@ -63,6 +63,14 @@ def run_nmap_scan(ip_ranges, arguments=None, timeout=6000):
     run_fscan_scan(ip_ranges, timeout)
 
 
+def _build_hfish_sync_error(error_code, error_message):
+    return {
+        'success': False,
+        'error_code': error_code,
+        'error': error_message,
+    }
+
+
 def run_hfish_sync():
     """执行一次 HFish 同步，并进行AI分析和自动封禁"""
     from database.models import HFishModel
@@ -73,14 +81,29 @@ def run_hfish_sync():
         from hfish_ai_ban import analyze_and_ban_attack_ips
 
         cfg = _load_cfg()
-        host_port = cfg.get('hfish', {}).get('host_port', '')
-        api_key = cfg.get('hfish', {}).get('api_key', '')
+        hfish_cfg = cfg.get('hfish', {})
+        host_port = hfish_cfg.get('host_port', '')
+        api_key = hfish_cfg.get('api_key', '')
+        api_base_url = hfish_cfg.get('api_base_url', '')
+
+        probe_result = get_attack_logs(0, 0, host_port, api_key, api_base_url)
+        if isinstance(probe_result, dict) and probe_result.get('success') is False:
+            return _build_hfish_sync_error(
+                probe_result.get('error_code', 'sync_failed'),
+                probe_result.get('error', 'HFish 同步失败')
+            )
+
+        probe_logs = probe_result
         last_timestamp = HFishModel.get_last_timestamp()
-        logs = get_attack_logs(last_timestamp, 0, host_port, api_key)
+        logs_result = probe_logs if last_timestamp == 0 else get_attack_logs(last_timestamp, 0, host_port, api_key, api_base_url)
 
-        if logs is None:
-            return {'success': False, 'error': '连接异常'}
+        if isinstance(logs_result, dict) and logs_result.get('success') is False:
+            return _build_hfish_sync_error(
+                logs_result.get('error_code', 'sync_failed'),
+                logs_result.get('error', 'HFish 同步失败')
+            )
 
+        logs = logs_result
         if not logs:
             _runtime_log('info', 'HFish 同步完成: 无新数据')
             return {'success': True, 'total': 0, 'new': 0}
@@ -88,7 +111,6 @@ def run_hfish_sync():
         count = HFishModel.save_logs(logs)
         _runtime_log('info', f'HFish 同步完成: 获取 {len(logs)} 条, 新增 {count} 条')
 
-        # 调用AI分析和自动封禁
         ai_result = analyze_and_ban_attack_ips(logs, cfg)
         if ai_result.get('analyzed', 0) > 0:
             _runtime_log('info', f'AI分析完成: 分析 {ai_result["analyzed"]} 个IP, 封禁 {ai_result["ban_count"]} 个')
@@ -96,7 +118,7 @@ def run_hfish_sync():
         return {'success': True, 'total': len(logs), 'new': count, 'ban_count': ai_result.get('ban_count', 0)}
     except Exception as e:
         _runtime_log('error', f'HFish 同步失败: {e}')
-        return {'success': False, 'error': str(e)}
+        return _build_hfish_sync_error('sync_failed', str(e))
 
 
 def run_hfish_sync_loop():
