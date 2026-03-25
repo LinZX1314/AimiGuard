@@ -362,460 +362,21 @@ function persistTtsPreference(enabled: boolean) {
 // ─── 演练模式状态 ────────────────────────────────────────────────────────────
 
 
-const drillMode = ref(false)
 
 
-const drillLog = ref<Array<{
 
 
-  id: number
 
 
-  type: 'step' | 'thinking' | 'tool_call' | 'tool_result' | 'complete' | 'warning' | 'text'
 
 
-  icon: string
 
 
-  color: string
 
 
-  label: string
 
 
-  content: string
 
-
-  timestamp: string
-
-
-  expanded: boolean
-
-
-  toolIcon: string
-
-
-}>>([])
-
-
-const drillStep = ref(0)
-
-
-const drillMaxStep = ref(30)
-
-
-const drillProgress = ref(0)
-
-
-const drillReport = ref('')
-
-
-const drillReportHtml = ref(false)
-
-
-const drillSummary = ref('')
-
-
-const drillFindingCount = ref(0)
-
-
-const drillPanelOpen = ref(false)
-
-
-const drillElapsed = ref(0)
-
-
-const drillHostsFound = ref(0)
-
-
-const drillScreenshotsTaken = ref(0)
-
-
-let drillLogId = 0
-
-
-let drillTimer: ReturnType<typeof setInterval> | null = null
-
-
-
-
-
-const parsedReportHtml = computed(() => {
-
-
-  const raw = drillReport.value || drillSummary.value
-
-
-  if (!raw) return ''
-
-
-  return DOMPurify.sanitize(marked.parse(raw) as string)
-
-
-})
-
-
-
-
-
-const toolIconMap: Record<string, string> = {
-
-
-  search: 'search',
-
-
-  network_scan: 'search',
-
-
-  scan: 'search',
-
-
-  camera: 'camera',
-
-
-  screenshot: 'camera',
-
-
-  web: 'camera',
-
-
-  bruteforce: 'lock',
-
-
-  ssh: 'lock',
-
-
-  rdp: 'lock',
-
-
-  mysql: 'lock',
-
-
-  honeypot: 'bug',
-
-
-  audit: 'bug',
-
-
-  stats: 'bug',
-
-
-  ban: 'ban',
-
-
-  report: 'file-text',
-
-
-  generate: 'file-text',
-
-
-  status: 'target',
-
-
-  plan: 'target',
-
-
-  analyze: 'eye',
-
-
-  document: 'eye',
-
-
-}
-
-
-
-
-
-function getToolIcon(toolName: string): string {
-
-
-  if (!toolName) return 'terminal'
-
-
-  const lower = toolName.toLowerCase()
-
-
-  for (const [key, icon] of Object.entries(toolIconMap)) {
-
-
-    if (lower.includes(key)) return icon
-
-
-  }
-
-
-  return 'zap'
-
-
-}
-
-
-
-
-
-function drillAdd(type: 'step' | 'thinking' | 'tool_call' | 'tool_result' | 'complete' | 'warning' | 'text', label: string, content: string, icon: string, color: string, toolIcon = 'terminal') {
-
-
-  if (drillLog.value.length >= 500) drillLog.value.shift()  // 限制最大长度，防止内存溢出
-
-
-  drillLog.value.push({
-
-
-    id: ++drillLogId,
-
-
-    type,
-
-
-    icon,
-
-
-    color,
-
-
-    label,
-
-
-    content,
-
-
-    timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-
-
-    expanded: type === 'tool_result',
-
-
-    toolIcon,
-
-
-  })
-
-
-  nextTick(() => {
-
-
-    const el = document.querySelector('.drill-log-scroll')
-
-
-    if (el) el.scrollTop = el.scrollHeight
-
-
-  })
-
-
-}
-
-
-
-
-
-function drillToggleExpand(id: number) {
-
-
-  const entry = drillLog.value.find(e => e.id === id)
-
-
-  if (entry) entry.expanded = !entry.expanded
-
-
-}
-
-
-
-
-
-function formatToolResult(result: string): string {
-
-
-  try {
-
-
-    const parsed = JSON.parse(result)
-
-
-    if (parsed.error) return `❌ ${parsed.error}`
-
-
-    if (parsed.vulnerable) {
-
-
-      const creds = parsed.vulnerable_creds || []
-
-
-      if (creds.length > 0) {
-
-
-        return `🔴 弱口令发现！\n${creds.map((c: any) => `  ${c.username} / ${c.password}`).join('\n')}`
-
-
-      }
-
-
-      return `✅ 检测完成，未发现常见弱口令`
-
-
-    }
-
-
-    if (parsed.发现主机 !== undefined) {
-
-
-      drillHostsFound.value = Math.max(drillHostsFound.value, parsed.发现主机)
-
-
-      return `✅ 发现 ${parsed.发现主机} 台主机`
-
-
-    }
-
-
-    if (parsed.total !== undefined) return `✅ 蜜罐记录 ${parsed.total} 次攻击`
-
-
-    if (parsed.screenshot_url) { drillScreenshotsTaken.value++; return `✅ 截图已保存` }
-
-
-    if (parsed.report) return `✅ 报告生成完毕，共 ${parsed.findings_count || 0} 项发现`
-
-
-    if (parsed.plan) {
-
-
-      // 行动计划：提取阶段数作为摘要，不显示完整 markdown
-
-
-      const phases = (parsed.plan.match(/### /g) || []).length
-
-
-      return `✅ ${parsed.message || '行动计划已生成'}（${phases} 个阶段）`
-
-
-    }
-
-
-    if (parsed.攻击记录 !== undefined) {
-
-
-      // 蜜罐审计结果
-
-
-      const count = parsed.总数 || (parsed.攻击记录 && parsed.攻击记录.length) || 0
-
-
-      const service = parsed.service || '全部'
-
-
-      return `✅ 蜜罐审计完成，服务 [${service}]，${count} 条攻击记录`
-
-
-    }
-
-
-    if (parsed.local_ip) {
-
-
-      // 本机IP查询结果
-
-
-      return `✅ 本机 IP: ${parsed.local_ip} | 主机名: ${parsed.hostname || 'unknown'}`
-
-
-    }
-
-
-    if (parsed.message) return parsed.message
-
-
-    return JSON.stringify(parsed, null, 2)
-
-
-  } catch { return result }
-
-
-}
-
-
-
-
-
-function toggleDrillPanel() {
-
-
-  drillPanelOpen.value = !drillPanelOpen.value
-
-
-  // 持久化面板开关状态（按会话区分），切换回来时恢复
-
-
-  const sid = currentSession.value
-
-
-  if (drillPanelOpen.value && sid && sid > 0) {
-
-
-    sessionStorage.setItem('drill_panel_' + sid, 'true')
-
-
-  } else if (sid && sid > 0) {
-
-
-    sessionStorage.removeItem('drill_panel_' + sid)
-
-
-  }
-
-
-}
-
-
-
-
-
-function startDrillTimer() {
-
-
-  drillElapsed.value = 0
-
-
-  if (drillTimer) clearInterval(drillTimer)
-
-
-  drillTimer = setInterval(() => { drillElapsed.value++ }, 1000)
-
-
-}
-
-
-
-
-
-function stopDrillTimer() {
-
-
-  if (drillTimer) { clearInterval(drillTimer); drillTimer = null }
-
-
-}
-
-
-
-
-
-function formatElapsed(seconds: number): string {
-
-
-  const m = Math.floor(seconds / 60)
-
-
-  const s = seconds % 60
-
-
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-
-
-}
 
 
 
@@ -938,175 +499,6 @@ async function loadMessages(sid: number) {
     
 
 
-    // 自动判定是否为 Drill 会话，实现切页后视图状态恢复
-
-
-    const isDrill = rawMessages.some(m => 
-
-
-      (m.role === 'user' && m.content?.includes('【演练文档】')) || 
-
-
-      (m.role === 'assistant' && m.tool_calls?.some(tc => tc.function?.name?.startsWith('drill_') || (tc as any).name?.startsWith('drill_')))
-
-
-    )
-
-
-
-
-
-    if (isDrill) {
-
-
-      drillMode.value = true
-
-
-      // 恢复该会话上次的面板开关状态（sessionStorage 中保存的值）
-
-
-      if (sessionStorage.getItem('drill_panel_' + sid) === 'true') {
-
-
-        drillPanelOpen.value = true
-
-
-      }
-
-
-      drillLog.value = []
-
-
-      drillStep.value = 0
-
-
-      drillFindingCount.value = 0
-
-
-      drillHostsFound.value = 0
-
-
-      drillScreenshotsTaken.value = 0
-
-
-      drillElapsed.value = 0
-
-
-      drillReport.value = ''
-
-
-      
-
-
-      rawMessages.forEach((msg, idx) => {
-
-
-        if (msg.role === 'user') {
-
-
-          // drillAdd('text', '👤 指挥官', msg.content || '', 'user', 'text-green-400', 'user')
-
-
-        } else if (msg.role === 'assistant') {
-
-
-          // if (msg.content) drillAdd('text', '🧠 协同思考', msg.content, 'cpu', 'text-blue-400', 'cpu')
-
-
-          if (msg.tool_calls?.length) {
-
-
-            msg.tool_calls.forEach(tc => {
-
-
-              drillStep.value++
-
-
-              const tName = tc.function?.name || (tc as any).name || ''
-
-
-              if (!tName) return
-
-
-              const toolArgs = typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments || (tc as any).arguments || {})
-
-
-              const tIcon = getToolIcon(tName)
-
-
-              const toolLabel = tName.replace('drill_', '').replace(/_/g, ' ').toUpperCase()
-
-
-              drillAdd('tool_call', `🔧 ${toolLabel}`, toolArgs, 'terminal', 'text-purple-400', tIcon)
-
-
-            })
-
-
-          }
-
-
-        } else if (msg.role === 'tool') {
-
-
-            const raw = typeof msg.content === 'object' ? JSON.stringify(msg.content) : (msg.content || '')
-
-
-            // 追加为独立的 tool_result 行，让 UI 可以折叠呈现，避免覆盖工具参数
-
-
-            drillAdd('tool_result', `↪ 结果反馈`, formatToolResult(raw), 'check-square', 'text-emerald-400')
-
-
-            try {
-
-
-              const r = JSON.parse(raw)
-
-
-              if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
-
-
-              if (r.发现主机 !== undefined) drillHostsFound.value = Math.max(drillHostsFound.value, r.发现主机)
-
-
-              if (r.screenshot_url) drillScreenshotsTaken.value++
-
-
-              if (r.report) {
-
-
-                drillReport.value = r.report
-
-
-                drillReportHtml.value = !!r.is_html
-
-
-              }
-
-
-            } catch (e) {}
-
-
-        }
-
-
-      })
-
-
-      if (drillReport.value) drillAdd('complete', '✅ 演练完成', `共发现 ${drillFindingCount.value} 个安全问题`, 'check-circle', 'text-emerald-400')
-
-
-    } else {
-
-
-      drillMode.value = false
-
-
-      drillPanelOpen.value = false
-
-
-    }
 
 
 
@@ -1456,22 +848,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   const isDrill = hasImageUpload || wasDrillSession || !!documentContent || extraParams?.context_type === 'drill' || extraParams?.is_drill
 
 
-  if (isDrill) {
-
-
-    drillLog.value = []; drillReport.value = ''; drillMode.value = true; drillPanelOpen.value = true
-
-
-    drillStep.value = 0; drillFindingCount.value = 0; drillElapsed.value = 0
-
-
-    drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
-
-
-    startDrillTimer()
-
-
-  }
 
 
 
@@ -1765,126 +1141,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
 
 
-          if (parsed.drill_mode) {
-
-
-            drillMode.value = true; drillLog.value = []; drillReport.value = ''
-
-
-            drillFindingCount.value = 0; drillHostsFound.value = 0; drillScreenshotsTaken.value = 0
-
-
-            startDrillTimer()
-
-
-            // 标记该会话为演练模式，后续发消息自动进入演练
-
-
-            if (currentSession.value && currentSession.value > 0) {
-
-
-              sessionStorage.setItem('drill_session', String(currentSession.value))
-
-
-            }
-
-
-            typeQueue += '\n🚀 演练启动：AI 正在分析演练文档，制定行动计划...\n'
-            startTypewriter()
-
-
-            continue
-
-
-          }
-
-
-
-
-
-          if (parsed.drill_step) {
-
-
-            drillStep.value = parsed.drill_step.step || 0
-
-
-            drillMaxStep.value = parsed.drill_step.max_steps || 30
-
-
-            drillProgress.value = Math.round((drillStep.value / drillMaxStep.value) * 100)
-
-
-            if (parsed.drill_step.status === 'thinking') {
-
-
-              typeQueue += '\n🤔 ' + (parsed.drill_step.message || '') + '\n'
-              startTypewriter()
-
-
-            }
-
-
-          }
-
-
-
-
-
-          if (parsed.drill_complete) {
-
-
-            drillReport.value = parsed.drill_complete.report || ''
-
-
-            drillReportHtml.value = !!parsed.drill_complete.is_html
-
-
-            drillSummary.value = parsed.drill_complete.summary || ''
-
-
-            drillFindingCount.value = parsed.drill_complete.findings_count || 0
-
-
-            stopDrillTimer()
-
-
-            const autoTag = parsed.drill_complete.auto_generated ? ' [自动生成]' : ''
-
-
-            const htmlTag = parsed.drill_complete.is_html ? ' 📊' : ''
-
-
-            typeQueue += '\n✅ 演练完成：共发现 ' + drillFindingCount.value + ' 个安全问题，演练结束' + autoTag + htmlTag + '\n'
-            startTypewriter()
-
-
-          }
-
-
-
-
-
-          if (parsed.drill_warning) {
-
-
-            typeQueue += '\n⚠️ 演练警告：' + parsed.drill_warning + '\n'
-            startTypewriter()
-
-
-          }
-
-
-
-
-
-          if (parsed.drill_final) {
-
-
-            typeQueue += '\n📋 最终状态：' + parsed.drill_final.exec_summary + '\n'
-            startTypewriter()
-
-
-          }
 
 
 
@@ -1920,19 +1176,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, arguments: parsed.tool_call.arguments })
 
 
-            if (drillMode.value) {
-
-
-              const tIcon = getToolIcon(parsed.tool_call.name)
-
-
-              const toolLabel = parsed.tool_call.name.replace('drill_', '').replace(/_/g, ' ').toUpperCase()
-
-
-              drillAdd('tool_call', `🔧 ${toolLabel}`, JSON.stringify(parsed.tool_call.arguments || {}, null, 2), 'terminal', 'text-purple-400', tIcon)
-
-
-            }
 
 
           }
@@ -1995,25 +1238,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
 
 
-            if (drillMode.value) {
-
-
-              drillAdd('tool_result', `↪ 结果反馈`, formatToolResult(resultStr), 'check-square', 'text-emerald-400')
-
-
-              try {
-
-
-                const r = JSON.parse(resultStr)
-
-
-                if (r.vulnerable && r.vulnerable_creds?.length > 0) drillFindingCount.value++
-
-
-              } catch (e) { console.warn('工具结果解析异常:', e) }
-
-
-            }
 
 
           }
@@ -2046,16 +1270,6 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             }
 
 
-            // 若已进入演练模式，补上 sessionStorage 标记（新会话场景 drill_mode 帧先于 session_id 帧到达）
-
-
-            if (drillMode.value) {
-
-
-              sessionStorage.setItem('drill_session', String(resolvedSessionId))
-
-
-            }
 
 
           }
@@ -2070,25 +1284,19 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
     }
 
 
-    if (!drillMode.value) speak(assistantMsg.content)
+    speak(assistantMsg.content)
 
 
   } catch(e: any) {
 
 
-    stopDrillTimer()
-
-
     if (e.name !== 'AbortError') assistantMsg.content = `错误：${e.message || '请求失败'}`
-
-
-    if (drillMode.value) drillAdd('warning', '❌ 请求失败', e.message || '', 'alert-triangle', 'text-red-400')
 
 
   } finally {
 
 
-    stopDrillTimer(); sending.value = false; activeChatController.value = null
+    sending.value = false; activeChatController.value = null
 
 
     const lastMsg = requestMessages[requestMessages.length - 1]
@@ -2133,10 +1341,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 function handleNewChat() {
 
 
-  messages.value = []; currentSession.value = -1; drillMode.value = false
-
-
-  drillLog.value = []; drillReport.value = ''; stopDrillTimer()
+  messages.value = []; currentSession.value = -1
 
 
   sessions.value = [{ id: -1, title: '新对话', created_at: new Date().toLocaleString() }, ...sessions.value.filter(s => s.id !== -1)]
@@ -2148,28 +1353,6 @@ function handleNewChat() {
 
 
 
-function openReportWindow() {
-
-
-  if (!drillReport.value) return
-
-
-  const win = window.open('', '_blank')
-
-
-  if (win) {
-
-
-    win.document.write(drillReport.value)
-
-
-    win.document.close()
-
-
-  }
-
-
-}
 
 
 
@@ -2220,7 +1403,7 @@ onBeforeUnmount(() => {
   // 切换页面时不主动中断请求，允许后台继续执行并在会话历史中恢复结果
 
 
-  stopDrillTimer(); if (window.speechSynthesis) window.speechSynthesis.cancel()
+  if (window.speechSynthesis) window.speechSynthesis.cancel()
 
 
 })
