@@ -72,7 +72,35 @@ def defense_hfish_logs():
 @require_auth
 def defense_hfish_stats():
     """Get HFish stats"""
-    return ok(HFishModel.get_stats())
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Get overall stats
+    c.execute('SELECT COUNT(*) as total FROM attack_logs')
+    total = c.fetchone()['total']
+    c.execute('SELECT COUNT(DISTINCT attack_ip) as ip_count FROM attack_logs')
+    ip_count = c.fetchone()['ip_count']
+    c.execute('SELECT COUNT(DISTINCT service_name) as service_count FROM attack_logs')
+    service_count = c.fetchone()['service_count']
+
+    # Get per-service stats (service_stats for frontend compatibility)
+    c.execute("""
+        SELECT
+            COALESCE(service_name, '未知') as name,
+            COUNT(*) as count
+        FROM attack_logs
+        GROUP BY service_name
+        ORDER BY count DESC
+    """)
+    service_stats = [{'name': r['name'], 'count': r['count']} for r in c.fetchall()]
+
+    conn.close()
+    return ok({
+        'total': total,
+        'unique_ips': ip_count,
+        'services': service_count,
+        'service_stats': service_stats,
+    })
 
 
 @defense_bp.route('/hfish/types', methods=['GET'])
