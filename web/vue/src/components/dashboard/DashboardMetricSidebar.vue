@@ -20,11 +20,12 @@ import TechCard from './shared/TechCard.vue'
 
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
+import { PieChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import 'echarts-wordcloud'
 import VChart from 'vue-echarts'
 
-use([CanvasRenderer, TooltipComponent])
+use([CanvasRenderer, PieChart, TooltipComponent])
 
 ChartJS.register(
   Title,
@@ -180,6 +181,48 @@ const wordCloudOption = computed(() => {
     ]
   }
 })
+
+const servicePieOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: {
+    trigger: 'item',
+    formatter: '{b}: {c} ({d}%)',
+  },
+  series: [
+    {
+      type: 'pie',
+      radius: ['35%', '60%'],
+      center: ['30%', '50%'],
+      avoidLabelOverlap: true,
+      itemStyle: {
+        borderRadius: 4,
+      },
+      label: {
+        show: true,
+        position: 'outside',
+        formatter: '{b}',
+        fontSize: 11,
+        color: '#94a3b8',
+        lineHeight: 18,
+      },
+      labelLine: {
+        show: true,
+        lineStyle: {
+          color: 'rgba(148,163,184,.5)',
+          width: 1,
+        },
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 12,
+          fontWeight: 'bold',
+        },
+      },
+      data: props.payload.hot_services.map((s) => ({ name: s.name, value: s.count })),
+    },
+  ],
+}))
 
 function getChainStatus(key: string): boolean {
   return props.payload.chain_status[key] ?? false

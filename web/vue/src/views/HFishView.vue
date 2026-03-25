@@ -2,8 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { api, notifyError } from '@/api/index'
 import { defenseApi, type HFishSyncResult } from '@/api/defense'
@@ -14,8 +14,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Pagination } from '@/components/ui/pagination'
 import {
-  RefreshCw,
-  RotateCw,
   Search,
   ChevronDown,
   ChevronRight,
@@ -29,7 +27,7 @@ import {
   AlertTriangle,
 } from 'lucide-vue-next'
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
 interface HFishTypeItem {
   name: string
@@ -80,6 +78,8 @@ const trend = ref({
   labels: [] as string[],
   values: [] as number[],
 })
+
+const serviceStatsData = ref<{ name: string; value: number }[]>([])
 
 const logs = ref<HFishLogItem[]>([])
 
@@ -168,6 +168,48 @@ const trendOption = computed(() => ({
   ],
 }))
 
+const servicePieOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: {
+    trigger: 'item',
+    formatter: '{b}: {c} ({d}%)',
+  },
+  series: [
+    {
+      type: 'pie',
+      radius: ['35%', '60%'],
+      center: ['25%', '50%'],
+      avoidLabelOverlap: true,
+      itemStyle: {
+        borderRadius: 4,
+      },
+      label: {
+        show: true,
+        position: 'outside',
+        formatter: '{b}',
+        fontSize: 11,
+        color: '#94a3b8',
+        lineHeight: 18,
+      },
+      labelLine: {
+        show: true,
+        lineStyle: {
+          color: 'rgba(148,163,184,.5)',
+          width: 1,
+        },
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 12,
+          fontWeight: 'bold',
+        },
+      },
+      data: serviceStatsData.value,
+    },
+  ],
+}))
+
 async function loadTypes() {
   loadingTypes.value = true
   try {
@@ -197,6 +239,10 @@ async function loadTypes() {
 
     typeTabs.value = settled.map((x, i) => (x.status === 'fulfilled' ? x.value : baseCards[i]))
     totalAttacks.value = typeTabs.value.reduce((sum, item) => sum + item.total_attacks, 0)
+    serviceStatsData.value = serviceStats.map((s: any) => ({
+      name: s.name || '未知',
+      value: Number(s.count || 0),
+    }))
   } catch (e) {
     console.error(e)
   }
@@ -368,23 +414,17 @@ onMounted(async () => {
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
       <Card class="border-l-[4px] border-l-primary xl:col-span-2">
         <CardContent class="p-5">
-          <div class="flex items-center justify-between gap-4">
-            <div>
+          <div class="flex items-center gap-6">
+            <div class="flex-shrink-0">
               <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">HFish 攻击总量</p>
               <h2 class="text-4xl font-bold text-primary mt-1">{{ totalAttacks }}</h2>
               <p class="text-xs text-muted-foreground mt-1">展示最近同步到本地的攻击聚合统计</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              @click="manualSync"
-              :disabled="loadingDetail"
-              class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-            >
-              <RotateCw v-if="loadingDetail" class="h-4 w-4 mr-2 animate-spin" />
-              <RefreshCw v-else class="h-4 w-4 mr-2" />
-              手动同步
-            </Button>
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+              <div class="h-[160px] flex-1 min-w-0">
+                <VChart :option="servicePieOption" autoresize />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

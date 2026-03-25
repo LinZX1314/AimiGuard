@@ -111,6 +111,9 @@ def run_hfish_sync():
         count = HFishModel.save_logs(logs)
         _runtime_log('info', f'HFish 同步完成: 获取 {len(logs)} 条, 新增 {count} 条')
 
+        if count == 0:
+            return {'success': True, 'total': len(logs), 'new': 0}
+
         ai_result = analyze_and_ban_attack_ips(logs, cfg)
         if ai_result.get('analyzed', 0) > 0:
             _runtime_log('info', f'AI分析完成: 分析 {ai_result["analyzed"]} 个IP, 封禁 {ai_result["ban_count"]} 个')
