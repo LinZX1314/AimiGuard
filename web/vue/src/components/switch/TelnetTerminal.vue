@@ -41,6 +41,29 @@ function clearConnectTimeout() {
   }
 }
 
+function getSystemMessageColor(content: string) {
+  if (content.startsWith('[错误]')) return '31'
+  if (content.startsWith('[已连接]')) return '32'
+  return '33'
+}
+
+function writeSystemMessage(content: string, persist = true) {
+  terminal?.writeln(`\r\n\x1b[${getSystemMessageColor(content)}m${content}\x1b[0m`)
+  if (persist) {
+    store.appendTerminalMessage({
+      type: 'system',
+      content,
+    })
+  }
+}
+
+function replaySystemMessages() {
+  const systemMessages = store.terminalMessages.filter((msg) => msg.type === 'system')
+  for (const msg of systemMessages.slice(-20)) {
+    writeSystemMessage(msg.content, false)
+  }
+}
+
 function startConnectTimeout() {
   clearConnectTimeout()
   connectTimeoutId = window.setTimeout(() => {
@@ -70,12 +93,7 @@ const handleTerminalConnected = (_payload: { device: { id: number; name: string;
   currentDevice = connectingDevice ?? currentDevice
   connectingDevice = null
   store.setConnectionStatus('connected')
-  terminal?.writeln('\x1b[32m[已连接]\x1b[0m')
-  terminal?.writeln('')
-  store.appendTerminalMessage({
-    type: 'system',
-    content: `已连接到 ${currentDevice?.name || '交换机'}`,
-  })
+  writeSystemMessage('[已连接]')
 
   const pendingCommand = store.terminalSession.pendingCommand.trim()
   if (pendingCommand) {
@@ -96,11 +114,7 @@ const handleTerminalOutput = (payload: { output: string }) => {
 const handleTerminalError = (payload: { message: string }) => {
   clearConnectTimeout()
   const message = payload.message || '终端执行失败'
-  terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
-  store.appendTerminalMessage({
-    type: 'system',
-    content: `错误: ${message}`,
-  })
+  writeSystemMessage(`[错误] ${message}`)
   if (store.connectionStatus === 'connecting') {
     connectingDevice = null
     currentDevice = null
@@ -111,11 +125,7 @@ const handleTerminalError = (payload: { message: string }) => {
 const handleSocketConnectError = (error: Error) => {
   clearConnectTimeout()
   const message = error?.message || 'Socket 连接失败'
-  terminal?.writeln(`\r\n\x1b[31m[错误] ${message}\x1b[0m`)
-  store.appendTerminalMessage({
-    type: 'system',
-    content: `错误: ${message}`,
-  })
+  writeSystemMessage(`[错误] ${message}`)
   connectingDevice = null
   currentDevice = null
   store.setConnectionStatus('disconnected')
@@ -133,11 +143,7 @@ const handleTerminalDisconnected = (payload: { message: string }) => {
   currentDevice = null
   commandBuffer = ''
   const message = payload.message || '已断开连接'
-  terminal?.writeln(`\r\n\x1b[33m[${message}]\x1b[0m`)
-  store.appendTerminalMessage({
-    type: 'system',
-    content: message,
-  })
+  writeSystemMessage(`[${message}]`)
 }
 
 function bindSocketEvents() {
@@ -213,6 +219,7 @@ function initTerminal() {
 
   terminal.writeln('\x1b[36m=== 交换机工作台终端 ===\x1b[0m')
   terminal.writeln('\x1b[33m提示: 请先选择设备并点击"连接"\x1b[0m')
+  replaySystemMessages()
   terminal.writeln('')
 
   terminal.onData((data: string) => {
