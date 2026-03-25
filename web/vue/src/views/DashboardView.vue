@@ -109,27 +109,43 @@ onUnmounted(() => {
 .dashboard-screen :deep(.world-map-shell),
 .dashboard-screen :deep(.topology-stage-shell),
 .dashboard-screen :deep(.device-panel-card),
-.dashboard-screen :deep(.topology-detail-card),
-.dashboard-screen :deep(.device-detail-strip) {
+.dashboard-screen :deep(.topology-detail-card) {
   background: linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--secondary) / 0.38));
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 32px hsl(var(--primary) / 0.08);
 }
 
-.dashboard-screen :deep(.dashboard-kpi-shell::before) {
-  opacity: 0.12;
+:global(html:not(.dark) .dashboard-screen .view-main-card--device),
+:global(html:not(.dark) .dashboard-screen .device-panel-shell),
+:global(html:not(.dark) .dashboard-screen .device-panel-grid) {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.dashboard-screen :deep(.kpi-chip),
-.dashboard-screen :deep(.topology-stage-board__legend),
-.dashboard-screen :deep(.world-map-shell__status),
-.dashboard-screen :deep(.device-panel-card__eyebrow),
-.dashboard-screen :deep(.device-detail-strip__eyebrow),
-.dashboard-screen :deep(.topology-stage-board__grid),
-.dashboard-screen :deep(.world-map-shell__loading) {
-  background: hsl(var(--secondary) / 0.4);
-  backdrop-filter: blur(8px);
-  box-shadow: none;
+:global(html:not(.dark) .dashboard-screen .view-main-card--device) {
+  border-color: transparent !important;
+}
+
+:global(html:not(.dark) .dashboard-screen .device-detail-strip) {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-color: hsl(var(--border) / 0.55) !important;
+}
+
+:global(html:not(.dark) .dashboard-screen .device-detail-strip__eyebrow) {
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border) / 0.75) !important;
+}
+
+:global(html:not(.dark) .dashboard-screen .device-detail-strip__main strong),
+:global(html:not(.dark) .dashboard-screen .device-detail-strip__list strong) {
+  color: hsl(var(--foreground)) !important;
+}
+
+:global(html:not(.dark) .dashboard-screen .device-detail-strip__main p),
+:global(html:not(.dark) .dashboard-screen .device-detail-strip__list span) {
+  color: hsl(var(--muted-foreground)) !important;
 }
 
 .dashboard-screen :deep(.map-card),

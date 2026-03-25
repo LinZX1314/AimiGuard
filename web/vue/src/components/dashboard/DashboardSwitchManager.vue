@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useUiStore } from '@/stores/ui'
 
 
 
@@ -132,6 +133,9 @@ interface OverviewPayload {
 
 
 
+
+const uiStore = useUiStore()
+const isDark = computed(() => uiStore.theme === 'dark')
 
 const ports = ref(createDefaultSwitchPorts())
 
@@ -889,7 +893,7 @@ onMounted(() => {
 
 
 
-  <section class="switch-shell" aria-label="设备面板">
+  <section class="switch-shell" :class="{ 'switch-shell--dark': isDark }" aria-label="设备面板">
 
 
 
@@ -1081,7 +1085,7 @@ onMounted(() => {
 
 
 
-      <div class="switch-chassis">
+      <div class="switch-chassis" :class="{ 'switch-chassis--dark': isDark }">
 
 
 
@@ -1099,7 +1103,7 @@ onMounted(() => {
 
 
 
-        <div class="switch-port-grid">
+        <div class="switch-port-grid" :class="{ 'switch-port-grid--dark': isDark }">
 
 
 
@@ -1231,7 +1235,7 @@ onMounted(() => {
 
 
 
-<DialogContent class="sm:max-w-[425px] border-border/80 bg-slate-200/82 backdrop-blur-xl text-slate-800">
+<DialogContent class="sm:max-w-[425px] border-border/80 bg-slate-200/82 backdrop-blur-xl text-slate-800 dark:border-white/10 dark:bg-[#0b1220]/96 dark:text-slate-100">
 
 
 
@@ -1646,17 +1650,501 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
 
 
 <style scoped>
+.switch-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border-radius: 20px;
+  overflow: hidden;
 
+  --switch-bg: linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary)));
+  --switch-border: rgba(0, 0, 0, 0.08);
+  --switch-text-muted: rgba(0, 0, 0, 0.5);
+  --switch-heading: #0f172a;
+  --chassis-bg: #dbe2ea;
+  --chassis-border: #c9d2dd;
+  --chassis-shadow: rgba(0, 0, 0, 0.1);
+  --brand-color: rgba(0, 0, 0, 0.08);
+  --port-bg: rgba(255, 255, 255, 0.5);
+  --port-border: rgba(0, 0, 0, 0.1);
+  --jack-bg: #334155;
+  --jack-border: #475569;
 
+  background: var(--switch-bg);
+  border: 1px solid var(--switch-border);
+}
 
+:global(html.dark) .switch-shell,
+.switch-shell--dark {
+  --switch-bg: linear-gradient(180deg, rgba(3, 8, 20, .98), rgba(8, 12, 22, .99));
+  --switch-border: rgba(0, 0, 0, .65);
+  --switch-text-muted: #cbd5e1 !important;
+  --switch-heading: #f1f5f9 !important;
+  --chassis-bg: linear-gradient(180deg, #0b0f17, #121821);
+  --chassis-border: #05070c;
+  --chassis-shadow: rgba(0, 0, 0, .55);
+  --brand-color: rgba(255, 255, 255, .12);
+  --port-bg: rgba(2, 6, 23, .82);
+  --port-border: rgba(148, 163, 184, .12);
+  --jack-bg: #0b0f14;
+  --jack-border: #2b3442;
 
+  background: var(--switch-bg) !important;
+  border-color: var(--switch-border) !important;
+}
 
-.switch-shell{position:relative;display:flex;flex-direction:column;height:100%;min-height:420px;border:1px solid rgba(255,255,255,.08);border-radius:20px;background:linear-gradient(180deg,rgba(5,10,24,.96),rgba(12,12,18,.98));overflow:hidden}.switch-head,.switch-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}.switch-head__identity,.switch-head p,.switch-head__reload,.switch-summary,.switch-port,.switch-modal__head,.switch-toggle-group,.switch-modal__stats div{display:flex;align-items:center}.switch-head__identity{gap:14px}.switch-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;color:var(--primary);border:1px solid rgba(59,130,246,.2);background:rgba(59,130,246,.08)}.switch-icon svg,.switch-head__reload svg{width:22px;height:22px}.switch-head h3,.switch-modal__head h4{margin:0}.switch-head p,.switch-modal__stats span{margin:0;font:11px/1.4 'JetBrains Mono',monospace;color:var(--muted-foreground)}.switch-head p{display:flex;flex-wrap:wrap;gap:10px}.switch-head p strong{color:var(--cyber-green)}.switch-head__reload,.switch-modal__close,.switch-toggle,.switch-modal__save{min-height:44px;border-radius:12px;border:1px solid transparent;transition:background-color .18s ease,border-color .18s ease,opacity .18s ease}.switch-head__reload,.switch-modal__save{padding:0 14px;font-weight:600}.switch-head__reload{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--foreground);gap:10px}.switch-summary span,.switch-chassis__range,.switch-port__id,.switch-modal__field span,.switch-modal__stats strong{font-family:'JetBrains Mono',monospace;font-size:11px}.switch-summary strong,.switch-modal__stats strong{color:var(--primary)}.switch-stage{flex:1;display:grid;place-items:center;padding:24px}.switch-chassis{position:relative;width:min(100%,860px);padding:20px;border-radius:12px;border:2px solid #2a2d36;background:#1a1c23;box-shadow:0 16px 40px rgba(0,0,0,.35)}.switch-chassis__lights{position:absolute;top:12px;left:18px;display:flex;gap:6px}.switch-chassis__lights span{width:8px;height:8px;border-radius:999px}.switch-chassis__lights span:first-child{background:#22c55e;box-shadow:0 0 12px #22c55e}.switch-chassis__lights span:last-child{background:#3b82f6}.switch-chassis__brand{position:absolute;right:26px;top:24px;font-size:34px;font-weight:900;font-style:italic;letter-spacing:-.06em;color:rgba(255,255,255,.12)}.switch-port-grid{margin-top:44px;padding:16px;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.06);border-radius:8px;display:grid;gap:8px}.switch-port-row{display:flex;justify-content:center;gap:8px}.switch-port{position:relative;flex-direction:column;gap:6px;padding:0;background:none;border:0;color:var(--foreground)}.switch-port__jack{width:34px;height:34px;border-radius:4px;border:2px solid #333;border-top:0;background:#111;position:relative}.switch-port[data-status='admin-down'] .switch-port__jack{background:#333;border-color:#555}.switch-port__jack::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:12px;height:6px;background:#222}.switch-port__jack::after{content:'';position:absolute;left:4px;right:4px;bottom:4px;height:4px;background:linear-gradient(90deg,#b8860b,#ffd700,#b8860b);opacity:.55}.switch-port__led{width:10px;height:5px;border-radius:999px;background:rgba(255,255,255,.16);box-shadow:0 0 10px rgba(255,255,255,.12)}.switch-port[data-status='up'] .switch-port__led{background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.65)}.switch-port[data-status='admin-down'] .switch-port__led{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.55)}.switch-chassis__range{margin-top:16px;text-align:center;color:rgba(255,255,255,.3);letter-spacing:.3em;text-transform:uppercase}.switch-modal{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}.switch-modal__dialog{width:min(100%,420px);padding:22px;border-radius:18px;border:1px solid rgba(59,130,246,.28);background:linear-gradient(180deg,rgba(10,15,24,.96),rgba(5,9,16,.98));box-shadow:0 24px 60px rgba(0,0,0,.45)}.switch-modal__body,.switch-modal__field{display:grid;gap:12px}.switch-modal__body{margin-top:16px}.switch-modal__close{padding:0 10px;border-color:rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7)}.switch-toggle-group{gap:10px}.switch-toggle{flex:1;justify-content:center;padding:0 12px;border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7)}.switch-toggle--danger.switch-toggle--active{border-color:rgba(255,68,68,.4);background:rgba(255,68,68,.16);color:#ff9c9c}.switch-toggle--active{border-color:rgba(34,197,94,.42);background:rgba(34,197,94,.12);color:#6ee7b7}.switch-modal__field input{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.36);color:var(--foreground);padding:0 14px}.switch-modal__stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.04)}.switch-modal__stats div{flex-direction:column;align-items:flex-start;gap:4px}.switch-modal__save{justify-content:center;border-color:rgba(59,130,246,.35);background:rgba(59,130,246,.12);color:var(--primary)}.switch-head__reload:focus-visible,.switch-port:focus-visible,.switch-modal__close:focus-visible,.switch-toggle:focus-visible,.switch-modal__field input:focus-visible,.switch-modal__save:focus-visible{outline:2px solid rgba(59,130,246,.7);outline-offset:2px}.switch-spin{animation:switch-spin 1s linear infinite}@keyframes switch-spin{to{transform:rotate(360deg)}}
+.switch-head,
+.switch-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border-bottom: 1px solid var(--switch-border);
+}
 
+.switch-head__identity,
+.switch-head p,
+.switch-head__reload,
+.switch-summary,
+.switch-port,
+.switch-modal__head,
+.switch-toggle-group,
+.switch-modal__stats div {
+  display: flex;
+  align-items: center;
+}
 
+.switch-head__identity {
+  gap: 14px;
+}
 
+.switch-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  color: var(--primary);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  background: hsl(var(--primary) / 0.08);
+}
 
+.switch-icon svg,
+.switch-head__reload svg {
+  width: 22px;
+  height: 22px;
+}
 
+.switch-head h3,
+.switch-modal__head h4 {
+  margin: 0;
+  color: var(--switch-heading);
+}
+
+.switch-head p,
+.switch-modal__stats span {
+  margin: 0;
+  font: 11px/1.4 'JetBrains Mono', monospace;
+  color: var(--switch-text-muted);
+}
+
+.switch-head p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.switch-head p strong {
+  color: hsl(var(--primary));
+}
+
+.switch-head__reload,
+.switch-modal__close,
+.switch-toggle,
+.switch-modal__save {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: background-color .18s ease, border-color .18s ease, opacity .18s ease;
+}
+
+.switch-head__reload,
+.switch-modal__save {
+  padding: 0 14px;
+  font-weight: 600;
+}
+
+.switch-head__reload {
+  border-color: var(--switch-border);
+  background: rgba(125, 125, 125, 0.05);
+  color: var(--foreground);
+  gap: 10px;
+}
+
+.switch-summary span,
+.switch-chassis__range,
+.switch-port__id,
+.switch-modal__field span,
+.switch-modal__stats strong {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.switch-summary strong,
+.switch-modal__stats strong {
+  color: hsl(var(--primary));
+}
+
+.switch-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.switch-chassis {
+  position: relative;
+  width: min(100%, 860px);
+  max-width: 100%;
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px solid var(--chassis-border);
+  background: var(--chassis-bg);
+  box-shadow: 0 16px 40px var(--chassis-shadow);
+}
+
+.switch-chassis--dark {
+  background: linear-gradient(180deg, #0b0f17, #121821) !important;
+  border-color: #05070c !important;
+}
+
+.switch-chassis__lights {
+  position: absolute;
+  top: 12px;
+  left: 18px;
+  display: flex;
+  gap: 6px;
+}
+
+.switch-chassis__lights span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.switch-chassis__lights span:first-child {
+  background: #22c55e;
+  box-shadow: 0 0 12px #22c55e;
+}
+
+.switch-chassis__lights span:last-child {
+  background: #3b82f6;
+}
+
+.switch-chassis__brand {
+  position: absolute;
+  right: 26px;
+  top: 24px;
+  font-size: 34px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -.06em;
+  color: var(--brand-color);
+}
+
+.switch-port-grid {
+  margin-top: 44px;
+  padding: 16px;
+  background: var(--port-bg);
+  border: 1px solid var(--port-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.switch-port-grid--dark {
+  background: rgba(2, 6, 23, .82) !important;
+  border-color: rgba(148, 163, 184, .12) !important;
+}
+
+.switch-port-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.switch-port {
+  position: relative;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--foreground);
+}
+
+.switch-port__jack {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 2px solid var(--jack-border);
+  border-top: 0;
+  background: var(--jack-bg);
+  position: relative;
+}
+
+.switch-port[data-status='admin-down'] .switch-port__jack {
+  background: #333;
+  border-color: #555;
+}
+
+.switch-port__jack::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 6px;
+  background: #222;
+}
+
+.switch-port__jack::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  height: 4px;
+  background: linear-gradient(90deg, #b8860b, #ffd700, #b8860b);
+  opacity: .55;
+}
+
+.switch-port__led {
+  width: 10px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(125, 125, 125, 0.4);
+  box-shadow: 0 0 10px rgba(0, 0, 0, .05);
+}
+
+:global(html.dark) .switch-port__led {
+  background: rgba(255, 255, 255, .16);
+  box-shadow: 0 0 10px rgba(255, 255, 255, .12);
+}
+
+:global(html.dark) .switch-head h3 {
+  color: #f1f5f9 !important;
+}
+
+:global(html.dark) .switch-head p {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-head p span {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-head p strong {
+  color: #67e8f9 !important;
+}
+
+:global(html.dark) .switch-summary strong {
+  color: #67e8f9 !important;
+}
+
+:global(html.dark) .switch-shell .switch-head h3 {
+  color: #f1f5f9 !important;
+}
+
+:global(html.dark) .switch-shell .switch-head p {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-shell .switch-head p span {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-shell .switch-head p strong {
+  color: #67e8f9 !important;
+}
+
+:global(html.dark) section.switch-shell .switch-head__identity h3 {
+  color: #f1f5f9 !important;
+}
+
+:global(html.dark) section.switch-shell .switch-head__identity p {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) section.switch-shell .switch-head__identity p span {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) section.switch-shell .switch-head__identity p strong {
+  color: #67e8f9 !important;
+}
+
+:global(html.dark) .switch-chassis {
+  background: #121316 !important;
+  border-color: #000000 !important;
+}
+
+:global(html.dark) .switch-summary span {
+  color: #94a3b8 !important;
+}
+
+:global(html.dark) .switch-head__reload {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-head__reload span {
+  color: #cbd5e1 !important;
+}
+
+:global(html.dark) .switch-chassis__range {
+  color: #94a3b8 !important;
+}
+
+:global(html.dark) .switch-port__id {
+  color: #cbd5e1 !important;
+}
+
+.switch-port[data-status='up'] .switch-port__led {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, .65);
+}
+
+.switch-port[data-status='admin-down'] .switch-port__led {
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, .55);
+}
+
+.switch-chassis__range {
+  margin-top: 16px;
+  text-align: center;
+  color: var(--switch-text-muted);
+  letter-spacing: .3em;
+  text-transform: uppercase;
+}
+
+.switch-modal {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(8px);
+}
+
+.switch-modal__dialog {
+  width: min(100%, 420px);
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid hsl(var(--primary) / 0.3);
+  background: var(--card);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+
+.switch-modal__body,
+.switch-modal__field {
+  display: grid;
+  gap: 12px;
+}
+
+.switch-modal__body {
+  margin-top: 16px;
+}
+
+.switch-modal__close {
+  padding: 0 10px;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.switch-toggle-group {
+  gap: 10px;
+}
+
+.switch-toggle {
+  flex: 1;
+  justify-content: center;
+  padding: 0 12px;
+  border-color: var(--border);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.switch-toggle--danger.switch-toggle--active {
+  border-color: rgba(255, 68, 68, .4);
+  background: rgba(255, 68, 68, .16);
+  color: #ff9c9c;
+}
+
+.switch-toggle--active {
+  border-color: hsl(var(--primary) / 0.4);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+
+.switch-modal__field input {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground);
+  padding: 0 14px;
+}
+
+.switch-modal__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+}
+
+.switch-modal__stats div {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.switch-modal__save {
+  justify-content: center;
+  border-color: hsl(var(--primary) / 0.3);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+
+.switch-head__reload:focus-visible,
+.switch-port:focus-visible,
+.switch-modal__close:focus-visible,
+.switch-toggle:focus-visible,
+.switch-modal__field input:focus-visible,
+.switch-modal__save:focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.7);
+  outline-offset: 2px;
+}
+
+.switch-spin {
+  animation: switch-spin 1s linear infinite;
+}
+
+@keyframes switch-spin {
+  to {
+    transform: rotate(360deg)
+  }
+}
 </style>
 
 
