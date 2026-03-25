@@ -459,6 +459,15 @@ class AiModel:
         return session_id
 
     @staticmethod
+    def update_session_drill_mode(session_id, is_drill_mode):
+        """更新会话的演练模式标记"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE ai_chat_sessions SET is_drill_mode = ? WHERE id = ?', (is_drill_mode, session_id))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
     def list_sessions(limit=50):
         conn = get_connection()
         cursor = conn.cursor()
