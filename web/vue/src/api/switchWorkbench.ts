@@ -135,6 +135,7 @@ function buildTerminalClient(): SwitchWorkbenchTerminalClient {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     autoConnect: false,
+    reconnection: false,
     auth: { token: getToken() || '' },
     extraHeaders: getToken() ? { Authorization: `Bearer ${getToken()}` } : undefined,
   })
