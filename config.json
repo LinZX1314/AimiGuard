@@ -30,7 +30,7 @@
     ],
     "fscan_timeout": 6000,
     "scan_interval": 604800,
-    "scan_enabled": true
+    "scan_enabled": false
   },
   "workflow": {
     "enabled": true,
