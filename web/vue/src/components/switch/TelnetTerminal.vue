@@ -118,6 +118,10 @@ const handleTerminalOutput = (payload: { output: string }) => {
 const handleTerminalError = (payload: { message: string }) => {
   clearConnectTimeout()
   const message = payload.message || '终端执行失败'
+  if (message.includes('连接超时')) {
+    if (timeoutErrorShown) return
+    timeoutErrorShown = true
+  }
   writeSystemMessage(`[错误] ${message}`)
   if (store.connectionStatus === 'connecting') {
     connectingDevice = null
@@ -128,6 +132,7 @@ const handleTerminalError = (payload: { message: string }) => {
 
 const handleSocketConnectError = (error: Error) => {
   clearConnectTimeout()
+  timeoutErrorShown = false
   const message = error?.message || 'Socket 连接失败'
   writeSystemMessage(`[错误] ${message}`)
   connectingDevice = null
@@ -266,6 +271,7 @@ function handleResize() {
 async function connect(device: SwitchWorkbenchDevice) {
   if (store.connectionStatus !== 'disconnected') return
 
+  timeoutErrorShown = false
   connectingDevice = device
   currentDevice = device
   commandBuffer = ''
