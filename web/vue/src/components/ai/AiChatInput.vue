@@ -69,6 +69,26 @@ const voiceSupported = computed(() => Boolean(SpeechRecognition && navigator.med
 const voiceTranscript = computed(() => [voiceDraft.value, voiceInterim.value].filter(Boolean).join(' ').trim())
 const canApplyVoice = computed(() => Boolean(voiceTranscript.value))
 
+function getVoiceRecognitionErrorMessage(error?: string) {
+  switch (error) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return '麦克风权限被拒绝，请在浏览器设置中允许访问。'
+    case 'network':
+      return navigator.onLine
+        ? '浏览器语音识别服务连接失败，请检查当前网络是否可访问外网，并优先使用 Chrome 或 Edge。'
+        : '当前网络不可用，浏览器原生语音识别需要联网后才能使用。'
+    case 'audio-capture':
+      return '未检测到可用麦克风，请检查系统输入设备设置。'
+    case 'no-speech':
+      return '没有识别到语音，请靠近麦克风后重试。'
+    case 'aborted':
+      return ''
+    default:
+      return `语音识别不可用：${error || '未知错误'}`
+  }
+}
+
 function resetWaveform() {
   waveformBars.value = Array.from({ length: 20 }, (_, index) => 0.15 + (index % 4) * 0.02)
 }
@@ -192,9 +212,7 @@ if (SpeechRecognition) {
     console.error('语音识别失败:', event)
     listening.value = false
     stopWaveform()
-    voiceError.value = event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
-      ? '麦克风权限被拒绝，请在浏览器设置中允许访问。'
-      : `语音识别不可用：${event?.error || '未知错误'}`
+    voiceError.value = getVoiceRecognitionErrorMessage(event?.error)
   }
 
   recognition.onend = () => {
@@ -215,6 +233,7 @@ async function toggleVoiceCard() {
     voiceInterim.value = ''
     resetWaveform()
     await startWaveform()
+    if (voiceError.value) return
     if (recognition) {
        try {
          recognition.start()
