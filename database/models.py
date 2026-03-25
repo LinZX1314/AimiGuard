@@ -277,6 +277,100 @@ class HFishModel:
         return [dict(r) for r in rows]
 
     @staticmethod
+    def get_attack_logs_by_ip(ip):
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT * FROM attack_logs WHERE attack_ip = ? ORDER BY create_time_timestamp DESC',
+            (ip,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def get_last_timestamp():
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT MAX(COALESCE(create_time_timestamp, 0)) as last_timestamp FROM attack_logs')
+        row = cursor.fetchone()
+        conn.close()
+        return int((row['last_timestamp'] if row and row['last_timestamp'] is not None else 0) or 0)
+
+    @staticmethod
+    def save_logs(logs):
+        if not logs:
+            return 0
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        inserted = 0
+
+        for item in logs:
+            attack_ip = item.get('attack_ip') or item.get('ip') or ''
+            ip_location = item.get('ip_location') or item.get('location') or ''
+            client_id = str(item.get('client_id') or '')
+            client_name = item.get('client_name') or ''
+            service_name = item.get('service_name') or ''
+            service_port = str(item.get('service_port') or item.get('attack_port') or '')
+            threat_level = item.get('threat_level') or ''
+            create_time_str = item.get('create_time_str') or ''
+            create_time_timestamp = item.get('create_time_timestamp')
+
+            if create_time_timestamp in (None, ''):
+                if item.get('create_time') not in (None, ''):
+                    create_time_timestamp = int(item.get('create_time') or 0)
+                elif create_time_str:
+                    create_time_timestamp = _time_str_to_timestamp(create_time_str)
+                else:
+                    create_time_timestamp = 0
+
+            if not create_time_str and create_time_timestamp:
+                try:
+                    create_time_str = datetime.fromtimestamp(int(create_time_timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    create_time_str = ''
+
+            create_time_timestamp = int(create_time_timestamp or 0)
+
+            cursor.execute(
+                '''
+                SELECT id FROM attack_logs
+                WHERE attack_ip = ? AND service_name = ? AND service_port = ? AND create_time_timestamp = ?
+                LIMIT 1
+                ''',
+                (attack_ip, service_name, service_port, create_time_timestamp)
+            )
+            if cursor.fetchone():
+                continue
+
+            cursor.execute(
+                '''
+                INSERT INTO attack_logs (
+                    attack_ip, ip_location, client_id, client_name,
+                    service_name, service_port, threat_level,
+                    create_time_str, create_time_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    attack_ip,
+                    ip_location,
+                    client_id,
+                    client_name,
+                    service_name,
+                    service_port,
+                    threat_level,
+                    create_time_str,
+                    create_time_timestamp,
+                )
+            )
+            inserted += 1
+
+        conn.commit()
+        conn.close()
+        return inserted
+
+    @staticmethod
     def get_stats():
         conn = get_connection()
         cursor = conn.cursor()
@@ -339,6 +433,16 @@ class AiModel:
         rows = cursor.fetchall()
         conn.close()
         return {row['ip']: dict(row) for row in rows}
+
+    @staticmethod
+    def get_analysis_by_ip(ip):
+        """按 IP 获取单条 AI 分析记录（兼容旧调用）。"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM ai_analysis_logs WHERE ip = ? LIMIT 1', (ip,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
 
     @staticmethod
     def create_session(title='新对话', context_type=None, context_id=None, is_drill_mode=0):

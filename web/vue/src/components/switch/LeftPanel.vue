@@ -33,14 +33,12 @@ const statusText = computed(() => {
 
 function handleConnect() {
   if (store.selectedDevice) {
-    store.setConnectionStatus('connecting')
-    terminalRef.value?.connect(store.selectedDevice)
+    void terminalRef.value?.connect(store.selectedDevice)
   }
 }
 
 function handleDisconnect() {
   terminalRef.value?.disconnect()
-  store.setConnectionStatus('disconnected')
 }
 
 function handleClear() {

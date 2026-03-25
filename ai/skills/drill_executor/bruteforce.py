@@ -13,10 +13,28 @@ SOCKET_TIMEOUT = 3         # 端口检测超时（秒）
 CONN_TIMEOUT = 5           # 服务连接超时（秒）
 MAX_OUTPUT_DISPLAY = 2000  # 返回结果截断长度（字符）
 
-# ─── fscan 路径缓存（模块级，只计算一次）──────────────────────────────
+# ─── fscan 路径探测（环境变量 -> 本地目录 -> PATH）──────────────────────
 _BRUTEFORCE_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_LOCAL_FSCAN = os.path.join(_BRUTEFORCE_BASE_DIR, 'lib', 'fscan.exe')
-_FSCAN_PATH = _LOCAL_FSCAN if os.path.isfile(_LOCAL_FSCAN) else shutil.which('fscan')
+
+
+def _resolve_fscan_path() -> str | None:
+    env_fscan = os.environ.get('FSCAN_PATH', '').strip().strip('"')
+    if env_fscan:
+        if os.path.isfile(env_fscan):
+            return env_fscan
+        return None
+
+    project_root = os.path.dirname(_BRUTEFORCE_BASE_DIR)
+    local_candidates = [
+        os.path.join(project_root, 'lib', 'fscan.exe'),
+        os.path.join(project_root, 'bin', 'fscan.exe'),
+        os.path.join(project_root, 'plugin', 'bin', 'fscan.exe'),
+    ]
+    for candidate in local_candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    return shutil.which('fscan')
 
 COMMON_SSH_CREDS = [
     ('root', 'root'), ('root', 'toor'), ('root', 'password'), ('root', '123456'),
@@ -47,12 +65,12 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
         service_type: 服务类型 (ssh/rdp/mysql/smb/mssql/postgres)
         port: 端口号（可选，fscan会自动扫描）
     """
-    fscan_path = _FSCAN_PATH
+    fscan_path = _resolve_fscan_path()
 
     if not fscan_path:
         return {
             'ok': False,
-            'error': '未找到 fscan.exe，请将 fscan.exe 放置在 lib/fscan.exe',
+            'error': '未找到 fscan.exe，请放置到项目的 lib/bin/plugin/bin 目录，或配置 FSCAN_PATH，或加入系统 PATH',
             'vulnerable': False,
         }
 

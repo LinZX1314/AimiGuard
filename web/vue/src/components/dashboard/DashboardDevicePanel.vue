@@ -41,6 +41,7 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .device-panel-grid {

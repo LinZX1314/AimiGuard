@@ -5,8 +5,9 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { api, apiCall } from '@/api/index'
-import { Button } from '@/components/ui/button'
+import { api, notifyError } from '@/api/index'
+import { defenseApi, type HFishSyncResult } from '@/api/defense'
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -266,16 +267,43 @@ async function switchType(name: string) {
 
 async function manualSync() {
   loadingDetail.value = true
-  const ok = await apiCall(async () => {
-    await api.post('/api/v1/defense/hfish/sync', {})
-  }, { errorMsg: '同步失败' })
-  if (ok) {
+  try {
+    const result = await defenseApi.triggerHFishSync()
+    if (!result?.success) {
+      notifyError(resolveHFishSyncErrorMessage(result))
+      return
+    }
+
     await loadTypes()
     if (expandedService.value) {
       await loadServiceDetail(expandedService.value)
     }
+  } catch (error) {
+    notifyError(error instanceof Error ? error.message : '同步失败')
+  } finally {
+    loadingDetail.value = false
   }
-  loadingDetail.value = false
+}
+
+function resolveHFishSyncErrorMessage(result?: HFishSyncResult) {
+  const errorCode = result?.error_code || 'sync_failed'
+  const error = result?.error || ''
+
+  const messages: Record<string, string> = {
+    invalid_config: 'HFish 同步失败：地址或 API Key 未配置完整',
+    unauthorized: 'HFish 同步失败：API Key 无效或已过期（401）',
+    forbidden: 'HFish 同步失败：当前 API Key 没有访问权限（403）',
+    not_found: 'HFish 同步失败：接口地址不存在（404），请检查 HFish 地址或 API 路径',
+    connection_refused: 'HFish 同步失败：目标服务拒绝连接，请确认 HFish 已启动并监听正确端口',
+    invalid_host: 'HFish 同步失败：主机地址无法解析，请检查 host / api_base_url 配置',
+    connection_error: 'HFish 同步失败：连接异常，请检查网络连通性和服务状态',
+    timeout: 'HFish 同步失败：接口请求超时，HFish 响应过慢',
+    http_error: `HFish 同步失败：${error || '接口返回 HTTP 错误'}`,
+    unexpected_error: `HFish 同步失败：${error || '发生未知异常'}`,
+    sync_failed: `HFish 同步失败：${error || '同步未完成'}`,
+  }
+
+  return messages[errorCode] || `HFish 同步失败：${error || errorCode}`
 }
 
 async function onPageChange(next: number) {

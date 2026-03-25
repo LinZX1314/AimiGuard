@@ -38,7 +38,7 @@ const form = reactive({
   secret: '',
   acl_number: 30,
   enabled: true,
-  readonly_only: true,
+  readonly_only: false,
   notes: '',
   paging_disable: '',
   tags: [] as string[],

@@ -292,10 +292,9 @@ onUnmounted(() => {
             </template>
 
             <template v-else>
-              <div class="map-card view-main-card">
+              <div class="map-card view-main-card view-main-card--device">
                 <DashboardDevicePanel :hide-summary-card="true" />
               </div>
-              <div class="view-empty-pad" aria-hidden="true"></div>
             </template>
           </div>
         </div>
@@ -329,6 +328,17 @@ onUnmounted(() => {
 .view-main-card {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.view-main-card--device {
+  background: linear-gradient(160deg, rgb(3 8 20 / 0.92), rgb(8 12 22 / 0.96));
+  border-color: rgb(15 23 42 / 0.72);
+}
+
+:global(html:not(.dark)) .view-main-card--device {
+  background: transparent;
+  border-color: hsl(var(--border) / 0.45);
 }
 
 .view-main-card--topology {
@@ -430,6 +440,12 @@ onUnmounted(() => {
   padding: 10px 12px;
 }
 
+:global(html:not(.dark)) .device-detail-strip {
+  border-color: hsl(var(--border) / 0.55);
+  background: transparent;
+  box-shadow: none;
+}
+
 .device-detail-strip__main {
   display: grid;
   gap: 4px;
@@ -448,14 +464,28 @@ onUnmounted(() => {
   letter-spacing: 0.12em;
 }
 
+:global(html:not(.dark)) .device-detail-strip__eyebrow {
+  border-color: hsl(var(--border) / 0.75);
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+
 .device-detail-strip__main strong {
   color: rgb(224 242 254);
   font-size: 14px;
 }
 
+:global(html:not(.dark)) .device-detail-strip__main strong {
+  color: hsl(var(--foreground));
+}
+
 .device-detail-strip__main p {
   color: rgb(148 163 184);
   font-size: 12px;
+}
+
+:global(html:not(.dark)) .device-detail-strip__main p {
+  color: hsl(var(--muted-foreground));
 }
 
 .device-detail-strip__list {
@@ -479,12 +509,20 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
+:global(html:not(.dark)) .device-detail-strip__list span {
+  color: hsl(var(--muted-foreground));
+}
+
 .device-detail-strip__list strong {
   color: rgb(165 243 252);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+:global(html:not(.dark)) .device-detail-strip__list strong {
+  color: hsl(var(--foreground));
 }
 
 .honeypot-feed-card {

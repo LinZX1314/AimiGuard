@@ -110,7 +110,8 @@ async function handleSend() {
 }
 
 function handleSendCommand(command: string) {
-  emit('send-to-terminal', command)
+  if (!command.trim()) return
+  emit('send-to-terminal', command.trim())
 }
 
 async function scrollToBottom() {

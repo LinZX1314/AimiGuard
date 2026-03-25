@@ -301,13 +301,8 @@ def defense_hfish_charts():
 @require_auth
 def defense_hfish_sync():
     """Trigger HFish sync"""
-    def _do():
-        try:
-            run_hfish_sync()
-        except Exception:
-            pass
-    _run_daemon(_do)
-    return ok({'message': '同步任务已触发'})
+    result = run_hfish_sync()
+    return ok(result)
 
 
 @defense_bp.route('/hfish/test', methods=['POST'])

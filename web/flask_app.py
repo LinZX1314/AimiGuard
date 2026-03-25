@@ -11,6 +11,7 @@ import threading
 from datetime import datetime
 
 from flask import Flask, Blueprint, jsonify, request, send_from_directory
+from flask_socketio import SocketIO
 
 import sys
 
@@ -20,6 +21,8 @@ if BASE_DIR not in sys.path:
 
 from database.db import init_db
 from utils.logger import log as unified_log
+
+socketio = SocketIO(cors_allowed_origins='*', async_mode='threading')
 
 
 
@@ -55,6 +58,10 @@ def _log(level: str, msg: str, category: str = "system"):
 def create_app() -> Flask:
     """构建 Flask 应用：注册蓝图、中间件、SPA 路由。"""
     app = Flask(__name__)
+    socketio.init_app(app)
+
+    from web.api.switch_workbench_ws import init_socketio
+    init_socketio(socketio)
 
     # 关闭 Werkzeug 访问日志
     logging.getLogger("werkzeug").setLevel(logging.WARNING)

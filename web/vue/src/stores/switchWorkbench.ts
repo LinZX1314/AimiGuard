@@ -25,14 +25,24 @@ export interface TerminalMessage {
   timestamp: number
 }
 
+export interface TerminalSession {
+  sessionId: string
+  pendingCommand: string
+  lastCommand: string
+}
+
 export const useSwitchWorkbenchStore = defineStore('switchWorkbench', () => {
-  // State
   const devices = ref<SwitchWorkbenchDevice[]>([])
   const selectedDeviceId = ref<number | null>(null)
   const isConnected = ref(false)
   const connectionStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
   const aiMessages = ref<AiMessage[]>([])
   const terminalMessages = ref<TerminalMessage[]>([])
+  const terminalSession = ref<TerminalSession>({
+    sessionId: `switch-${Date.now()}`,
+    pendingCommand: '',
+    lastCommand: '',
+  })
 
   // Getters
   const selectedDevice = computed(() =>
@@ -63,6 +73,25 @@ export const useSwitchWorkbenchStore = defineStore('switchWorkbench', () => {
   function setConnectionStatus(status: 'disconnected' | 'connecting' | 'connected') {
     connectionStatus.value = status
     isConnected.value = status === 'connected'
+    if (status === 'disconnected') {
+      terminalSession.value.pendingCommand = ''
+    }
+  }
+
+  function setPendingTerminalCommand(command: string) {
+    terminalSession.value.pendingCommand = command
+  }
+
+  function setLastTerminalCommand(command: string) {
+    terminalSession.value.lastCommand = command
+  }
+
+  function rotateTerminalSession() {
+    terminalSession.value = {
+      sessionId: `switch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      pendingCommand: '',
+      lastCommand: '',
+    }
   }
 
   function appendTerminalMessage(msg: Omit<TerminalMessage, 'id' | 'timestamp'>) {
@@ -104,12 +133,16 @@ export const useSwitchWorkbenchStore = defineStore('switchWorkbench', () => {
     connectionStatus,
     aiMessages,
     terminalMessages,
+    terminalSession,
     selectedDevice,
     HUAWEI_COMMANDS,
     matchCommands,
     setDevices,
     selectDevice,
     setConnectionStatus,
+    setPendingTerminalCommand,
+    setLastTerminalCommand,
+    rotateTerminalSession,
     appendTerminalMessage,
     appendAiMessage,
     clearTerminal,

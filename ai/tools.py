@@ -631,21 +631,36 @@ def _run_fscan(args: dict, cfg: dict = None) -> dict:
     if not target:
         return {'ok': False, 'error': '缺少 target 参数'}
 
-    # 查找fscan可执行文件
+    # 查找 fscan 可执行文件：环境变量 -> 本地目录 -> 系统 PATH
     fscan_path = None
-    # 先在项目lib目录查找
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    local_fscan = os.path.join(base_dir, 'lib', 'fscan.exe')
-    if os.path.isfile(local_fscan):
-        fscan_path = local_fscan
-    else:
-        # 从系统PATH查找
+    env_fscan = os.environ.get('FSCAN_PATH', '').strip().strip('"')
+    local_candidates = [
+        os.path.join(base_dir, 'lib', 'fscan.exe'),
+        os.path.join(base_dir, 'bin', 'fscan.exe'),
+        os.path.join(base_dir, 'plugin', 'bin', 'fscan.exe'),
+    ]
+
+    if env_fscan:
+        if os.path.isfile(env_fscan):
+            fscan_path = env_fscan
+        else:
+            return {'ok': False, 'error': f'环境变量 FSCAN_PATH 指向文件不存在: {env_fscan}'}
+
+    if not fscan_path:
+        for candidate in local_candidates:
+            if os.path.isfile(candidate):
+                fscan_path = candidate
+                break
+
+    if not fscan_path:
         system_fscan = shutil.which('fscan')
         if system_fscan:
             fscan_path = system_fscan
 
     if not fscan_path:
-        return {'ok': False, 'error': '未找到fscan.exe，请将fscan.exe放置在 lib/fscan.exe 或配置到系统PATH'}
+        fallback_dirs = ' | '.join(sorted({os.path.dirname(p) for p in local_candidates}))
+        return {'ok': False, 'error': f'未找到 fscan.exe，请放置到: {fallback_dirs}，或配置 FSCAN_PATH，或加入系统 PATH'}
 
     try:
         import tempfile
