@@ -21,6 +21,7 @@ let commandBuffer = ''
 let socketBound = false
 let connectingDevice: SwitchWorkbenchDevice | null = null
 let connectTimeoutId: number | null = null
+let timeoutErrorShown = false
 
 const terminalOptions = {
   theme: {
@@ -66,8 +67,10 @@ function replaySystemMessages() {
 
 function startConnectTimeout() {
   clearConnectTimeout()
+  timeoutErrorShown = false
   connectTimeoutId = window.setTimeout(() => {
-    if (store.connectionStatus !== 'connecting') return
+    if (store.connectionStatus !== 'connecting' || timeoutErrorShown) return
+    timeoutErrorShown = true
     handleTerminalError({ message: '连接超时，请检查设备可达性、Telnet 配置或后端服务状态' })
   }, 12000)
 }
@@ -90,6 +93,7 @@ const handleSocketJoined = (payload: { session_id: string }) => {
 
 const handleTerminalConnected = (_payload: { device: { id: number; name: string; host: string; port: number } }) => {
   clearConnectTimeout()
+  timeoutErrorShown = false
   currentDevice = connectingDevice ?? currentDevice
   connectingDevice = null
   store.setConnectionStatus('connected')
