@@ -17,12 +17,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Activity } from 'lucide-vue-next'
 import TechCard from './shared/TechCard.vue'
 
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import VChart from 'vue-echarts'
-
-use([CanvasRenderer])
-
 ChartJS.register(
   Title,
   Tooltip,
@@ -66,28 +60,96 @@ const chainItems = [
   { key: 'acl_auto_ban', label: 'ACL 封禁' },
 ]
 
-const trendData = computed(() => ({
-  labels: props.payload.trends.labels,
-  datasets: [{
+const trendData = computed(() => {
+  const formattedLabels = props.payload.trends.labels.map((label: string) => {
+    if (!label) return ''
+    const parts = label.split(' ')
+    let datePart = parts[0]
+    let timePart = parts[1] || ''
+
+    const dParts = datePart.split('-')
+    if (dParts.length === 3) {
+      datePart = `${dParts[1]}/${dParts[2]}`
+    }
+
+    if (timePart) {
+      const tParts = timePart.split(':')
+      if (tParts.length >= 2) {
+        timePart = `${tParts[0]}:${tParts[1]}`
+      }
+      return `${datePart} ${timePart}`
+    }
+    return datePart
+  })
+
+  return {
+    labels: formattedLabels,
+    datasets: [{
     label: '攻击次数',
     data: props.payload.trends.counts,
-    borderColor: 'hsl(var(--primary))',
-    backgroundColor: 'hsl(var(--primary) / 0.12)',
+    borderColor: '#34d399',
+    backgroundColor: (context: any) => {
+      const chart = context.chart
+      const { ctx, chartArea } = chart
+      if (!chartArea) {
+        return 'rgba(52, 211, 153, 0.1)'
+      }
+      const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom)
+      gradient.addColorStop(0, 'rgba(52, 211, 153, 0.4)')
+      gradient.addColorStop(1, 'rgba(52, 211, 153, 0.0)')
+      return gradient
+    },
     fill: true,
-    tension: 0.35,
-    pointRadius: 2,
+    tension: 0.4,
+    pointRadius: 4,
+    pointBackgroundColor: '#ffffff',
+    pointBorderColor: '#34d399',
+    pointBorderWidth: 2,
+    pointHoverRadius: 6,
     borderWidth: 2,
   }],
-}))
+  }
+})
 
 const trendOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { grid: { color: 'rgba(148,163,184,.12)' }, ticks: { color: '#94a3b8' } },
-    y: { grid: { color: 'rgba(148,163,184,.12)' }, ticks: { color: '#94a3b8' } },
+  plugins: { 
+    legend: { display: false },
+    tooltip: {
+      mode: 'index' as const,
+      intersect: false,
+    }
   },
+  scales: {
+    x: { 
+      grid: { display: false }, 
+      ticks: { 
+        color: '#94a3b8', 
+        font: { size: 10 },
+        maxRotation: 0,
+        maxTicksLimit: 6
+      },
+      border: { display: false }
+    },
+    y: { 
+      display: false,
+      beginAtZero: true
+    },
+  },
+  interaction: {
+    mode: 'nearest' as const,
+    axis: 'x' as const,
+    intersect: false
+  },
+  layout: {
+    padding: {
+      top: 10,
+      bottom: 5,
+      left: 10,
+      right: 15
+    }
+  }
 }
 
 function getChainStatus(key: string): boolean {
