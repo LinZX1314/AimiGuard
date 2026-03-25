@@ -380,11 +380,34 @@ class HFishModel:
         ip_count = cursor.fetchone()['ip_count']
         cursor.execute('SELECT COUNT(DISTINCT service_name) as service_count FROM attack_logs')
         service_count = cursor.fetchone()['service_count']
+        cursor.execute("""
+            SELECT
+                COALESCE(service_name, '未知') as name,
+                COUNT(*) as count
+            FROM attack_logs
+            GROUP BY service_name
+            ORDER BY count DESC
+        """)
+        service_stats = [{'name': r['name'], 'count': r['count']} for r in cursor.fetchall()]
+        # 按小时统计趋势
+        cursor.execute("""
+            SELECT
+                strftime('%Y-%m-%d %H:00', create_time_str) as hour,
+                COUNT(*) as count
+            FROM attack_logs
+            WHERE create_time_str IS NOT NULL
+            GROUP BY hour
+            ORDER BY hour DESC
+            LIMIT 24
+        """)
+        time_stats = [{'date': r['hour'], 'count': r['count']} for r in cursor.fetchall()]
         conn.close()
         return {
             'total': total,
             'unique_ips': ip_count,
             'services': service_count,
+            'service_stats': service_stats,
+            'time_stats': time_stats,
         }
 
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Line, Bar } from 'vue-chartjs'
+import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   Title,
@@ -11,7 +11,6 @@ import {
   CategoryScale,
   PointElement,
   Filler,
-  BarElement,
 } from 'chart.js'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -20,12 +19,9 @@ import TechCard from './shared/TechCard.vue'
 
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart } from 'echarts/charts'
-import { TooltipComponent } from 'echarts/components'
-import 'echarts-wordcloud'
 import VChart from 'vue-echarts'
 
-use([CanvasRenderer, PieChart, TooltipComponent])
+use([CanvasRenderer])
 
 ChartJS.register(
   Title,
@@ -36,7 +32,6 @@ ChartJS.register(
   CategoryScale,
   PointElement,
   Filler,
-  BarElement,
 )
 
 const props = defineProps<{
@@ -95,135 +90,6 @@ const trendOptions = {
   },
 }
 
-const serviceData = computed(() => ({
-  labels: props.payload.hot_services.slice(0, 6).map((x) => x.name),
-  datasets: [{
-    label: '攻击次数',
-    data: props.payload.hot_services.slice(0, 6).map((x) => x.count),
-    backgroundColor: 'hsl(var(--primary) / 0.65)',
-    borderRadius: 6,
-  }],
-}))
-
-const attackTypeWords = computed(() => {
-  const counter = new Map<string, number>()
-  props.payload.recent_attacks.forEach((item) => {
-    const key = item.service_name?.trim() || '未知攻击'
-    counter.set(key, (counter.get(key) || 0) + 1)
-  })
-
-  const result = Array.from(counter.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-
-  if (result.length > 0) {
-    return result
-  }
-
-  return [
-    ['SSH暴力破解', 9],
-    ['SQL注入', 7],
-    ['端口扫描', 6],
-    ['XSS攻击', 5],
-    ['目录遍历', 4],
-    ['DDoS', 4],
-  ] as Array<[string, number]>
-})
-
-const wordCloudOption = computed(() => {
-  // 现代渐变色彩方案 - 使用实际HSL值而非CSS变量
-  const colors = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#f97316',
-    '#10b981', '#06b6d4', '#3b82f6', '#a855f7',
-  ]
-  return {
-    tooltip: {
-      show: true,
-      backgroundColor: 'hsl(var(--card))',
-      borderColor: 'hsl(var(--border))',
-      textStyle: { color: 'hsl(var(--foreground))' },
-      formatter: (params: any) => `${params.name}: ${params.value}次`
-    },
-    series: [
-      {
-        type: 'wordCloud',
-        shape: 'circle',
-        keepAspect: true,
-        left: 'center',
-        top: 'center',
-        width: '90%',
-        height: '90%',
-        sizeRange: [14, 36],
-        rotationRange: [-30, 30],
-        rotationStep: 15,
-        gridSize: 10,
-        drawOutOfBound: false,
-        layoutAnimation: true,
-        shrinkToFit: true,
-        textStyle: {
-          fontWeight: '600',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          color: function () {
-            return colors[Math.floor(Math.random() * colors.length)]
-          }
-        },
-        emphasis: {
-          textStyle: {
-            shadowBlur: 12,
-            shadowColor: 'rgba(99, 102, 241, 0.5)'
-          }
-        },
-        data: attackTypeWords.value.map(([name, value]) => ({
-          name,
-          value,
-        }))
-      }
-    ]
-  }
-})
-
-const servicePieOption = computed(() => ({
-  backgroundColor: 'transparent',
-  tooltip: {
-    trigger: 'item',
-    formatter: '{b}: {c} ({d}%)',
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['35%', '60%'],
-      center: ['30%', '50%'],
-      avoidLabelOverlap: true,
-      itemStyle: {
-        borderRadius: 4,
-      },
-      label: {
-        show: true,
-        position: 'outside',
-        formatter: '{b}',
-        fontSize: 11,
-        color: '#94a3b8',
-        lineHeight: 18,
-      },
-      labelLine: {
-        show: true,
-        lineStyle: {
-          color: 'rgba(148,163,184,.5)',
-          width: 1,
-        },
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: 12,
-          fontWeight: 'bold',
-        },
-      },
-      data: props.payload.hot_services.map((s) => ({ name: s.name, value: s.count })),
-    },
-  ],
-}))
-
 function getChainStatus(key: string): boolean {
   return props.payload.chain_status[key] ?? false
 }
@@ -251,35 +117,22 @@ function getChainStatus(key: string): boolean {
     </TechCard>
 
     <TechCard title="热门攻击服务" glow-color="orange" class="tech-card-dashboard-clear flex-adaptive-card flex-1 shrink-0">
-      <div class="flex flex-col gap-2 h-full min-h-0">
-        <div class="basis-[45%] min-h-[70px]">
-          <Bar
-            v-if="payload.hot_services.length"
-            :data="serviceData"
-            :options="{
-              responsive: true,
-              maintainAspectRatio: false,
-              indexAxis: 'y',
-              plugins: { legend: { display: false } },
-              scales: {
-                x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } },
-                y: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))' } }
-              }
-            }"
-          />
-          <Skeleton v-else-if="loading" class="h-full w-full" />
-          <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
-        </div>
-
-        <div class="flex-1 min-h-[100px] relative rounded-lg border border-border/60 bg-secondary/30 dark:bg-muted/20 backdrop-blur overflow-hidden" aria-label="攻击类型词云">
-          <v-chart
-            v-if="attackTypeWords.length"
-            class="h-full w-full absolute inset-0"
-            :option="wordCloudOption"
-            autoresize
-          />
-          <div v-else class="h-full flex items-center justify-center text-xs text-muted-foreground">暂无攻击数据</div>
-        </div>
+      <div class="h-full min-h-0 overflow-y-auto space-y-1.5 px-1">
+        <template v-if="payload.hot_services.length">
+          <div
+            v-for="(service, index) in payload.hot_services"
+            :key="service.name"
+            class="flex items-center justify-between rounded-md border border-border/60 bg-secondary/30 px-3 py-2 dark:bg-muted/20"
+          >
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <span class="text-xs font-semibold text-primary w-5">{{ index + 1 }}</span>
+              <span class="text-sm truncate text-foreground">{{ service.name }}</span>
+            </div>
+            <span class="text-sm font-bold text-primary ml-2 flex-shrink-0">{{ service.count }}</span>
+          </div>
+        </template>
+        <Skeleton v-else-if="loading" class="h-full w-full" />
+        <div v-else class="h-full flex items-center justify-center text-sm text-muted-foreground">暂无服务统计</div>
       </div>
     </TechCard>
 
