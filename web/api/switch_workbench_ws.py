@@ -124,22 +124,21 @@ def register_handlers():
         payload = data or {}
         raw_device = payload.get('device') if isinstance(payload.get('device'), dict) else {}
         session_key = _session_key(payload.get('session_id'))
+        raw_id = raw_device.get('id')
         host = str(raw_device.get('host') or raw_device.get('ip') or '').strip()
-        if not host:
-            emit('terminal_error', {'message': '缺少主机地址'})
+
+        # 优先通过 id 解析设备，id 为空时才检查 host
+        if not raw_id and not host:
+            emit('terminal_error', {'message': '缺少主机地址或设备标识'})
             return
+
         if telnetlib is None:
             emit('terminal_error', {'message': 'Telnet 依赖不可用'})
             return
 
-        raw_id = raw_device.get('id')
-        if not raw_id and host:
-            emit('terminal_error', {'message': '缺少设备标识，禁止直连未登记主机'})
-            return
-
         resolved_device = None
         try:
-            resolved_device = _resolve_device(int(raw_id) if raw_id else None, probe=False)
+            resolved_device = _resolve_device(int(raw_id) if raw_id else None, host or None, probe=False)
         except Exception:
             resolved_device = None
 

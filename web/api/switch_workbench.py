@@ -259,55 +259,101 @@ def _is_readonly_command(command: str) -> bool:
     return any(lowered.startswith(prefix) for prefix in _ALLOWED_READONLY_PREFIXES)
 
 
-def _build_ai_suggestions(prompt: str, device: dict[str, Any] | None, command_output: str = '', command_text: str = '') -> list[dict[str, Any]]:
-    lowered = prompt.lower()
-    output_lower = (command_output or '').lower()
-    suggestions: list[dict[str, Any]] = []
+# ── 命令标签映射 ────────────────────────────────────────────────────────────────
+# AI 输出 <miplin>cmd_xxx</miplin> 标签，后端解析为实际命令
 
-    def add(command: str, title: str, risk: str, reason: str, auto_runnable: bool = True):
+import re
+
+# 标签到命令的映射
+TAG_COMMAND_MAP = {
+    'cmd_version': 'show version',
+    'cmd_interfaces': 'show interfaces',
+    'cmd_vlan': 'show vlan',
+    'cmd_mac': 'show mac address-table',
+    'cmd_arp': 'show arp',
+    'cmd_counters': 'show interfaces counters',
+    'cmd_log': 'show log',
+    'cmd_config': 'show running-config',
+    'cmd_acl': 'show access-lists',
+    'cmd_chassis': 'show chassis',
+}
+
+# 命令到标签的反向映射
+COMMAND_TAG_MAP = {v: k for k, v in TAG_COMMAND_MAP.items()}
+
+# 命令用途说明
+COMMAND_DESCRIPTIONS = {
+    'show version': '查看设备版本信息',
+    'show interfaces': '查看端口状态摘要',
+    'show vlan': '查看VLAN配置',
+    'show mac address-table': '查看MAC地址表',
+    'show arp': '查看ARP表',
+    'show interfaces counters': '查看接口计数器',
+    'show log': '查看日志',
+    'show running-config': '查看当前配置',
+    'show access-lists': '查看ACL配置',
+    'show chassis': '查看设备资产信息',
+}
+
+
+def _parse_commands_from_response(response: str) -> list[str]:
+    """从 AI 响应中解析 <miplin>cmd_xxx</miplin> 标签，返回命令列表"""
+    commands = []
+    # 匹配 <miplin>cmd_xxx</miplin> 标签
+    pattern = r'<miplin>(cmd_\w+)</miplin>'
+    matches = re.findall(pattern, response)
+    for tag in matches:
+        if tag in TAG_COMMAND_MAP:
+            commands.append(TAG_COMMAND_MAP[tag])
+    return list(dict.fromkeys(commands))  # 去重保持顺序
+
+
+def _build_ai_suggestions(prompt: str, device: dict[str, Any] | None, command_output: str = '', command_text: str = '') -> list[dict[str, Any]]:
+    """基于 AI 响应解析命令推荐（fallback 逻辑）"""
+    suggestions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(command: str, risk: str, reason: str, auto_runnable: bool = True):
+        if command in seen:
+            return
+        seen.add(command)
         suggestions.append({
             'id': f'sg-{len(suggestions) + 1}',
-            'title': title,
+            'title': COMMAND_DESCRIPTIONS.get(command, command),
             'command': command,
             'risk': risk,
             'reason': reason,
             'auto_runnable': auto_runnable,
         })
 
-    if command_output:
-        if 'down' in output_lower or 'error' in output_lower or 'crc' in output_lower:
-            add('display interface counters', '深入查看接口计数器', '只读', '当前回显出现 down / error / CRC 迹象，建议继续确认链路质量。')
-            add('display logbuffer | include interface', '查看接口相关日志', '只读', '继续追踪异常端口是否伴随 flap 或硬件告警。')
-        if 'acl' in (command_text or '').lower() or 'matched 0' in output_lower:
-            add('display current-configuration | include acl', '拉取 ACL 配置片段', '谨慎', '回显提示 ACL 命中异常，建议抓取配置片段做差异比对。', auto_runnable=False)
-        if 'version' in (command_text or '').lower():
-            add('display device manuinfo', '补充设备资产信息', '低风险', '继续确认硬件与版本基线，便于后续排障。')
+    # Fallback: 基于关键词的简单匹配
+    lowered = prompt.lower()
 
-    if 'acl' in lowered or '策略' in prompt:
-        add('display acl all', '查看 ACL 列表', '只读', '先确认 ACL 内容、命中与空规则。')
-        add('display current-configuration | include acl', '抓取 ACL 配置片段', '谨慎', '便于与基线做差异对比。', auto_runnable=False)
-    if '接口' in prompt or '端口' in prompt or 'down' in lowered:
-        add('display interface brief', '查看接口状态', '只读', '先定位 down 口与高利用率端口。')
-        add('display interface counters', '查看接口计数器', '只读', '进一步确认 CRC / error 是否持续增长。')
-    if '配置' in prompt or '基线' in prompt or '版本' in prompt:
-        add('display version', '查看版本信息', '低风险', '确认设备软件版本和平台信息。')
-        add('display current-configuration', '抓取当前配置', '只读', '便于留档和生成基线快照。')
-
-    deduped: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in suggestions:
-        if item['command'] in seen:
-            continue
-        seen.add(item['command'])
-        deduped.append(item)
-
-    if not deduped:
+    if 'arp' in lowered:
+        add('show arp', '只读', '推荐执行 show arp 查看ARP表')
+    elif 'mac' in lowered:
+        add('show mac address-table', '只读', '推荐执行 show mac address-table 查看MAC表')
+    elif 'vlan' in lowered:
+        add('show vlan', '只读', '推荐执行 show vlan 查看VLAN配置')
+    elif 'acl' in lowered or '策略' in prompt:
+        add('show access-lists', '只读', '推荐执行 show access-lists 查看ACL')
+    elif '端口' in prompt or '接口' in prompt or '状态' in prompt:
+        add('show interfaces', '只读', '推荐执行 show interfaces 查看端口状态')
+    elif '版本' in prompt or '硬件' in prompt or '资产' in prompt:
+        add('show version', '只读', '推荐执行 show version 查看版本')
+        add('show chassis', '只读', '推荐执行 show chassis 查看资产')
+    elif '日志' in prompt or 'log' in lowered:
+        add('show log', '只读', '推荐执行 show log 查看日志')
+    elif '配置' in prompt or '基线' in prompt:
+        add('show running-config', '只读', '推荐执行 show running-config 查看配置')
+    elif '计数器' in prompt or '流量' in prompt or '错误' in prompt:
+        add('show interfaces counters', '只读', '推荐执行 show interfaces counters 查看计数器')
+    else:
+        # 默认推荐
         device_name = device['name'] if device else '当前设备'
-        add('display interface brief', f'{device_name} 接口总览', '只读', '默认先读取接口摘要，快速建立问题上下文。')
-        add('display current-configuration', '配置快照采样', '只读', '采样当前配置，供 AI 进一步分析。')
-        deduped = suggestions
+        add('show interfaces', '只读', f'{device_name} 默认推荐接口概览')
 
-    return deduped[:4]
+    return suggestions[:4]
 
 
 def _summarize_output(command: str, output: str) -> str:
@@ -342,33 +388,47 @@ def _build_ai_turn(device: dict[str, Any] | None, prompt: str, command_output: s
     cfg = _load_cfg()
     ai_enabled = cfg.get('ai', {}).get('enabled', False)
     ai_answer = ''
+    suggestions: list[dict[str, Any]] = []
+    next_steps: list[str] = []
 
     if ai_enabled:
         system_prompt = '''你是一个专业的网络设备命令助手。请根据用户需求从以下固定命令池中选择最合适的命令。
 
 ## 命令池（仅可使用这些命令）
-- display version - 查看设备版本信息
-- display interface brief - 查看端口状态摘要
-- display vlan - 查看VLAN配置
-- display mac-address - 查看MAC地址表
-- display arp - 查看ARP表
-- display interface counters - 查看接口计数器
-- display logbuffer | include interface - 查看接口相关日志
-- display current-configuration | include acl - 拉取ACL配置片段
-- display device manuinfo - 查看设备资产信息
-- display current-configuration - 查看当前配置
+- show version - 查看设备版本信息
+- show interfaces - 查看端口状态摘要
+- show vlan - 查看VLAN配置
+- show mac address-table - 查看MAC地址表
+- show arp - 查看ARP表
+- show interfaces counters - 查看接口计数器
+- show log - 查看日志
+- show running-config - 查看当前配置
+- show access-lists - 查看ACL配置
+- show chassis - 查看设备资产信息
+
+## 命令标签（必须使用）
+每个命令对应一个标签，回复时用 <miplin>标签</miplin> 包裹命令：
+- show version → <miplin>cmd_version</miplin>
+- show interfaces → <miplin>cmd_interfaces</miplin>
+- show vlan → <miplin>cmd_vlan</miplin>
+- show mac address-table → <miplin>cmd_mac</miplin>
+- show arp → <miplin>cmd_arp</miplin>
+- show interfaces counters → <miplin>cmd_counters</miplin>
+- show log → <miplin>cmd_log</miplin>
+- show running-config → <miplin>cmd_config</miplin>
+- show access-lists → <miplin>cmd_acl</miplin>
+- show chassis → <miplin>cmd_chassis</miplin>
 
 ## 回复格式
-必须按以下 Markdown 格式回复：
-### 建议执行的命令
-1. `命令1` - 用途说明
-2. `命令2` - 用途说明
+先简短分析用户意图，然后用标签包裹推荐命令。示例：
+根据您的需求，建议执行以下命令：
+<miplin>cmd_interfaces</miplin> - 查看端口状态
+<miplin>cmd_arp</miplin> - 查看ARP表
 
 ## 重要约束
-- 只回复命令，不要做其他操作
 - 最多选择3条最相关的命令
-- 如果用户需求不明确，选择最常用的相关命令
 - 优先选择只读命令
+- 只从命令池中选择，不要自己编造命令
 '''
         user_content = (
             f'设备信息: {json.dumps(device_snapshot, ensure_ascii=False)}\n'
@@ -376,13 +436,36 @@ def _build_ai_turn(device: dict[str, Any] | None, prompt: str, command_output: s
             f'最近执行命令: {command_text or "无"}\n'
             f'最近命令回显:\n{command_output or "无"}\n'
             f'最近对话: {json.dumps(conversation or [], ensure_ascii=False)}\n'
-            '请从命令池中选择最合适的命令并按格式回复。'
+            '请根据用户意图选择最合适的命令，用标签格式回复。'
         )
         result = call_openai_chat_completion([
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_content},
         ], cfg)
         ai_answer = (result.get('content') or result.get('message') or '').strip()
+
+        # 从 AI 响应中解析命令标签，生成 suggested_commands
+        parsed_commands = _parse_commands_from_response(ai_answer)
+        if parsed_commands:
+            suggestions = []
+            seen = set()
+            for cmd in parsed_commands:
+                if cmd in seen:
+                    continue
+                seen.add(cmd)
+                suggestions.append({
+                    'id': f'sg-{len(suggestions) + 1}',
+                    'title': COMMAND_DESCRIPTIONS.get(cmd, cmd),
+                    'command': cmd,
+                    'risk': '只读',
+                    'reason': f'推荐执行 {cmd}',
+                    'auto_runnable': True,
+                })
+            next_steps = [item['command'] for item in suggestions[:3]]
+        else:
+            # AI 未使用标签，fallback 到规则匹配
+            suggestions = _build_ai_suggestions(prompt, device, command_output=command_output, command_text=command_text)
+            next_steps = [item['command'] for item in suggestions[:3]]
 
     if not ai_answer:
         ai_answer = fallback_summary + '\n\n建议继续执行只读命令，确认异常是否可复现，并结合版本/配置快照做进一步对比。'

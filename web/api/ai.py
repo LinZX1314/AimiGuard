@@ -718,6 +718,23 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
                     'auto_generated': True,
                     'is_html': is_html,
                 }})
+
+                # 保存报告到数据库（供演练报告列表查询）
+                try:
+                    AiModel.save_message(
+                        sid,
+                        'tool',
+                        json.dumps({
+                            'report': report_html,
+                            'summary': drill_state.get_exec_summary(),
+                            'findings_count': len(drill_state.findings),
+                            'auto_generated': True,
+                            'is_html': is_html,
+                        }, ensure_ascii=False),
+                        tool_call_id=f'drill_report_auto_{sid}'
+                    )
+                except Exception:
+                    pass
             break
 
         # 保存 assistant tool_call 消息
@@ -847,6 +864,23 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int,
             'auto_generated': True,
             'is_html': is_html,
         }})
+
+        # 保存报告到数据库（供演练报告列表查询）
+        try:
+            AiModel.save_message(
+                sid,
+                'tool',
+                json.dumps({
+                    'report': report_html,
+                    'summary': drill_state.get_exec_summary(),
+                    'findings_count': len(drill_state.findings),
+                    'auto_generated': True,
+                    'is_html': is_html,
+                }, ensure_ascii=False),
+                tool_call_id=f'drill_report_fallback_{sid}'
+            )
+        except Exception:
+            pass
 
     # 保存最后一条 assistant 消息
     if history and history[-1].get('role') == 'assistant':
