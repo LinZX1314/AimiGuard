@@ -308,7 +308,8 @@ function messageKey(message: Message, index: number): string {
   border: 1px solid hsl(var(--border) / 0.55);
   text-align: left;
   vertical-align: top;
-  white-space: nowrap;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .ai-markdown :deep(ul),
