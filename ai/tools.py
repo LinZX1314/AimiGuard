@@ -459,7 +459,8 @@ wr
         'properties': {
             'switch_ip': {
                 'type': 'string',
-                'description': '交换机IP地址，不传则查询所有交换机',
+                'description': '交换机IP地址，默认为192.168.0.1',
+                'default': '192.168.0.1',
             },
             'limit': {
                 'type': 'integer',
@@ -474,7 +475,7 @@ def _get_ban_records(args: dict, cfg: dict = None) -> dict:
     """获取封禁记录工具"""
     from database.models import SwitchAclModel
 
-    switch_ip = args.get('switch_ip')
+    switch_ip = args.get('switch_ip', '192.168.0.1')
     limit = args.get('limit', 50)
 
     try:
