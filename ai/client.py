@@ -97,6 +97,7 @@ def stream_openai_chat_with_tools(
     messages: list[dict],
     cfg: dict,
     tools: list[dict] | None = None,
+    tool_choice: str = 'auto',
 ) -> Generator[tuple[str, str, dict | None], None, None]:
     """
     支持 function calling 的流式对话。
@@ -106,6 +107,8 @@ def stream_openai_chat_with_tools(
     tool_call 为 {'id': str, 'name': str, 'arguments': dict}。
 
     正常文本流时，tool_call 为 None。
+
+    tool_choice: 'auto'（默认） | 'required'（强制必须调用工具）
     """
     ai_cfg   = cfg.get('ai', {})
     api_url  = ai_cfg.get('api_url', '')
@@ -123,7 +126,7 @@ def stream_openai_chat_with_tools(
     kwargs: dict = {'model': model, 'messages': messages, 'stream': True}
     if tools:
         kwargs['tools'] = tools
-        kwargs['tool_choice'] = 'auto'
+        kwargs['tool_choice'] = tool_choice if tool_choice in ('auto', 'required', 'none') else 'auto'
 
     try:
         response = client.chat.completions.create(**kwargs)

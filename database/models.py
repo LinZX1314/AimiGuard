@@ -8,33 +8,38 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 from database.db import get_connection, get_db_cursor
-from database.workflow_models import WorkflowModel, WorkflowRunModel, WorkflowWebhookModel
+from database.workflow_models import (
+    WorkflowModel,
+    WorkflowRunModel,
+    WorkflowWebhookModel,
+)
 
 
 def _time_str_to_timestamp(time_str: str) -> int:
     """将 `%Y-%m-%d %H:%M:%S` 时间字符串转为秒级时间戳；失败返回 0。"""
     try:
-        return int(datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S').timestamp())
+        return int(datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").timestamp())
     except Exception:
         return 0
 
 
 class NmapModel:
     """Nmap 结果查询模型：仅封装读取类接口。"""
+
     @staticmethod
     def get_latest_scan_id():
         with get_db_cursor() as cursor:
-            cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+            cursor.execute("SELECT id FROM scans ORDER BY id DESC LIMIT 1")
             result = cursor.fetchone()
-            return dict(result)['id'] if result else None
+            return dict(result)["id"] if result else None
 
     @staticmethod
     def get_hosts(scan_id=None, limit=100, offset=0, state=None):
         with get_db_cursor() as cursor:
             if scan_id is None:
-                cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+                cursor.execute("SELECT id FROM scans ORDER BY id DESC LIMIT 1")
                 row = cursor.fetchone()
-                scan_id = row['id'] if row else None
+                scan_id = row["id"] if row else None
 
             if scan_id is None:
                 return []
@@ -90,20 +95,25 @@ class NmapModel:
         with get_db_cursor() as cursor:
             resolved_asset_id = asset_id
             if resolved_asset_id is None and mac_address:
-                cursor.execute("SELECT id FROM assets WHERE mac_address = ?", (mac_address,))
+                cursor.execute(
+                    "SELECT id FROM assets WHERE mac_address = ?", (mac_address,)
+                )
                 row = cursor.fetchone()
                 resolved_asset_id = row["id"] if row else None
 
             if resolved_asset_id is None:
                 return []
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, asset_id, ip, scan_id, seen_time
                 FROM asset_ip_history
                 WHERE asset_id = ?
                 ORDER BY seen_time DESC
                 LIMIT ?
-            """, (resolved_asset_id, limit))
+            """,
+                (resolved_asset_id, limit),
+            )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -111,21 +121,37 @@ class NmapModel:
     def get_stats():
         try:
             with get_db_cursor() as cursor:
-                cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+                cursor.execute("SELECT id FROM scans ORDER BY id DESC LIMIT 1")
                 row = cursor.fetchone()
-                latest_scan_id = row['id'] if row else None
+                latest_scan_id = row["id"] if row else None
                 if latest_scan_id is None:
                     return {"total": 0, "state_stats": [], "vendor_stats": []}
 
-                cursor.execute("SELECT state, COUNT(*) as count FROM hosts WHERE scan_id = ? GROUP BY state", (latest_scan_id,))
-                state_stats = [{"state": r[0], "count": r[1]} for r in cursor.fetchall()]
+                cursor.execute(
+                    "SELECT state, COUNT(*) as count FROM hosts WHERE scan_id = ? GROUP BY state",
+                    (latest_scan_id,),
+                )
+                state_stats = [
+                    {"state": r[0], "count": r[1]} for r in cursor.fetchall()
+                ]
 
-                cursor.execute("SELECT vendor, COUNT(*) as count FROM hosts WHERE scan_id = ? AND vendor != '' GROUP BY vendor ORDER BY count DESC LIMIT 10", (latest_scan_id,))
-                vendor_stats = [{"vendor": r[0], "count": r[1]} for r in cursor.fetchall()]
+                cursor.execute(
+                    "SELECT vendor, COUNT(*) as count FROM hosts WHERE scan_id = ? AND vendor != '' GROUP BY vendor ORDER BY count DESC LIMIT 10",
+                    (latest_scan_id,),
+                )
+                vendor_stats = [
+                    {"vendor": r[0], "count": r[1]} for r in cursor.fetchall()
+                ]
 
-                cursor.execute("SELECT COUNT(*) FROM hosts WHERE scan_id = ?", (latest_scan_id,))
+                cursor.execute(
+                    "SELECT COUNT(*) FROM hosts WHERE scan_id = ?", (latest_scan_id,)
+                )
                 total = cursor.fetchone()[0]
-                return {"total": total, "state_stats": state_stats, "vendor_stats": vendor_stats}
+                return {
+                    "total": total,
+                    "state_stats": state_stats,
+                    "vendor_stats": vendor_stats,
+                }
         except Exception:
             return {"total": 0, "state_stats": [], "vendor_stats": []}
 
@@ -133,13 +159,16 @@ class NmapModel:
     def get_latest_up_hosts():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id FROM scans ORDER BY id DESC LIMIT 1')
+        cursor.execute("SELECT id FROM scans ORDER BY id DESC LIMIT 1")
         row = cursor.fetchone()
         if not row:
             conn.close()
             return []
-        latest_scan_id = row['id']
-        cursor.execute("SELECT ip, mac_address, os_type, os_tags FROM hosts WHERE scan_id = ? AND state = 'up'", (latest_scan_id,))
+        latest_scan_id = row["id"]
+        cursor.execute(
+            "SELECT ip, mac_address, os_type, os_tags FROM hosts WHERE scan_id = ? AND state = 'up'",
+            (latest_scan_id,),
+        )
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -149,13 +178,18 @@ class NmapModel:
         conn = get_connection()
         cursor = conn.cursor()
         if scan_id:
-            cursor.execute("SELECT * FROM hosts WHERE ip = ? AND scan_id = ?", (ip, scan_id))
+            cursor.execute(
+                "SELECT * FROM hosts WHERE ip = ? AND scan_id = ?", (ip, scan_id)
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM hosts WHERE ip = ? AND scan_id = (
                     SELECT id FROM scans ORDER BY id DESC LIMIT 1
                 )
-            """, (ip,))
+            """,
+                (ip,),
+            )
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
@@ -168,10 +202,17 @@ class ScannerModel:
     def create_scan(ip_ranges, arguments, scan_time):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO scans (scan_time, ip_ranges, arguments, hosts_count)
             VALUES (?, ?, ?, 0)
-        ''', (scan_time, ','.join(ip_ranges) if isinstance(ip_ranges, list) else ip_ranges, arguments))
+        """,
+            (
+                scan_time,
+                ",".join(ip_ranges) if isinstance(ip_ranges, list) else ip_ranges,
+                arguments,
+            ),
+        )
         scan_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -181,17 +222,30 @@ class ScannerModel:
     def save_host(scan_id, host, scan_time, open_ports_str, services_str):
         conn = get_connection()
         cursor = conn.cursor()
-        web_fingerprints = host.get('web_fingerprints', [])
-        cursor.execute('''
+        web_fingerprints = host.get("web_fingerprints", [])
+        cursor.execute(
+            """
             INSERT INTO hosts
             (scan_id, ip, mac_address, vendor, hostname, state, os_type, os_accuracy, os_tags, open_ports, services, web_fingerprints, scan_time, last_seen)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            scan_id, host.get('ip'), host.get('mac_address'), host.get('vendor'),
-            host.get('hostname'), host.get('state'), host.get('os_type'),
-            host.get('os_accuracy'), host.get('os_tags'), open_ports_str,
-            services_str, json.dumps(web_fingerprints, ensure_ascii=False), scan_time, scan_time
-        ))
+        """,
+            (
+                scan_id,
+                host.get("ip"),
+                host.get("mac_address"),
+                host.get("vendor"),
+                host.get("hostname"),
+                host.get("state"),
+                host.get("os_type"),
+                host.get("os_accuracy"),
+                host.get("os_tags"),
+                open_ports_str,
+                services_str,
+                json.dumps(web_fingerprints, ensure_ascii=False),
+                scan_time,
+                scan_time,
+            ),
+        )
         conn.commit()
         conn.close()
 
@@ -200,50 +254,91 @@ class ScannerModel:
         conn = get_connection()
         cursor = conn.cursor()
 
-        ip = (host.get('ip') or '').strip()
-        mac_address = (host.get('mac_address') or '').strip()
-        hostname = (host.get('hostname') or '').strip()
-        vendor = (host.get('vendor') or '').strip()
-        state = (host.get('state') or '').strip()
-        os_type = (host.get('os_type') or '').strip()
-        os_accuracy = (host.get('os_accuracy') or '').strip()
-        os_tags = (host.get('os_tags') or '').strip()
-        web_fingerprints = json.dumps(host.get('web_fingerprints', []), ensure_ascii=False)
+        ip = (host.get("ip") or "").strip()
+        mac_address = (host.get("mac_address") or "").strip()
+        hostname = (host.get("hostname") or "").strip()
+        vendor = (host.get("vendor") or "").strip()
+        state = (host.get("state") or "").strip()
+        os_type = (host.get("os_type") or "").strip()
+        os_accuracy = (host.get("os_accuracy") or "").strip()
+        os_tags = (host.get("os_tags") or "").strip()
+        web_fingerprints = json.dumps(
+            host.get("web_fingerprints", []), ensure_ascii=False
+        )
 
         if not ip and not mac_address:
             conn.close()
             return
 
         if mac_address:
-            cursor.execute('SELECT id, current_ip FROM assets WHERE mac_address = ?', (mac_address,))
+            cursor.execute(
+                "SELECT id, current_ip FROM assets WHERE mac_address = ?",
+                (mac_address,),
+            )
         else:
-            cursor.execute('SELECT id, current_ip FROM assets WHERE mac_address IS NULL AND current_ip = ? ORDER BY id DESC LIMIT 1', (ip,))
+            cursor.execute(
+                "SELECT id, current_ip FROM assets WHERE mac_address IS NULL AND current_ip = ? ORDER BY id DESC LIMIT 1",
+                (ip,),
+            )
 
         existing = cursor.fetchone()
         old_ip = None
 
         if existing:
             asset_id, old_ip = existing[0], existing[1]
-            cursor.execute('''
+            cursor.execute(
+                """
                 UPDATE assets
                 SET current_ip = ?, hostname = ?, vendor = ?, state = ?, os_type = ?, os_accuracy = ?, os_tags = ?,
                     web_fingerprints = ?, last_seen = ?, last_scan_id = ?
                 WHERE id = ?
-            ''', (ip, hostname, vendor, state, os_type, os_accuracy, os_tags, web_fingerprints, scan_time, scan_id, asset_id))
+            """,
+                (
+                    ip,
+                    hostname,
+                    vendor,
+                    state,
+                    os_type,
+                    os_accuracy,
+                    os_tags,
+                    web_fingerprints,
+                    scan_time,
+                    scan_id,
+                    asset_id,
+                ),
+            )
         else:
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO assets
                 (mac_address, current_ip, hostname, vendor, state, os_type, os_accuracy, os_tags, web_fingerprints, first_seen, last_seen, last_scan_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (mac_address if mac_address else None, ip, hostname, vendor, state, os_type, os_accuracy, os_tags,
-                  web_fingerprints, scan_time, scan_time, scan_id))
+            """,
+                (
+                    mac_address if mac_address else None,
+                    ip,
+                    hostname,
+                    vendor,
+                    state,
+                    os_type,
+                    os_accuracy,
+                    os_tags,
+                    web_fingerprints,
+                    scan_time,
+                    scan_time,
+                    scan_id,
+                ),
+            )
             asset_id = cursor.lastrowid
 
         if ip and old_ip != ip:
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO asset_ip_history (asset_id, ip, scan_id, seen_time)
                 VALUES (?, ?, ?, ?)
-            ''', (asset_id, ip, scan_id, scan_time))
+            """,
+                (asset_id, ip, scan_id, scan_time),
+            )
 
         conn.commit()
         conn.close()
@@ -252,7 +347,10 @@ class ScannerModel:
     def increment_hosts_count(scan_id, count):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('UPDATE scans SET hosts_count = hosts_count + ? WHERE id = ?', (count, scan_id))
+        cursor.execute(
+            "UPDATE scans SET hosts_count = hosts_count + ? WHERE id = ?",
+            (count, scan_id),
+        )
         conn.commit()
         conn.close()
 
@@ -264,12 +362,12 @@ class HFishModel:
     def get_attack_logs(limit=50, offset=0, service_name=None):
         conn = get_connection()
         cursor = conn.cursor()
-        query = 'SELECT * FROM attack_logs WHERE 1=1'
+        query = "SELECT * FROM attack_logs WHERE 1=1"
         params = []
         if service_name:
-            query += ' AND service_name = ?'
+            query += " AND service_name = ?"
             params.append(service_name)
-        query += ' ORDER BY create_time_timestamp DESC LIMIT ? OFFSET ?'
+        query += " ORDER BY create_time_timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -281,8 +379,8 @@ class HFishModel:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT * FROM attack_logs WHERE attack_ip = ? ORDER BY create_time_timestamp DESC',
-            (ip,)
+            "SELECT * FROM attack_logs WHERE attack_ip = ? ORDER BY create_time_timestamp DESC",
+            (ip,),
         )
         rows = cursor.fetchall()
         conn.close()
@@ -292,10 +390,15 @@ class HFishModel:
     def get_last_timestamp():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT MAX(COALESCE(create_time_timestamp, 0)) as last_timestamp FROM attack_logs')
+        cursor.execute(
+            "SELECT MAX(COALESCE(create_time_timestamp, 0)) as last_timestamp FROM attack_logs"
+        )
         row = cursor.fetchone()
         conn.close()
-        return int((row['last_timestamp'] if row and row['last_timestamp'] is not None else 0) or 0)
+        return int(
+            (row["last_timestamp"] if row and row["last_timestamp"] is not None else 0)
+            or 0
+        )
 
     @staticmethod
     def save_logs(logs):
@@ -307,19 +410,21 @@ class HFishModel:
         inserted = 0
 
         for item in logs:
-            attack_ip = item.get('attack_ip') or item.get('ip') or ''
-            ip_location = item.get('ip_location') or item.get('location') or ''
-            client_id = str(item.get('client_id') or '')
-            client_name = item.get('client_name') or ''
-            service_name = item.get('service_name') or ''
-            service_port = str(item.get('service_port') or item.get('attack_port') or '')
-            threat_level = item.get('threat_level') or ''
-            create_time_str = item.get('create_time_str') or ''
-            create_time_timestamp = item.get('create_time_timestamp')
+            attack_ip = item.get("attack_ip") or item.get("ip") or ""
+            ip_location = item.get("ip_location") or item.get("location") or ""
+            client_id = str(item.get("client_id") or "")
+            client_name = item.get("client_name") or ""
+            service_name = item.get("service_name") or ""
+            service_port = str(
+                item.get("service_port") or item.get("attack_port") or ""
+            )
+            threat_level = item.get("threat_level") or ""
+            create_time_str = item.get("create_time_str") or ""
+            create_time_timestamp = item.get("create_time_timestamp")
 
-            if create_time_timestamp in (None, ''):
-                if item.get('create_time') not in (None, ''):
-                    create_time_timestamp = int(item.get('create_time') or 0)
+            if create_time_timestamp in (None, ""):
+                if item.get("create_time") not in (None, ""):
+                    create_time_timestamp = int(item.get("create_time") or 0)
                 elif create_time_str:
                     create_time_timestamp = _time_str_to_timestamp(create_time_str)
                 else:
@@ -327,31 +432,33 @@ class HFishModel:
 
             if not create_time_str and create_time_timestamp:
                 try:
-                    create_time_str = datetime.fromtimestamp(int(create_time_timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    create_time_str = datetime.fromtimestamp(
+                        int(create_time_timestamp)
+                    ).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
-                    create_time_str = ''
+                    create_time_str = ""
 
             create_time_timestamp = int(create_time_timestamp or 0)
 
             cursor.execute(
-                '''
+                """
                 SELECT id FROM attack_logs
                 WHERE attack_ip = ? AND service_name = ? AND service_port = ? AND create_time_timestamp = ?
                 LIMIT 1
-                ''',
-                (attack_ip, service_name, service_port, create_time_timestamp)
+                """,
+                (attack_ip, service_name, service_port, create_time_timestamp),
             )
             if cursor.fetchone():
                 continue
 
             cursor.execute(
-                '''
+                """
                 INSERT INTO attack_logs (
                     attack_ip, ip_location, client_id, client_name,
                     service_name, service_port, threat_level,
                     create_time_str, create_time_timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
+                """,
                 (
                     attack_ip,
                     ip_location,
@@ -362,7 +469,7 @@ class HFishModel:
                     threat_level,
                     create_time_str,
                     create_time_timestamp,
-                )
+                ),
             )
             inserted += 1
 
@@ -374,12 +481,14 @@ class HFishModel:
     def get_stats():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) as total FROM attack_logs')
-        total = cursor.fetchone()['total']
-        cursor.execute('SELECT COUNT(DISTINCT attack_ip) as ip_count FROM attack_logs')
-        ip_count = cursor.fetchone()['ip_count']
-        cursor.execute('SELECT COUNT(DISTINCT service_name) as service_count FROM attack_logs')
-        service_count = cursor.fetchone()['service_count']
+        cursor.execute("SELECT COUNT(*) as total FROM attack_logs")
+        total = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(DISTINCT attack_ip) as ip_count FROM attack_logs")
+        ip_count = cursor.fetchone()["ip_count"]
+        cursor.execute(
+            "SELECT COUNT(DISTINCT service_name) as service_count FROM attack_logs"
+        )
+        service_count = cursor.fetchone()["service_count"]
         cursor.execute("""
             SELECT
                 COALESCE(service_name, '未知') as name,
@@ -388,7 +497,9 @@ class HFishModel:
             GROUP BY service_name
             ORDER BY count DESC
         """)
-        service_stats = [{'name': r['name'], 'count': r['count']} for r in cursor.fetchall()]
+        service_stats = [
+            {"name": r["name"], "count": r["count"]} for r in cursor.fetchall()
+        ]
         # 按小时统计趋势
         cursor.execute("""
             SELECT
@@ -400,14 +511,16 @@ class HFishModel:
             ORDER BY hour DESC
             LIMIT 24
         """)
-        time_stats = [{'date': r['hour'], 'count': r['count']} for r in cursor.fetchall()]
+        time_stats = [
+            {"date": r["hour"], "count": r["count"]} for r in cursor.fetchall()
+        ]
         conn.close()
         return {
-            'total': total,
-            'unique_ips': ip_count,
-            'services': service_count,
-            'service_stats': service_stats,
-            'time_stats': time_stats,
+            "total": total,
+            "unique_ips": ip_count,
+            "services": service_count,
+            "service_stats": service_stats,
+            "time_stats": time_stats,
         }
 
 
@@ -418,14 +531,14 @@ class StatsModel:
     def get_dashboard_stats():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) as total_hosts FROM hosts')
-        total_hosts = cursor.fetchone()['total_hosts']
-        cursor.execute('SELECT COUNT(*) as total_attacks FROM attack_logs')
-        total_attacks = cursor.fetchone()['total_attacks']
+        cursor.execute("SELECT COUNT(*) as total_hosts FROM hosts")
+        total_hosts = cursor.fetchone()["total_hosts"]
+        cursor.execute("SELECT COUNT(*) as total_attacks FROM attack_logs")
+        total_attacks = cursor.fetchone()["total_attacks"]
         conn.close()
         return {
-            'total_hosts': total_hosts,
-            'total_attacks': total_attacks,
+            "total_hosts": total_hosts,
+            "total_attacks": total_attacks,
         }
 
 
@@ -433,10 +546,11 @@ class AiModel:
     """AI 分析与聊天记录模型"""
 
     @staticmethod
-    def save_analysis(ip, analysis_text, decision, scan_time=None, status='pending'):
+    def save_analysis(ip, analysis_text, decision, scan_time=None, status="pending"):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO ai_analysis_logs (ip, analysis_text, decision, scan_time, status)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(ip) DO UPDATE SET
@@ -444,7 +558,15 @@ class AiModel:
                 decision = excluded.decision,
                 scan_time = excluded.scan_time,
                 status = excluded.status
-        ''', (ip, analysis_text, decision, scan_time or datetime.now().strftime('%Y-%m-%d %H:%M:%S'), status))
+        """,
+            (
+                ip,
+                analysis_text,
+                decision,
+                scan_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                status,
+            ),
+        )
         conn.commit()
         conn.close()
 
@@ -452,30 +574,35 @@ class AiModel:
     def get_all_analyses():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM ai_analysis_logs')
+        cursor.execute("SELECT * FROM ai_analysis_logs")
         rows = cursor.fetchall()
         conn.close()
-        return {row['ip']: dict(row) for row in rows}
+        return {row["ip"]: dict(row) for row in rows}
 
     @staticmethod
     def get_analysis_by_ip(ip):
         """按 IP 获取单条 AI 分析记录（兼容旧调用）。"""
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM ai_analysis_logs WHERE ip = ? LIMIT 1', (ip,))
+        cursor.execute("SELECT * FROM ai_analysis_logs WHERE ip = ? LIMIT 1", (ip,))
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
 
     @staticmethod
-    def create_session(title='新对话', context_type=None, context_id=None, is_drill_mode=0):
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    def create_session(
+        title="新对话", context_type=None, context_id=None, is_drill_mode=0
+    ):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO ai_chat_sessions (title, context_type, context_id, is_drill_mode, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        ''', (title, context_type, context_id, is_drill_mode, now, now))
+        """,
+            (title, context_type, context_id, is_drill_mode, now, now),
+        )
         session_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -486,30 +613,73 @@ class AiModel:
         """更新会话的演练模式标记"""
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('UPDATE ai_chat_sessions SET is_drill_mode = ? WHERE id = ?', (is_drill_mode, session_id))
+        cursor.execute(
+            "UPDATE ai_chat_sessions SET is_drill_mode = ? WHERE id = ?",
+            (is_drill_mode, session_id),
+        )
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def get_session_drill_mode(session_id):
+        """获取会话的演练模式标记"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT is_drill_mode FROM ai_chat_sessions WHERE id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row["is_drill_mode"] if row else 0
 
     @staticmethod
     def list_sessions(limit=50):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM ai_chat_sessions ORDER BY updated_at DESC LIMIT ?', (limit,))
+        cursor.execute(
+            "SELECT * FROM ai_chat_sessions ORDER BY updated_at DESC LIMIT ?", (limit,)
+        )
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     @staticmethod
-    def save_message(session_id, role, content, tool_calls=None, tool_call_id=None):
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    def save_message(
+        session_id,
+        role,
+        content,
+        tool_calls=None,
+        tool_call_id=None,
+        openai_content=None,
+    ):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO ai_chat_history (session_id, role, content, tool_calls, tool_call_id, create_time)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (session_id, role, content, json.dumps(tool_calls, ensure_ascii=False) if tool_calls is not None else None, tool_call_id, now))
+        cursor.execute(
+            """
+            INSERT INTO ai_chat_history (session_id, role, content, openai_content, tool_calls, tool_call_id, create_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                session_id,
+                role,
+                content,
+                json.dumps(openai_content, ensure_ascii=False)
+                if openai_content
+                else None,
+                json.dumps(tool_calls, ensure_ascii=False)
+                if tool_calls is not None
+                else None,
+                tool_call_id,
+                now,
+            ),
+        )
         if session_id:
-            cursor.execute('UPDATE ai_chat_sessions SET updated_at = ? WHERE id = ?', (now, session_id))
+            cursor.execute(
+                "UPDATE ai_chat_sessions SET updated_at = ? WHERE id = ?",
+                (now, session_id),
+            )
         message_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -519,17 +689,25 @@ class AiModel:
     def get_messages(session_id):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM ai_chat_history WHERE session_id = ? ORDER BY id ASC', (session_id,))
+        cursor.execute(
+            "SELECT * FROM ai_chat_history WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
+        )
         rows = cursor.fetchall()
         conn.close()
         results = []
         for row in rows:
             data = dict(row)
-            if data.get('tool_calls'):
+            if data.get("tool_calls"):
                 try:
-                    data['tool_calls'] = json.loads(data['tool_calls'])
+                    data["tool_calls"] = json.loads(data["tool_calls"])
                 except Exception:
-                    data['tool_calls'] = []
+                    data["tool_calls"] = []
+            if data.get("openai_content"):
+                try:
+                    data["openai_content"] = json.loads(data["openai_content"])
+                except Exception:
+                    data["openai_content"] = None
             results.append(data)
         return results
 
@@ -537,8 +715,10 @@ class AiModel:
     def delete_session(session_id):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM ai_chat_history WHERE session_id = ?', (session_id,))
-        cursor.execute('DELETE FROM ai_chat_sessions WHERE id = ?', (session_id,))
+        cursor.execute(
+            "DELETE FROM ai_chat_history WHERE session_id = ?", (session_id,)
+        )
+        cursor.execute("DELETE FROM ai_chat_sessions WHERE id = ?", (session_id,))
         conn.commit()
         conn.close()
 
@@ -550,64 +730,73 @@ class AiModel:
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                'SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE is_drill_mode = 1 ORDER BY created_at DESC LIMIT ?',
+                "SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE is_drill_mode = 1 ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             )
             sessions = [dict(row) for row in cursor.fetchall()]
 
             for s in sessions:
                 cursor.execute(
-                    '''
+                    """
                     SELECT content, create_time FROM ai_chat_history
                     WHERE session_id = ? AND role = 'tool'
                     AND content LIKE '%"report":%'
                     ORDER BY id DESC LIMIT 1
-                    ''',
-                    (s['id'],),
+                    """,
+                    (s["id"],),
                 )
                 row = cursor.fetchone()
                 if row:
                     try:
-                        data = json.loads(row['content'])
+                        data = json.loads(row["content"])
                         cursor.execute(
-                            '''
+                            """
                             SELECT content FROM ai_chat_history
                             WHERE session_id = ? AND role = 'user'
                             ORDER BY id ASC LIMIT 1
-                            ''',
-                            (s['id'],),
+                            """,
+                            (s["id"],),
                         )
                         user_row = cursor.fetchone()
 
-                        report_content = data.get('report', '')
-                        original_input = user_row['content'] if user_row else None
+                        report_content = data.get("report", "")
+                        original_input = user_row["content"] if user_row else None
 
-                        if original_input and not data.get('is_html', False):
-                            report_content = f"> **原始演练输入**: {original_input}\n\n---\n\n" + report_content
+                        if original_input and not data.get("is_html", False):
+                            report_content = (
+                                f"> **原始演练输入**: {original_input}\n\n---\n\n"
+                                + report_content
+                            )
 
-                        reports.append({
-                            'session_id': s['id'],
-                            'title': s['title'],
-                            'created_at': s['created_at'],
-                            'updated_at': s.get('updated_at'),
-                            'report': report_content,
-                            'summary': data.get('summary'),
-                            'is_html': data.get('is_html', False),
-                            'original_input': original_input,
-                        })
+                        reports.append(
+                            {
+                                "session_id": s["id"],
+                                "title": s["title"],
+                                "created_at": s["created_at"],
+                                "updated_at": s.get("updated_at"),
+                                "report": report_content,
+                                "summary": data.get("summary"),
+                                "is_html": data.get("is_html", False),
+                                "original_input": original_input,
+                            }
+                        )
                     except Exception as e:
-                        print(f"[AiModel.get_reports] 解析报告失败 session_id={s['id']}: {e}")
+                        print(
+                            f"[AiModel.get_reports] 解析报告失败 session_id={s['id']}: {e}"
+                        )
                 else:
-                    reports.append({
-                        'session_id': s['id'],
-                        'title': s['title'],
-                        'created_at': s['created_at'],
-                        'updated_at': s.get('updated_at'),
-                        'report': '',
-                        'summary': None,
-                        'is_html': False,
-                        'original_input': None,
-                    })
+                    reports.append(
+                        {
+                            "session_id": s["id"],
+                            "title": s["title"],
+                            "created_at": s["created_at"],
+                            "updated_at": s.get("updated_at"),
+                            "report": "",
+                            "summary": None,
+                            "is_html": False,
+                            "original_input": None,
+                        }
+                    )
         except Exception:
             pass
         finally:
@@ -617,22 +806,37 @@ class AiModel:
 
     @staticmethod
     def save_chat_history(query, response="", scan_id=None, history_id=None):
-        return AiModel.save_message(None, 'user', query)
+        return AiModel.save_message(None, "user", query)
 
 
 class SwitchAclModel:
     """交换机ACL策略管理"""
 
     @staticmethod
-    def add_rule(switch_ip, acl_number, rule_id, action, target_ip, rule_text, description=''):
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    def add_rule(
+        switch_ip, acl_number, rule_id, action, target_ip, rule_text, description=""
+    ):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO switch_acl_rules
             (switch_ip, acl_number, rule_id, action, target_ip, rule_text, description, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (switch_ip, acl_number, rule_id, action, target_ip, rule_text, description, now, now))
+        """,
+            (
+                switch_ip,
+                acl_number,
+                rule_id,
+                action,
+                target_ip,
+                rule_text,
+                description,
+                now,
+                now,
+            ),
+        )
         rule_id_db = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -640,13 +844,16 @@ class SwitchAclModel:
 
     @staticmethod
     def remove_rule(switch_ip, acl_number, target_ip):
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             UPDATE switch_acl_rules SET action = 'removed', updated_at = ?
             WHERE switch_ip = ? AND acl_number = ? AND target_ip = ? AND action != 'removed'
-        ''', (now, switch_ip, acl_number, target_ip))
+        """,
+            (now, switch_ip, acl_number, target_ip),
+        )
         conn.commit()
         conn.close()
 
@@ -658,12 +865,12 @@ class SwitchAclModel:
         sql = 'SELECT * FROM switch_acl_rules WHERE action != "removed"'
         params = []
         if switch_ip:
-            sql += ' AND switch_ip = ?'
+            sql += " AND switch_ip = ?"
             params.append(switch_ip)
         if acl_number:
-            sql += ' AND acl_number = ?'
+            sql += " AND acl_number = ?"
             params.append(acl_number)
-        sql += ' ORDER BY acl_number, rule_id'
+        sql += " ORDER BY acl_number, rule_id"
 
         cursor.execute(sql, params)
         rows = cursor.fetchall()
@@ -674,7 +881,7 @@ class SwitchAclModel:
     def clear_all():
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM switch_acl_rules')
+        cursor.execute("DELETE FROM switch_acl_rules")
         conn.commit()
         conn.close()
 
@@ -683,16 +890,31 @@ class SwitchWorkbenchModel:
     """交换机工作台执行记录模型"""
 
     @staticmethod
-    def add_command_run(device_name, device_host, command_text, source, status, stdout='', summary=''):
-        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    def add_command_run(
+        device_name, device_host, command_text, source, status, stdout="", summary=""
+    ):
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         completed_at = created_at
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO switch_workbench_runs
             (device_name, device_host, command_text, source, status, stdout, summary, created_at, completed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (device_name, device_host, command_text, source, status, stdout, summary, created_at, completed_at))
+        """,
+            (
+                device_name,
+                device_host,
+                command_text,
+                source,
+                status,
+                stdout,
+                summary,
+                created_at,
+                completed_at,
+            ),
+        )
         run_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -702,7 +924,9 @@ class SwitchWorkbenchModel:
     def list_command_runs(limit=30):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM switch_workbench_runs ORDER BY id DESC LIMIT ?', (limit,))
+        cursor.execute(
+            "SELECT * FROM switch_workbench_runs ORDER BY id DESC LIMIT ?", (limit,)
+        )
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -715,7 +939,8 @@ class ScreenshotModel:
     def save_screenshot(ip, port, url, screenshot_path, scan_time, scan_id=None):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO web_screenshots (ip, port, url, screenshot_path, scan_time, scan_id)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(ip, port) DO UPDATE SET
@@ -723,7 +948,9 @@ class ScreenshotModel:
                 screenshot_path = excluded.screenshot_path,
                 scan_time = excluded.scan_time,
                 scan_id = COALESCE(excluded.scan_id, web_screenshots.scan_id)
-        ''', (ip, port, url, screenshot_path, scan_time, scan_id))
+        """,
+            (ip, port, url, screenshot_path, scan_time, scan_id),
+        )
         conn.commit()
         conn.close()
 
@@ -732,9 +959,11 @@ class ScreenshotModel:
         conn = get_connection()
         cursor = conn.cursor()
         if port:
-            cursor.execute('SELECT * FROM web_screenshots WHERE ip = ? AND port = ?', (ip, port))
+            cursor.execute(
+                "SELECT * FROM web_screenshots WHERE ip = ? AND port = ?", (ip, port)
+            )
         else:
-            cursor.execute('SELECT * FROM web_screenshots WHERE ip = ?', (ip,))
+            cursor.execute("SELECT * FROM web_screenshots WHERE ip = ?", (ip,))
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -742,22 +971,28 @@ class ScreenshotModel:
     @staticmethod
     def get_all_screenshots(limit=100):
         import os as _os
+
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM web_screenshots ORDER BY scan_time DESC LIMIT ?', (limit,))
+        cursor.execute(
+            "SELECT * FROM web_screenshots ORDER BY scan_time DESC LIMIT ?", (limit,)
+        )
         rows = cursor.fetchall()
         conn.close()
         result = []
         for r in rows:
             d = dict(r)
-            path = d.get('screenshot_path')
+            path = d.get("screenshot_path")
             if path and _os.path.exists(path):
                 result.append(d)
             else:
                 try:
                     conn2 = get_connection()
                     cur2 = conn2.cursor()
-                    cur2.execute('DELETE FROM web_screenshots WHERE ip = ? AND port = ?', (d.get('ip'), d.get('port')))
+                    cur2.execute(
+                        "DELETE FROM web_screenshots WHERE ip = ? AND port = ?",
+                        (d.get("ip"), d.get("port")),
+                    )
                     conn2.commit()
                     conn2.close()
                 except Exception:
@@ -768,7 +1003,9 @@ class ScreenshotModel:
     def delete_screenshot(ip, port):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM web_screenshots WHERE ip = ? AND port = ?', (ip, port))
+        cursor.execute(
+            "DELETE FROM web_screenshots WHERE ip = ? AND port = ?", (ip, port)
+        )
         conn.commit()
         conn.close()
 
@@ -776,55 +1013,55 @@ class ScreenshotModel:
 class TopologyModel:
     """Topology persistence model (JSON based)."""
 
-    TOPOLOGY_FILE = os.path.join(BASE_DIR, 'database', 'topology.json')
+    TOPOLOGY_FILE = os.path.join(BASE_DIR, "database", "topology.json")
 
     @staticmethod
     def get_topology():
         if not os.path.exists(TopologyModel.TOPOLOGY_FILE):
-            return {'nodes': [], 'links': []}
+            return {"nodes": [], "links": []}
         try:
-            with open(TopologyModel.TOPOLOGY_FILE, 'r', encoding='utf-8') as f:
+            with open(TopologyModel.TOPOLOGY_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
-            return {'nodes': [], 'links': []}
+            return {"nodes": [], "links": []}
 
         if not isinstance(data, dict):
-            return {'nodes': [], 'links': []}
+            return {"nodes": [], "links": []}
 
-        nodes = data.get('nodes')
-        links = data.get('links')
+        nodes = data.get("nodes")
+        links = data.get("links")
         return {
-            'nodes': nodes if isinstance(nodes, list) else [],
-            'links': links if isinstance(links, list) else [],
+            "nodes": nodes if isinstance(nodes, list) else [],
+            "links": links if isinstance(links, list) else [],
         }
 
     @staticmethod
     def save_topology(data):
         payload = data if isinstance(data, dict) else {}
-        nodes = payload.get('nodes')
-        links = payload.get('links')
+        nodes = payload.get("nodes")
+        links = payload.get("links")
         normalized = {
-            'nodes': nodes if isinstance(nodes, list) else [],
-            'links': links if isinstance(links, list) else [],
+            "nodes": nodes if isinstance(nodes, list) else [],
+            "links": links if isinstance(links, list) else [],
         }
 
         os.makedirs(os.path.dirname(TopologyModel.TOPOLOGY_FILE), exist_ok=True)
-        with open(TopologyModel.TOPOLOGY_FILE, 'w', encoding='utf-8') as f:
+        with open(TopologyModel.TOPOLOGY_FILE, "w", encoding="utf-8") as f:
             json.dump(normalized, f, ensure_ascii=False, indent=2)
         return True
 
 
 __all__ = [
-    'NmapModel',
-    'ScannerModel',
-    'HFishModel',
-    'StatsModel',
-    'AiModel',
-    'SwitchAclModel',
-    'SwitchWorkbenchModel',
-    'ScreenshotModel',
-    'TopologyModel',
-    'WorkflowModel',
-    'WorkflowRunModel',
-    'WorkflowWebhookModel',
+    "NmapModel",
+    "ScannerModel",
+    "HFishModel",
+    "StatsModel",
+    "AiModel",
+    "SwitchAclModel",
+    "SwitchWorkbenchModel",
+    "ScreenshotModel",
+    "TopologyModel",
+    "WorkflowModel",
+    "WorkflowRunModel",
+    "WorkflowWebhookModel",
 ]

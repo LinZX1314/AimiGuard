@@ -15,7 +15,7 @@ def get_connection():
     conn = sqlite3.connect(DB_FILE, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute("PRAGMA journal_mode=WAL")
     except Exception:
         pass
     return conn
@@ -53,7 +53,7 @@ def init_db():
     cursor = conn.cursor()
 
     # ================= Nmap网络扫描相关表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_time TEXT NOT NULL,
@@ -61,9 +61,9 @@ def init_db():
             arguments TEXT,
             hosts_count INTEGER DEFAULT 0
         )
-    ''')
+    """)
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS hosts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_id INTEGER NOT NULL,
@@ -82,9 +82,9 @@ def init_db():
             last_seen TEXT,
             FOREIGN KEY (scan_id) REFERENCES scans(id)
         )
-    ''')
+    """)
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mac_address TEXT UNIQUE,
@@ -100,9 +100,9 @@ def init_db():
             last_seen TEXT NOT NULL,
             last_scan_id INTEGER
         )
-    ''')
+    """)
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS asset_ip_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             asset_id INTEGER NOT NULL,
@@ -112,16 +112,18 @@ def init_db():
             UNIQUE(asset_id, ip, scan_id),
             FOREIGN KEY (asset_id) REFERENCES assets(id)
         )
-    ''')
+    """)
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_mac ON assets(mac_address)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_assets_ip ON assets(current_ip)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_asset_ip_history_asset ON asset_ip_history(asset_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_assets_mac ON assets(mac_address)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_assets_ip ON assets(current_ip)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_ip_history_asset ON asset_ip_history(asset_id)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_hosts_scan_id ON hosts(scan_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_hosts_state ON hosts(state)")
 
     # ================= HFish蜜罐攻击日志相关表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS attack_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             attack_ip TEXT,
@@ -134,14 +136,20 @@ def init_db():
             create_time_str TEXT,
             create_time_timestamp INTEGER
         )
-    ''')
+    """)
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)')
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attack_logs_ip ON attack_logs(attack_ip)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attack_logs_time ON attack_logs(create_time_timestamp)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attack_logs_service ON attack_logs(service_name)"
+    )
 
     # ================= AI 分析记录表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_analysis_logs (
             ip TEXT PRIMARY KEY,
             analysis_text TEXT,
@@ -149,11 +157,13 @@ def init_db():
             scan_time TEXT,
             status TEXT DEFAULT 'pending'
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ai_analysis_ip ON ai_analysis_logs(ip)"
+    )
 
     # ================= AI 聊天与会话持久化表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_chat_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
@@ -163,14 +173,16 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-    ''')
+    """)
 
     try:
-        cursor.execute('ALTER TABLE ai_chat_sessions ADD COLUMN is_drill_mode INTEGER DEFAULT 0')
+        cursor.execute(
+            "ALTER TABLE ai_chat_sessions ADD COLUMN is_drill_mode INTEGER DEFAULT 0"
+        )
     except Exception:
         pass
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER,
@@ -178,15 +190,22 @@ def init_db():
             query TEXT,
             response TEXT,
             content TEXT,
+            openai_content TEXT,
             tool_calls TEXT,
             tool_call_id TEXT,
             create_time TEXT NOT NULL,
             FOREIGN KEY (session_id) REFERENCES ai_chat_sessions(id)
         )
-    ''')
+    """)
+
+    # 迁移：添加 openai_content 字段
+    try:
+        cursor.execute("ALTER TABLE ai_chat_history ADD COLUMN openai_content TEXT")
+    except:
+        pass
 
     # ================= 交换机ACL策略表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS switch_acl_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             switch_ip TEXT NOT NULL,
@@ -199,11 +218,13 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_acl_switch ON switch_acl_rules(switch_ip, acl_number)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acl_switch ON switch_acl_rules(switch_ip, acl_number)"
+    )
 
     # ================= Web 指纹表（fscan SERVICE 条目） =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS web_fingerprints (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ip TEXT NOT NULL,
@@ -217,11 +238,11 @@ def init_db():
             scan_time TEXT NOT NULL,
             UNIQUE(ip, port)
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_fp_ip ON web_fingerprints(ip)')
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_web_fp_ip ON web_fingerprints(ip)")
 
     # ================= Web 页面截图表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS web_screenshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ip TEXT NOT NULL,
@@ -232,18 +253,20 @@ def init_db():
             scan_id INTEGER,
             UNIQUE(ip, port)
         )
-    ''')
+    """)
 
     try:
-        cursor.execute('ALTER TABLE web_screenshots ADD COLUMN scan_id INTEGER')
+        cursor.execute("ALTER TABLE web_screenshots ADD COLUMN scan_id INTEGER")
     except Exception:
         pass
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_ip ON web_screenshots(ip)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_web_ss_scan_id ON web_screenshots(scan_id)')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_web_ss_ip ON web_screenshots(ip)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_web_ss_scan_id ON web_screenshots(scan_id)"
+    )
 
     # ================= 工作流定义与运行记录表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS workflows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -259,12 +282,18 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflows_next_run_at ON workflows(next_run_at)')
-    cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_webhook_token ON workflows(webhook_token)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflows_next_run_at ON workflows(next_run_at)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_webhook_token ON workflows(webhook_token)"
+    )
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS workflow_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_id INTEGER NOT NULL,
@@ -277,12 +306,16 @@ def init_db():
             error_message TEXT,
             FOREIGN KEY (workflow_id) REFERENCES workflows(id)
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)"
+    )
 
     # ================= 交换机工作台执行记录表 =================
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS switch_workbench_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             device_name TEXT NOT NULL,
@@ -295,11 +328,15 @@ def init_db():
             created_at TEXT NOT NULL,
             completed_at TEXT
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_created_at ON switch_workbench_runs(created_at DESC)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_device_host ON switch_workbench_runs(device_host)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_created_at ON switch_workbench_runs(created_at DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_switch_workbench_runs_device_host ON switch_workbench_runs(device_host)"
+    )
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS workflow_run_steps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id INTEGER NOT NULL,
@@ -314,10 +351,12 @@ def init_db():
             error_message TEXT,
             FOREIGN KEY (run_id) REFERENCES workflow_runs(id)
         )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run ON workflow_run_steps(run_id)')
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_run_steps_run ON workflow_run_steps(run_id)"
+    )
 
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS workflow_webhooks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_id INTEGER NOT NULL UNIQUE,
@@ -328,12 +367,14 @@ def init_db():
             updated_at TEXT NOT NULL,
             FOREIGN KEY (workflow_id) REFERENCES workflows(id)
         )
-    ''')
+    """)
     try:
-        cursor.execute('ALTER TABLE workflow_webhooks ADD COLUMN secret TEXT')
+        cursor.execute("ALTER TABLE workflow_webhooks ADD COLUMN secret TEXT")
     except Exception:
         pass
-    cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_webhooks_token ON workflow_webhooks(token)')
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_webhooks_token ON workflow_webhooks(token)"
+    )
 
     conn.commit()
     conn.close()
