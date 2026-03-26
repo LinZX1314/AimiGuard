@@ -957,6 +957,14 @@ def create_drill_stream(
                 + "\n\n"
             )
 
+            # 追加工具结果到历史（让AI看到工具执行结果）
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "name": tool_name,
+                "content": result_str
+            })
+
             # 如果是报告生成工具，同时输出报告内容供前端渲染
             if (
                 tool_name == "generate_report"
