@@ -269,8 +269,6 @@ onUnmounted(() => {
                     节点 {{ topologyOverview.nodeCount }}
                     <span class="topology-header-card__dot"></span>
                     链路 {{ topologyOverview.linkCount }}
-                    <span class="topology-header-card__dot"></span>
-                    高危告警 {{ topologyOverview.warningCount }}
                   </p>
                 </div>
 
@@ -278,10 +276,6 @@ onUnmounted(() => {
                   <article class="topology-header-pill">
                     <span>在线节点</span>
                     <strong>{{ topologyOverview.onlineCount }}</strong>
-                  </article>
-                  <article class="topology-header-pill">
-                    <span>风险节点</span>
-                    <strong>{{ topologyOverview.warningCount }}</strong>
                   </article>
                 </div>
               </div>
