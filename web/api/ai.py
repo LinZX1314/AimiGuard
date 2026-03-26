@@ -307,7 +307,7 @@ def ai_chat_stream():
             # 发送演练启动消息
             yield f"data: {json.dumps({'content': '🚀 演练启动：AI 正在分析演练文档，制定行动计划...'}, ensure_ascii=False)}\n\n"
 
-            # 使用独立的演练执行器（create_drill_stream 返回的 chunk 末尾已有 \n\n，需剥除后加 data: 前缀）
+            # 演练执行器会发送 step_complete 事件，每步完成后保存到数据库
             for chunk in create_drill_stream(
                 document_content=message,
                 cfg=cfg_now,
@@ -316,8 +316,22 @@ def ai_chat_stream():
                 import logging
                 try:
                     parsed_chunk = json.loads(chunk.strip())
-                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else 'other'))
+                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else ('step_complete' if 'step_complete' in parsed_chunk else 'other')))
                     logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                    # step_complete 事件包含完整的 assistant message，保存到数据库
+                    if parsed_chunk.get('step_complete'):
+                        step_data = parsed_chunk['step_complete']
+                        AiModel.save_message(sid, 'assistant', step_data.get('content') or '', tool_calls=step_data.get('tool_calls'))
+                    # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
+                    if parsed_chunk.get('tool_result'):
+                        tr = parsed_chunk['tool_result']
+                        # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
+                        if tr.get('name') == 'drill_generate_report' and tr.get('full_result'):
+                            try:
+                                full_result = json.loads(tr['full_result'])
+                                AiModel.save_message(sid, 'tool', tr['full_result'], tool_call_id=tr.get('id'))
+                            except:
+                                AiModel.save_message(sid, 'tool', tr.get('result', ''), tool_call_id=tr.get('id'))
                 except:
                     logging.info(f'[DrillSSE] raw: {chunk[:100]}')
                 yield f"data: {chunk.rstrip()}\n\n"
@@ -372,8 +386,22 @@ def ai_chat_stream():
                 import logging
                 try:
                     parsed_chunk = json.loads(chunk.strip())
-                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else 'other'))
+                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else ('step_complete' if 'step_complete' in parsed_chunk else 'other')))
                     logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                    # step_complete 事件包含完整的 assistant message，保存到数据库
+                    if parsed_chunk.get('step_complete'):
+                        step_data = parsed_chunk['step_complete']
+                        AiModel.save_message(sid, 'assistant', step_data.get('content') or '', tool_calls=step_data.get('tool_calls'))
+                    # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
+                    if parsed_chunk.get('tool_result'):
+                        tr = parsed_chunk['tool_result']
+                        # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
+                        if tr.get('name') == 'drill_generate_report' and tr.get('full_result'):
+                            try:
+                                full_result = json.loads(tr['full_result'])
+                                AiModel.save_message(sid, 'tool', tr['full_result'], tool_call_id=tr.get('id'))
+                            except:
+                                AiModel.save_message(sid, 'tool', tr.get('result', ''), tool_call_id=tr.get('id'))
                 except:
                     logging.info(f'[DrillSSE] raw: {chunk[:100]}')
                 yield f"data: {chunk.rstrip()}\n\n"
