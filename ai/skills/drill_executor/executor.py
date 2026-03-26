@@ -869,6 +869,18 @@ def create_drill_stream(
                 "INFO",
             )
 
+            # 工具名到描述的映射
+            tool_descriptions = {
+                "network_scan": "扫描目标网络，发现存活主机和开放端口",
+                "web_screenshot": "对Web服务页面截图，验证服务可访问性",
+                "bruteforce_ssh": "检测SSH服务弱口令（端口22）",
+                "bruteforce_rdp": "检测RDP服务弱口令（端口3389）",
+                "bruteforce_mysql": "检测MySQL服务弱口令（端口3306）",
+                "honeypot_audit": "查询HFish蜜罐攻击日志，审计安全事件",
+                "generate_report": "生成安全演练报告，总结检测结果",
+                "get_local_ip": "获取本机IP地址",
+            }
+
             # 发送工具调用开始
             yield (
                 json.dumps(
@@ -876,6 +888,7 @@ def create_drill_stream(
                         "tool_call": {
                             "id": tc["id"],
                             "name": tool_name,
+                            "description": tool_descriptions.get(tool_name, ""),
                             "arguments": tool_args,
                         }
                     }

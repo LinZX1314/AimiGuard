@@ -28,6 +28,7 @@ interface ToolCall {
 
   name?: string
 
+  description?: string
 
   arguments?: Record<string, unknown>
 
@@ -1174,7 +1175,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             const tcId = parsed.tool_call.id || 'tc_' + Date.now()
 
 
-            ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, arguments: parsed.tool_call.arguments })
+            ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, description: parsed.tool_call.description, arguments: parsed.tool_call.arguments })
 
 
 

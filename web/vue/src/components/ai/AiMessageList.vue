@@ -15,6 +15,7 @@ interface ToolCall {
   id: string
   type?: string
   name?: string
+  description?: string
   arguments?: Record<string, unknown>
   function?: {
     name?: string
@@ -187,6 +188,7 @@ function messageKey(message: Message, index: number): string {
                       <div class="flex items-center gap-2 font-semibold text-muted-foreground group-open:text-primary transition-colors">
                         <Wrench :size="14" class="group-open:rotate-12 transition-transform" />
                         <span>执行工具: {{ tc.name || tc.function?.name }}</span>
+                        <span v-if="tc.description" class="text-[10px] text-muted-foreground/60">— {{ tc.description }}</span>
                         <span v-if="msg.tool_results?.some(r => r.tool_call_id === tc.id)" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">已完成</span>
                         <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">执行中</span>
                       </div>
