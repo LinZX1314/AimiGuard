@@ -313,6 +313,13 @@ def ai_chat_stream():
                 cfg=cfg_now,
                 state=drill_state
             ):
+                import logging
+                try:
+                    parsed_chunk = json.loads(chunk.strip())
+                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else 'other'))
+                    logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                except:
+                    logging.info(f'[DrillSSE] raw: {chunk[:100]}')
                 yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
@@ -362,6 +369,13 @@ def ai_chat_stream():
                 cfg=cfg_now,
                 state=drill_state
             ):
+                import logging
+                try:
+                    parsed_chunk = json.loads(chunk.strip())
+                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else 'other'))
+                    logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                except:
+                    logging.info(f'[DrillSSE] raw: {chunk[:100]}')
                 yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
