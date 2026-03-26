@@ -307,13 +307,13 @@ def ai_chat_stream():
             # 发送演练启动消息
             yield f"data: {json.dumps({'content': '🚀 演练启动：AI 正在分析演练文档，制定行动计划...'}, ensure_ascii=False)}\n\n"
 
-            # 使用独立的演练执行器
+            # 使用独立的演练执行器（create_drill_stream 返回的 chunk 末尾已有 \n\n，需剥除后加 data: 前缀）
             for chunk in create_drill_stream(
                 document_content=message,
                 cfg=cfg_now,
                 state=drill_state
             ):
-                yield chunk
+                yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
@@ -356,13 +356,13 @@ def ai_chat_stream():
                 drill_state = DrillState()
             if drill_state.document_content == '':
                 drill_state.document_content = message
-            # 使用独立的演练执行器
+            # 使用独立的演练执行器（create_drill_stream 返回的 chunk 末尾已有 \n\n，需剥除后加 data: 前缀）
             for chunk in create_drill_stream(
                 document_content=drill_state.document_content,
                 cfg=cfg_now,
                 state=drill_state
             ):
-                yield chunk
+                yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
