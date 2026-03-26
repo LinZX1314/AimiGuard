@@ -678,50 +678,30 @@ def _generate_markdown_report(
 
 # ─── 系统提示词 ─────────────────────────────────────────────────────────────
 
-DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent。
+DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent，负责全自动执行安全演练。
+
+## 核心规则（必须严格遵守）
+1. 收到演练文档后，**先用文字分析并列出执行计划表格**，询问用户确认后再执行。
+2. 用户回复"开始"、"确认"或"继续"后，才开始按顺序调用工具。
+3. 每步工具执行完毕，根据结果决定下一步，直到 generate_report 执行完毕演练才结束。
 
 ## 目标网络
 扫描目标：192.168.0.0/24
 
-## 核心任务分析
-根据演练文档中的安全要求，映射为以下检测任务：
+## 自动执行顺序（按序逐步调用工具）
+1. 调用 **network_scan**（target=192.168.0.0/24）开始资产探测
+2. 扫描发现端口 80/443/8080/8443 的主机 → 调用 **web_screenshot** 截图
+3. 扫描发现端口 22 的主机 → 调用 **bruteforce_ssh**
+4. 扫描发现端口 3389 的主机 → 调用 **bruteforce_rdp**
+5. 扫描发现端口 3306 的主机 → 调用 **bruteforce_mysql**
+6. 所有检测完成后 → 调用 **honeypot_audit**
+7. 最后 → 调用 **generate_report** 生成报告
 
-| 文档要点 | 检测任务 |
-|----------|----------|
-| 1. 关停非必要暴露面 / 收紧边界 | network_scan → 资产探测，发现所有开放端口和服务 |
-| 2. 关闭高危端口、隐藏默认后台 | web_screenshot → 对HTTP端口截图保存 |
-| 3. 清理弱口令、默认口令 | bruteforce_ssh/rdp/mysql → 弱口令检测 |
-| 4. 强化安全意识 | ⏭️ 无法自动执行，忽略 |
-| 5. 日志审计与应急响应 | honeypot_audit → 获取蜜罐攻击信息 |
-
-## 执行流程
-- 用户回复"开始"、"确认"、"继续"后 → 执行 network_scan
-- 扫描发现端口 80/443/8080/8443 → web_screenshot 截图
-- 扫描发现端口 22 → bruteforce_ssh
-- 扫描发现端口 3389 → bruteforce_rdp
-- 扫描发现端口 3306 → bruteforce_mysql
-- 所有检测完成后 → honeypot_audit
-- 最后 → generate_report 生成报告
-
-## 输出格式
-执行计划要简洁美观，使用表格展示比如：
-
-```
-📋 执行计划
-
-| 步骤 | 检测项 | 对应要求 |
-|------|--------|----------|
-| 1 | 🌐 资产探测 | 关停非必要暴露面 |
-| 2 | 📸 Web截图 | 隐藏默认后台 |
-| 3 | 🔐 弱口令检测 | 清理敏感信息 |
-| 4 | 🍯 蜜罐审计 | 日志审计与应急响应 |
-| 5 | 📊 生成报告 | 汇总结果 |
-
-```
-
-是否开始执行？回复"开始"或"确认"即可。
-
-现在开始执行演练。"""
+## 重要说明
+- 收到任务后**先分析文档内容，输出执行计划表格**，并询问用户"是否开始执行？回复'开始'或'确认'即可"
+- 用户确认后，才开始调用工具
+- 每步工具执行完毕看结果再决定下一步工具
+- 所有工具调用完毕后才输出总结文字"""
 
 
 # ─── 主执行器 ────────────────────────────────────────────────────────────────
@@ -799,29 +779,23 @@ def create_drill_stream(
                         "content": msg.get("content", ""),
                     }
                 )
-        # 注入确认消息，让 AI 继续执行（使用用户实际发送的确认消息）
-        confirm_msg = "开始"
-        if session_history:
-            last_user = next((m for m in reversed(session_history) if m.get("role") == "user"), None)
-            if last_user and last_user.get("content", "").strip() in ["开始", "确认", "继续"]:
-                confirm_msg = last_user["content"]
+        # 注入继续执行指令，让 AI 立即调用下一个工具而非重新展示计划
+        # 注意：这里不需要重新注入user消息的openai_content，因为history已经在上面完整恢复了
         history.append(
             {
                 "role": "user",
-                "content": confirm_msg,
+                "content": "继续执行，立即调用下一个工具，不要重新展示计划表。",
             }
         )
     else:
         # 注入文档内容作为用户消息（触发 Agent 启动）
+        # 关键：明确要求 AI 直接调用工具，禁止只输出计划文字
         user_content = (
-            f"请开始执行以下安全演练任务：\n\n"
-            f"## 安全演练文档内容\n\n{document_content}\n\n"
-            f"请按以下步骤执行：\n"
-            f"1. 分析文档内容，提取目标网络和演练要求\n"
-            f"2. 制定行动计划\n"
-            f"3. 按计划执行各项检测\n"
-            f"4. 生成完整演练报告\n\n"
-            f"开始执行！"
+            f"演练文档已收到，立即开始执行，不要等待确认。\n\n"
+            f"## 演练文档内容\n\n{document_content}\n\n"
+            f"## 立即执行指令\n"
+            f"现在调用 network_scan 工具（target=192.168.0.0/24）开始第一步扫描，"
+            f"不要输出计划表，直接调用工具。"
         )
         history.append(
             {
@@ -851,11 +825,13 @@ def create_drill_stream(
         )
 
         # LLM 决策：是否调用工具
+        # 第一步用 auto 让AI可以先输出计划表格；确认后用 required 强制调用工具
+        tc_choice = 'auto' if state.step_count == 1 else 'required'
         tool_calls = []
         text_chunks = []
 
         for chunk, error, tool_call in stream_openai_chat_with_tools(
-            build_openai_messages(history), cfg, tools=tools
+            build_openai_messages(history), cfg, tools=tools, tool_choice=tc_choice
         ):
             if error:
                 yield json.dumps({"error": error}) + "\n\n"
@@ -876,7 +852,7 @@ def create_drill_stream(
             # 只有在无工具调用时才追加纯文本消息，避免与后面带 tool_calls 的消息重复
             if response_text:
                 history.append({"role": "assistant", "content": response_text})
-            unified_log("DrillExecutor", "AI 无更多工具调用，演练结束", "INFO")
+            unified_log("DrillExecutor", f"AI 无更多工具调用，演练结束（step={state.step_count}，tc_choice={tc_choice}）", "INFO")
             break
 
         # ─── 执行工具调用 ─────────────────────────────────────────────────
