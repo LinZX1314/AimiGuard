@@ -754,8 +754,9 @@ def create_drill_stream(
     tools = get_drill_tool_definitions()
     history: list[dict] = []
 
-    # 注入系统提示
-    history.append({"role": "system", "content": DRILL_SYSTEM_PROMPT})
+    # 注入系统提示（合并 DRILL_SYSTEM_PROMPT 和玄枢指挥官身份）
+    combined_system = f"{DRILL_SYSTEM_PROMPT}\n\n你叫玄枢指挥官，你是一个专业的网络安全助手，负责网络攻防指挥。"
+    history.append({"role": "system", "content": combined_system})
 
     # 如果有会话历史，注入到历史中（用于继续执行）
     if session_history:
@@ -798,11 +799,16 @@ def create_drill_stream(
                         "content": msg.get("content", ""),
                     }
                 )
-        # 注入"开始"确认消息，让 AI 继续执行
+        # 注入确认消息，让 AI 继续执行（使用用户实际发送的确认消息）
+        confirm_msg = "开始"
+        if session_history:
+            last_user = next((m for m in reversed(session_history) if m.get("role") == "user"), None)
+            if last_user and last_user.get("content", "").strip() in ["开始", "确认", "继续"]:
+                confirm_msg = last_user["content"]
         history.append(
             {
                 "role": "user",
-                "content": "开始",
+                "content": confirm_msg,
             }
         )
     else:
