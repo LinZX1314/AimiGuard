@@ -245,9 +245,6 @@ onUnmounted(() => {
                     :key="item.id"
                     :style="{ animationDelay: `${idx * 120}ms` }"
                   >
-                    <span class="honeypot-feed__level" :class="`level-${item.level.toLowerCase()}`">
-                      {{ honeypotLevelText(item.level) }}
-                    </span>
                     <span class="honeypot-feed__ip">{{ item.ip }}</span>
                     <span class="honeypot-feed__service">{{ item.service }}</span>
                     <span class="honeypot-feed__location">{{ item.location }}</span>
@@ -565,7 +562,7 @@ onUnmounted(() => {
 
 .honeypot-feed__item {
   display: grid;
-  grid-template-columns: 54px 1.2fr 1fr 1fr 78px;
+  grid-template-columns: 1.5fr 1fr 1fr 78px;
   align-items: center;
   gap: 10px;
   font-size: 11px;
