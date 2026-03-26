@@ -1,6 +1,7 @@
 """
 AI Module - AI Chat endpoints（含上下文/会话持久化与 Tool Use 支持）
 """
+
 import json
 import base64
 import threading
@@ -15,13 +16,10 @@ from ai.skills.drill_executor.drill_tools import get_drill_tool_definitions
 from ai.skills.drill_executor import DrillState
 from ai.skills.drill_executor.executor import DRILL_SYSTEM_PROMPT, create_drill_stream
 from database.models import AiModel
-from .helpers import (
-    require_auth, ok, err, _body, _load_cfg, _save_cfg,
-    _now_iso
-)
+from .helpers import require_auth, ok, err, _body, _load_cfg, _save_cfg, _now_iso
 from utils.logger import log as unified_log
 
-ai_bp = Blueprint('ai', __name__)
+ai_bp = Blueprint("ai", __name__)
 
 # 运行时会话缓存（LRU 结构，防止内存泄漏）
 from collections import OrderedDict
@@ -31,29 +29,44 @@ _chat_sessions: OrderedDict[int, list] = OrderedDict()
 _session_lock = threading.Lock()
 
 _TEXT_EXTENSIONS = {
-    '.txt', '.md', '.json', '.log', '.csv', '.yaml', '.yml', '.xml', '.html', '.js', '.ts', '.py', '.java', '.sh', '.bat'
+    ".txt",
+    ".md",
+    ".json",
+    ".log",
+    ".csv",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".html",
+    ".js",
+    ".ts",
+    ".py",
+    ".java",
+    ".sh",
+    ".bat",
 }
 
 
 def _is_text_like_file(filename: str, mimetype: str) -> bool:
-    if (mimetype or '').startswith('text/'):
+    if (mimetype or "").startswith("text/"):
         return True
-    lower = (filename or '').lower()
+    lower = (filename or "").lower()
     return any(lower.endswith(ext) for ext in _TEXT_EXTENSIONS)
 
 
 def _parse_chat_payload():
     """兼容 JSON 与 multipart/form-data（原生文件上传）请求。"""
-    content_type = (request.content_type or '').lower()
-    if 'multipart/form-data' in content_type:
+    content_type = (request.content_type or "").lower()
+    if "multipart/form-data" in content_type:
         body = {
-            'message': (request.form.get('message') or '').strip(),
-            'session_id': request.form.get('session_id'),
-            'context_type': request.form.get('context_type'),
-            'context_id': request.form.get('context_id'),
-            'drill_mode': str(request.form.get('drill_mode', '')).strip().lower() in ('1', 'true', 'yes', 'on'),
+            "message": (request.form.get("message") or "").strip(),
+            "session_id": request.form.get("session_id"),
+            "context_type": request.form.get("context_type"),
+            "context_id": request.form.get("context_id"),
+            "drill_mode": str(request.form.get("drill_mode", "")).strip().lower()
+            in ("1", "true", "yes", "on"),
         }
-        files = request.files.getlist('files')
+        files = request.files.getlist("files")
         return body, files
 
     return _body(), []
@@ -64,10 +77,8 @@ def _normalize_uploaded_files(message: str, files: list):
     if not files:
         return message, None
 
-    safe_message = (message or '').strip() or '请分析我上传的文件/图片。'
-    openai_content = [
-        {'type': 'text', 'text': safe_message}
-    ]
+    safe_message = (message or "").strip() or "请分析我上传的文件/图片。"
+    openai_content = [{"type": "text", "text": safe_message}]
 
     file_summaries = []
     text_blocks = []
@@ -76,46 +87,48 @@ def _normalize_uploaded_files(message: str, files: list):
         if not storage:
             continue
 
-        filename = (getattr(storage, 'filename', None) or 'unnamed').strip()
-        mimetype = (getattr(storage, 'mimetype', None) or 'application/octet-stream').strip()
-        raw = storage.read() or b''
+        filename = (getattr(storage, "filename", None) or "unnamed").strip()
+        mimetype = (
+            getattr(storage, "mimetype", None) or "application/octet-stream"
+        ).strip()
+        raw = storage.read() or b""
         storage.stream.seek(0)
 
         if not raw:
-            file_summaries.append(f'- {filename}: 空文件')
+            file_summaries.append(f"- {filename}: 空文件")
             continue
 
         size_kb = max(1, len(raw) // 1024)
-        file_summaries.append(f'- {filename} ({mimetype}, {size_kb}KB)')
+        file_summaries.append(f"- {filename} ({mimetype}, {size_kb}KB)")
 
-        if mimetype.startswith('image/'):
+        if mimetype.startswith("image/"):
             # 后端原生接收文件，并在服务端转换为模型可读的 image_url
-            b64 = base64.b64encode(raw).decode('utf-8')
-            openai_content.append({
-                'type': 'image_url',
-                'image_url': {
-                    'url': f'data:{mimetype};base64,{b64}'
+            b64 = base64.b64encode(raw).decode("utf-8")
+            openai_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mimetype};base64,{b64}"},
                 }
-            })
+            )
             continue
 
         if _is_text_like_file(filename, mimetype):
             try:
-                decoded = raw.decode('utf-8')
+                decoded = raw.decode("utf-8")
             except UnicodeDecodeError:
-                decoded = raw.decode('gbk', errors='ignore')
+                decoded = raw.decode("gbk", errors="ignore")
 
             clipped = decoded[:80_000]
             if len(decoded) > 80_000:
-                clipped += '\n\n...[文件内容过长，已截断]'
-            text_blocks.append(f'【文件内容：{filename}】\n{clipped}')
+                clipped += "\n\n...[文件内容过长，已截断]"
+            text_blocks.append(f"【文件内容：{filename}】\n{clipped}")
             continue
 
-    summary_text = '[已上传文件]\n' + '\n'.join(file_summaries)
-    openai_content.append({'type': 'text', 'text': summary_text})
+    summary_text = "[已上传文件]\n" + "\n".join(file_summaries)
+    openai_content.append({"type": "text", "text": summary_text})
 
     if text_blocks:
-        openai_content.append({'type': 'text', 'text': '\n\n'.join(text_blocks)})
+        openai_content.append({"type": "text", "text": "\n\n".join(text_blocks)})
 
     persisted_message = f"{safe_message}\n\n{summary_text}"
     return persisted_message, openai_content
@@ -124,13 +137,14 @@ def _normalize_uploaded_files(message: str, files: list):
 def _get_system_context() -> str:
     """获取实时系统摘要，作为 AI 的底座背景知识"""
     from database.models import StatsModel, HFishModel
+
     try:
         hfish_stats = HFishModel.get_stats()
 
-        hot_services = hfish_stats.get('service_stats', [])[:5]
+        hot_services = hfish_stats.get("service_stats", [])[:5]
         service_summary = [f"{svc['name']}({svc['count']}次)" for svc in hot_services]
 
-        top_attackers = hfish_stats.get('ip_stats', [])[:5]
+        top_attackers = hfish_stats.get("ip_stats", [])[:5]
         attacker_summary = [f"{ip['ip']}({ip['count']}次)" for ip in top_attackers]
 
         # 通过DHCP查询在线设备数
@@ -138,10 +152,13 @@ def _get_system_context() -> str:
         try:
             from ai.tools import execute_tool
             import json
-            dhcp_result = execute_tool('dhcp_query', {}, {})
-            dhcp_data = json.loads(dhcp_result) if isinstance(dhcp_result, str) else dhcp_result
-            if dhcp_data.get('ok'):
-                online_devices = dhcp_data.get('count', 0)
+
+            dhcp_result = execute_tool("dhcp_query", {}, {})
+            dhcp_data = (
+                json.loads(dhcp_result) if isinstance(dhcp_result, str) else dhcp_result
+            )
+            if dhcp_data.get("ok"):
+                online_devices = dhcp_data.get("count", 0)
         except Exception:
             pass
 
@@ -169,17 +186,17 @@ def _get_history(session_id: int) -> list:
             # LRU: 移到末尾表示最近使用
             _chat_sessions.move_to_end(session_id)
             return _chat_sessions[session_id]
-        
+
         # 内存没有，尝试从 DB 加载
         history = AiModel.get_messages(session_id)
         if history:
             _chat_sessions[session_id] = history
             _chat_sessions.move_to_end(session_id)
-            
+
             # 超过上限时删除最旧的会话
             if len(_chat_sessions) > _MAX_SESSIONS:
                 _chat_sessions.popitem(last=False)
-        
+
         return history
 
 
@@ -187,7 +204,8 @@ def _get_history(session_id: int) -> list:
 # 路由接口
 # ──────────────────────────────────────────────────────────────────────────────
 
-@ai_bp.route('/sessions', methods=['GET'])
+
+@ai_bp.route("/sessions", methods=["GET"])
 @require_auth
 def ai_sessions():
     """从数据库获取持久化的会话列表"""
@@ -195,7 +213,7 @@ def ai_sessions():
     return ok(sessions)
 
 
-@ai_bp.route('/reports', methods=['GET'])
+@ai_bp.route("/reports", methods=["GET"])
 @require_auth
 def ai_reports():
     """从数据库获取所有已生成的演练报告"""
@@ -203,17 +221,17 @@ def ai_reports():
     return ok(reports)
 
 
-@ai_bp.route('/sessions/<int:session_id>/messages', methods=['GET'])
+@ai_bp.route("/sessions/<int:session_id>/messages", methods=["GET"])
 @require_auth
 def ai_session_messages(session_id: int):
     """获取指定会话的历史记录（含持久化数据）"""
     history = _get_history(session_id)
     # 过滤掉系统消息，只返回给前端对话部分
-    out = [m for m in history if m.get('role') != 'system']
+    out = [m for m in history if m.get("role") != "system"]
     return ok(out)
 
 
-@ai_bp.route('/sessions/<int:session_id>', methods=['DELETE'])
+@ai_bp.route("/sessions/<int:session_id>", methods=["DELETE"])
 @require_auth
 def ai_session_delete(session_id: int):
     """从数据库和缓存中删除会话"""
@@ -223,43 +241,60 @@ def ai_session_delete(session_id: int):
     return ok()
 
 
-@ai_bp.route('/chat/stream', methods=['POST'])
+@ai_bp.route("/chat/stream", methods=["POST"])
 @require_auth
 def ai_chat_stream():
     """
     AI 聊天流式接口（增加持久化深度和上下文感知）
     """
     body, uploaded_files = _parse_chat_payload()
-    message      = body.get('message', '').strip()
-    session_id   = body.get('session_id')
-    context_type = body.get('context_type')
-    context_id   = body.get('context_id')
+    message = body.get("message", "").strip()
+    session_id = body.get("session_id")
+    context_type = body.get("context_type")
+    context_id = body.get("context_id")
+
+    unified_log(
+        "AIChat",
+        f"收到请求 | message={message[:50] if message else 'empty'}... | files={len(uploaded_files)}",
+        "INFO",
+    )
 
     message, openai_content = _normalize_uploaded_files(message, uploaded_files)
 
+    unified_log(
+        "AIChat",
+        f"处理后 | message={message[:50] if message else 'empty'}... | openai_content={'有' if openai_content else '无'}",
+        "INFO",
+    )
+
     # 检查 AI 是否启用
     cfg_now = _load_cfg()
-    ai_enabled = cfg_now.get('ai', {}).get('enabled', False)
+    ai_enabled = cfg_now.get("ai", {}).get("enabled", False)
     if not ai_enabled:
-        return err('AI 功能已禁用，请在设置中开启')
+        return err("AI 功能已禁用，请在设置中开启")
 
     if not message:
-        return err('消息内容不能为空')
+        return err("消息内容不能为空")
 
     # 检查是否进入演练模式（只有上传图片时才进入）
-    has_image = uploaded_files and any(f.mimetype.startswith('image/') for f in uploaded_files)
-    is_drill_mode = body.get('drill_mode', False) or has_image
+    has_image = uploaded_files and any(
+        f.mimetype.startswith("image/") for f in uploaded_files
+    )
+    is_drill_mode = body.get("drill_mode", False) or has_image
     drill_state: DrillState | None = None
 
-    if is_drill_mode:
-        drill_state = DrillState()
-        drill_state.document_content = message
-        unified_log('AIChat', f'进入演练模式 | doc_len={len(message)}', 'INFO')
+    # 检查是否是继续执行演练的确认消息
+    CONFIRM_MSGS = {"开始", "继续", "确认", "开始执行", "继续执行"}
+    is_confirm_msg = message.strip() in CONFIRM_MSGS
 
     # 1. 确定会话 ID
     if session_id:
         sid = int(session_id)
         history = _get_history(sid)
+        # 检查会话是否已经是演练模式
+        session_is_drill = AiModel.get_session_drill_mode(sid)
+        if session_is_drill:
+            is_drill_mode = True
         # 如果是已有会话进入了演练模式，更新会话标记
         if is_drill_mode:
             AiModel.update_session_drill_mode(sid, 1)
@@ -267,10 +302,10 @@ def ai_chat_stream():
         # 创建新会话
         title = message[:20] + "..." if len(message) > 20 else message
         sid = AiModel.create_session(
-            title=title, 
-            context_type=context_type, 
+            title=title,
+            context_type=context_type,
             context_id=context_id,
-            is_drill_mode=1 if is_drill_mode else 0
+            is_drill_mode=1 if is_drill_mode else 0,
         )
         history = []
 
@@ -278,23 +313,49 @@ def ai_chat_stream():
         sys_info = _get_system_context()
         if context_type and context_id:
             sys_info += f"\n当前焦点上下文: {context_type} = {context_id}"
-            if context_type == 'host':
+            if context_type == "host":
                 from database.models import NmapModel
-                host = NmapModel.get_host_by_ip(context_id)
-                if host: sys_info += f"\n详细资产数据: {json.dumps(host, ensure_ascii=False)}"
 
-        history.append({'role': 'system', 'content': f"你叫玄枢指挥官，你是一个专业的网络安全助手。背景：\n{sys_info}", 'ts': _now_iso()})
+                host = NmapModel.get_host_by_ip(context_id)
+                if host:
+                    sys_info += (
+                        f"\n详细资产数据: {json.dumps(host, ensure_ascii=False)}"
+                    )
+
+        history.append(
+            {
+                "role": "system",
+                "content": f"你叫玄枢指挥官，你是一个专业的网络安全助手。背景：\n{sys_info}",
+                "ts": _now_iso(),
+            }
+        )
         with _session_lock:
             _chat_sessions[sid] = history
 
+    # 初始化演练状态（如果是演练模式）
+    if is_drill_mode and not is_confirm_msg:
+        drill_state = DrillState()
+        drill_state.document_content = message
+        unified_log("AIChat", f"进入演练模式 | doc_len={len(message)}", "INFO")
+    elif is_drill_mode and is_confirm_msg and history:
+        # 从历史中重建演练状态
+        drill_state = DrillState()
+        for msg in reversed(history):
+            if msg.get("role") == "user" and len(str(msg.get("content", ""))) > 50:
+                drill_state.document_content = msg.get("content", "")
+                break
+        unified_log("AIChat", f"继续演练模式 | 确认消息={message}", "INFO")
+
     # 2. 保存并追加用户消息
-    history.append({
-        'role': 'user',
-        'content': message,
-        'openai_content': openai_content,
-        'ts': _now_iso()
-    })
-    AiModel.save_message(sid, 'user', message)
+    history.append(
+        {
+            "role": "user",
+            "content": message,
+            "openai_content": openai_content,
+            "ts": _now_iso(),
+        }
+    )
+    AiModel.save_message(sid, "user", message, openai_content=openai_content)
 
     def generate():
         nonlocal drill_state
@@ -305,35 +366,77 @@ def ai_chat_stream():
         # ── 演练模式 ────────────────────────────────────────────────────────────
         if is_drill_mode and drill_state:
             # 发送演练启动消息
-            yield f"data: {json.dumps({'content': '🚀 演练启动：AI 正在分析演练文档，制定行动计划...'}, ensure_ascii=False)}\n\n"
+            if is_confirm_msg:
+                yield f"data: {json.dumps({'content': '🚀 继续执行演练...'}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'content': '🚀 演练启动：AI 正在分析演练文档，制定行动计划...'}, ensure_ascii=False)}\n\n"
+
+            # 获取会话历史（用于继续执行）
+            session_history = AiModel.get_messages(sid) if is_confirm_msg else None
 
             # 演练执行器会发送 step_complete 事件，每步完成后保存到数据库
             for chunk in create_drill_stream(
-                document_content=message,
+                document_content=drill_state.document_content,
                 cfg=cfg_now,
-                state=drill_state
+                state=drill_state,
+                session_history=session_history,
+                openai_content=openai_content,
             ):
                 import logging
+
                 try:
                     parsed_chunk = json.loads(chunk.strip())
-                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else ('step_complete' if 'step_complete' in parsed_chunk else 'other')))
-                    logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                    chunk_type = (
+                        "tool_result"
+                        if "tool_result" in parsed_chunk
+                        else (
+                            "tool_call"
+                            if "tool_call" in parsed_chunk
+                            else (
+                                "content"
+                                if "content" in parsed_chunk
+                                else (
+                                    "step_complete"
+                                    if "step_complete" in parsed_chunk
+                                    else "other"
+                                )
+                            )
+                        )
+                    )
+                    logging.info(f"[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}")
                     # step_complete 事件包含完整的 assistant message，保存到数据库
-                    if parsed_chunk.get('step_complete'):
-                        step_data = parsed_chunk['step_complete']
-                        AiModel.save_message(sid, 'assistant', step_data.get('content') or '', tool_calls=step_data.get('tool_calls'))
+                    if parsed_chunk.get("step_complete"):
+                        step_data = parsed_chunk["step_complete"]
+                        AiModel.save_message(
+                            sid,
+                            "assistant",
+                            step_data.get("content") or "",
+                            tool_calls=step_data.get("tool_calls"),
+                        )
                     # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
-                    if parsed_chunk.get('tool_result'):
-                        tr = parsed_chunk['tool_result']
+                    if parsed_chunk.get("tool_result"):
+                        tr = parsed_chunk["tool_result"]
                         # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
-                        if tr.get('name') == 'drill_generate_report' and tr.get('full_result'):
+                        if tr.get("name") == "generate_report" and tr.get(
+                            "full_result"
+                        ):
                             try:
-                                full_result = json.loads(tr['full_result'])
-                                AiModel.save_message(sid, 'tool', tr['full_result'], tool_call_id=tr.get('id'))
+                                full_result = json.loads(tr["full_result"])
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr["full_result"],
+                                    tool_call_id=tr.get("id"),
+                                )
                             except:
-                                AiModel.save_message(sid, 'tool', tr.get('result', ''), tool_call_id=tr.get('id'))
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr.get("result", ""),
+                                    tool_call_id=tr.get("id"),
+                                )
                 except:
-                    logging.info(f'[DrillSSE] raw: {chunk[:100]}')
+                    logging.info(f"[DrillSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
@@ -347,9 +450,7 @@ def ai_chat_stream():
 
         # 第一轮：LLM 判断内容或调用工具
         for chunk, error, tool_call in stream_openai_chat_with_tools(
-            build_openai_messages(history),
-            cfg_now,
-            tools=all_tools_normal
+            build_openai_messages(history), cfg_now, tools=all_tools_normal
         ):
             if error:
                 yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
@@ -364,46 +465,84 @@ def ai_chat_stream():
         # 如果没有工具调用，保存回复并结束
         if not tool_calls_received:
             res_content = "".join(full_reply)
-            history.append({'role': 'assistant', 'content': res_content, 'ts': _now_iso()})
-            AiModel.save_message(sid, 'assistant', res_content)
+            history.append(
+                {"role": "assistant", "content": res_content, "ts": _now_iso()}
+            )
+            AiModel.save_message(sid, "assistant", res_content)
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
 
         # 检查是否需要进入演练模式（AI 智能调用了 drill 工具 或 用户上传了演练文档）
-        has_drill_tools = any(tc['name'].startswith('drill_') for tc in tool_calls_received)
+        has_drill_tools = any(
+            tc["name"].startswith("drill_") for tc in tool_calls_received
+        )
         if has_drill_tools or is_drill_mode:
             # 确保 drill_state 已初始化（is_drill_mode=False 但 AI 首次调用 drill 工具时走此分支）
             if not drill_state:
                 drill_state = DrillState()
-            if drill_state.document_content == '':
+            if drill_state.document_content == "":
                 drill_state.document_content = message
             # 使用独立的演练执行器（create_drill_stream 返回的 chunk 末尾已有 \n\n，需剥除后加 data: 前缀）
             for chunk in create_drill_stream(
                 document_content=drill_state.document_content,
                 cfg=cfg_now,
-                state=drill_state
+                state=drill_state,
             ):
                 import logging
+
                 try:
                     parsed_chunk = json.loads(chunk.strip())
-                    chunk_type = 'tool_result' if 'tool_result' in parsed_chunk else ('tool_call' if 'tool_call' in parsed_chunk else ('content' if 'content' in parsed_chunk else ('step_complete' if 'step_complete' in parsed_chunk else 'other')))
-                    logging.info(f'[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}')
+                    chunk_type = (
+                        "tool_result"
+                        if "tool_result" in parsed_chunk
+                        else (
+                            "tool_call"
+                            if "tool_call" in parsed_chunk
+                            else (
+                                "content"
+                                if "content" in parsed_chunk
+                                else (
+                                    "step_complete"
+                                    if "step_complete" in parsed_chunk
+                                    else "other"
+                                )
+                            )
+                        )
+                    )
+                    logging.info(f"[DrillSSE] {chunk_type}: {str(parsed_chunk)[:200]}")
                     # step_complete 事件包含完整的 assistant message，保存到数据库
-                    if parsed_chunk.get('step_complete'):
-                        step_data = parsed_chunk['step_complete']
-                        AiModel.save_message(sid, 'assistant', step_data.get('content') or '', tool_calls=step_data.get('tool_calls'))
+                    if parsed_chunk.get("step_complete"):
+                        step_data = parsed_chunk["step_complete"]
+                        AiModel.save_message(
+                            sid,
+                            "assistant",
+                            step_data.get("content") or "",
+                            tool_calls=step_data.get("tool_calls"),
+                        )
                     # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
-                    if parsed_chunk.get('tool_result'):
-                        tr = parsed_chunk['tool_result']
+                    if parsed_chunk.get("tool_result"):
+                        tr = parsed_chunk["tool_result"]
                         # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
-                        if tr.get('name') == 'drill_generate_report' and tr.get('full_result'):
+                        if tr.get("name") == "generate_report" and tr.get(
+                            "full_result"
+                        ):
                             try:
-                                full_result = json.loads(tr['full_result'])
-                                AiModel.save_message(sid, 'tool', tr['full_result'], tool_call_id=tr.get('id'))
+                                full_result = json.loads(tr["full_result"])
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr["full_result"],
+                                    tool_call_id=tr.get("id"),
+                                )
                             except:
-                                AiModel.save_message(sid, 'tool', tr.get('result', ''), tool_call_id=tr.get('id'))
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr.get("result", ""),
+                                    tool_call_id=tr.get("id"),
+                                )
                 except:
-                    logging.info(f'[DrillSSE] raw: {chunk[:100]}')
+                    logging.info(f"[DrillSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
@@ -416,14 +555,14 @@ def ai_chat_stream():
 
     return Response(
         stream_with_context(generate()),
-        mimetype='text/event-stream',
+        mimetype="text/event-stream",
         headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-            'X-Content-Type-Options': 'nosniff',
-            'Content-Encoding': 'identity',
-            'Connection': 'keep-alive',
-        }
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Encoding": "identity",
+            "Connection": "keep-alive",
+        },
     )
 
 
@@ -444,11 +583,15 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int):
         step_count += 1
 
         # 发送步骤开始
-        yield json.dumps({'drill_step': {
-            'step': step_count,
-            'status': 'thinking',
-            'message': f'🤔 AI 正在思考下一步... (第 {step_count}/{max_steps} 步)',
-        }})
+        yield json.dumps(
+            {
+                "drill_step": {
+                    "step": step_count,
+                    "status": "thinking",
+                    "message": f"🤔 AI 正在思考下一步... (第 {step_count}/{max_steps} 步)",
+                }
+            }
+        )
 
         tool_calls = []
         text_chunks = []
@@ -458,152 +601,193 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int):
             build_openai_messages(history), cfg, tools=tools
         ):
             if error:
-                yield json.dumps({'error': error})
+                yield json.dumps({"error": error})
                 return
             if chunk:
                 text_chunks.append(chunk)
-                yield json.dumps({'content': chunk})
+                yield json.dumps({"content": chunk})
             if tool_call:
                 tool_calls.append(tool_call)
 
-        response_text = ''.join(text_chunks)
+        response_text = "".join(text_chunks)
         if response_text and not tool_calls:
             # 无工具调用时才保存纯文本回复，避免与带 tool_calls 的消息重复
-            history.append({'role': 'assistant', 'content': response_text})
+            history.append({"role": "assistant", "content": response_text})
 
         # 无工具调用则结束
         if not tool_calls:
-            unified_log('AIChat', f'Agent循环结束（无更多工具调用）| 共 {step_count} 步', 'INFO')
+            unified_log(
+                "AIChat", f"Agent循环结束（无更多工具调用）| 共 {step_count} 步", "INFO"
+            )
             break
 
         # 保存 assistant tool_call 消息
-        history.append({
-            'role': 'assistant',
-            'content': response_text or None,
-            'tool_calls': [{
-                'id': tc['id'],
-                'type': 'function',
-                'function': {'name': tc['name'], 'arguments': json.dumps(tc['arguments'], ensure_ascii=False)},
-            } for tc in tool_calls]
-        })
+        history.append(
+            {
+                "role": "assistant",
+                "content": response_text or None,
+                "tool_calls": [
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(
+                                tc["arguments"], ensure_ascii=False
+                            ),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            }
+        )
 
         # 持久化 assistant tool_call 消息，避免前端断开后工具链记录丢失
         try:
             AiModel.save_message(
                 sid,
-                'assistant',
-                response_text or '',
-                tool_calls=[{
-                    'id': tc['id'],
-                    'type': 'function',
-                    'function': {
-                        'name': tc['name'],
-                        'arguments': json.dumps(tc['arguments'], ensure_ascii=False),
-                    },
-                } for tc in tool_calls],
+                "assistant",
+                response_text or "",
+                tool_calls=[
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(
+                                tc["arguments"], ensure_ascii=False
+                            ),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
             )
         except Exception:
             pass
 
         # ─── 执行工具 ────────────────────────────────────────────────────────
         for tc in tool_calls:
-            tool_name = tc['name']
-            tool_args = tc['arguments']
+            tool_name = tc["name"]
+            tool_args = tc["arguments"]
 
             # 发送工具调用开始
-            yield json.dumps({'tool_call': {
-                'id': tc['id'],
-                'name': tool_name,
-                'arguments': tool_args,
-                'status': 'executing',
-            }})
+            yield json.dumps(
+                {
+                    "tool_call": {
+                        "id": tc["id"],
+                        "name": tool_name,
+                        "arguments": tool_args,
+                        "status": "executing",
+                    }
+                }
+            )
 
             # 执行工具
             res = _execute_tool(tool_name, tool_args)
 
             # 发送给前端（截断过长结果）
-            display = res[:800] + '...' if len(res) > 800 else res
+            display = res[:800] + "..." if len(res) > 800 else res
 
-            yield json.dumps({'tool_result': {
-                'id': tc['id'],
-                'tool_call_id': tc['id'],   # 前端匹配所需
-                'name': tool_name,
-                'result': display,
-                'full_result': res,
-                'status': 'done',
-            }})
+            yield json.dumps(
+                {
+                    "tool_result": {
+                        "id": tc["id"],
+                        "tool_call_id": tc["id"],  # 前端匹配所需
+                        "name": tool_name,
+                        "result": display,
+                        "full_result": res,
+                        "status": "done",
+                    }
+                }
+            )
 
             # 保存工具结果
-            history.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': res, 'ts': _now_iso()})
+            history.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": res,
+                    "ts": _now_iso(),
+                }
+            )
             # 持久化 tool 结果，支持切页后历史恢复
             try:
                 AiModel.save_message(
                     sid,
-                    'tool',
+                    "tool",
                     res,
-                    tool_call_id=tc['id'],
+                    tool_call_id=tc["id"],
                 )
             except Exception:
                 pass
 
     # 保存最后一条 assistant 消息
-    if history and history[-1].get('role') == 'assistant':
+    if history and history[-1].get("role") == "assistant":
         try:
-            AiModel.save_message(sid, 'assistant', history[-1].get('content') or '')
+            AiModel.save_message(sid, "assistant", history[-1].get("content") or "")
         except Exception:
             pass
-
 
 
 def _build_report_prompt(
     state: DrillState,
     hfish: dict,
-    scan_data: list, bruteforce_data: list,
-    honeypot_data: list, ban_data: list,
-    findings_data: list, screenshots_data: list
+    scan_data: list,
+    bruteforce_data: list,
+    honeypot_data: list,
+    ban_data: list,
+    findings_data: list,
+    screenshots_data: list,
 ) -> str:
     """构造 AI 报告生成 Prompt，包含所有演练数据"""
     from datetime import datetime
 
     elapsed = (datetime.now() - state._start_time).total_seconds()
-    elapsed_str = f"{int(elapsed) // 60}分{int(elapsed) % 60}秒" if elapsed >= 60 else f"{int(elapsed)}秒"
+    elapsed_str = (
+        f"{int(elapsed) // 60}分{int(elapsed) % 60}秒"
+        if elapsed >= 60
+        else f"{int(elapsed)}秒"
+    )
 
     # 蜜罐统计
-    service_stats = hfish.get('service_stats', [])
-    ip_stats = hfish.get('ip_stats', [])
-    time_stats = hfish.get('time_stats', [])
-    hfish_total = hfish.get('total', 0)
+    service_stats = hfish.get("service_stats", [])
+    ip_stats = hfish.get("ip_stats", [])
+    time_stats = hfish.get("time_stats", [])
+    hfish_total = hfish.get("total", 0)
 
     # 扫描汇总
-    total_hosts = sum(r.get('result', {}).get('发现主机', 0) for r in scan_data)
-    scan_targets = [r.get('target', '') for r in scan_data if r.get('target')]
+    total_hosts = sum(r.get("result", {}).get("发现主机", 0) for r in scan_data)
+    scan_targets = [r.get("target", "") for r in scan_data if r.get("target")]
 
     # 弱口令
-    vulnerable_bf = [r for r in bruteforce_data if r.get('result', {}).get('vulnerable')]
+    vulnerable_bf = [
+        r for r in bruteforce_data if r.get("result", {}).get("vulnerable")
+    ]
 
     # 格式化 JSON 数据供 AI 分析
     import json
+
     context = {
-        '演练开始时间': state._start_time.strftime('%Y-%m-%d %H:%M:%S'),
-        '运行时长': elapsed_str,
-        '目标网络': state.target_network or '未指定',
-        '执行步骤': state.step_count,
-        '扫描结果': scan_data,
-        '弱口令检测结果': bruteforce_data,
-        '蜜罐审计结果': honeypot_data,
-        '封禁记录': ban_data,
-        '发现的问题': findings_data,
-        '截图记录': screenshots_data,
-        '蜜罐总攻击次数': hfish_total,
-        '蜜罐服务统计': service_stats,
-        '蜜罐攻击来源Top10': ip_stats,
-        '蜜罐7天趋势': time_stats,
-        '网络扫描次数': len(scan_data),
-        '发现主机数': total_hosts,
-        '弱口令风险数': len(vulnerable_bf),
-        '蜜罐审计次数': len(honeypot_data),
-        '封禁IP数': len(ban_data),
-        '安全问题数': len(findings_data),
+        "演练开始时间": state._start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "运行时长": elapsed_str,
+        "目标网络": state.target_network or "未指定",
+        "执行步骤": state.step_count,
+        "扫描结果": scan_data,
+        "弱口令检测结果": bruteforce_data,
+        "蜜罐审计结果": honeypot_data,
+        "封禁记录": ban_data,
+        "发现的问题": findings_data,
+        "截图记录": screenshots_data,
+        "蜜罐总攻击次数": hfish_total,
+        "蜜罐服务统计": service_stats,
+        "蜜罐攻击来源Top10": ip_stats,
+        "蜜罐7天趋势": time_stats,
+        "网络扫描次数": len(scan_data),
+        "发现主机数": total_hosts,
+        "弱口令风险数": len(vulnerable_bf),
+        "蜜罐审计次数": len(honeypot_data),
+        "封禁IP数": len(ban_data),
+        "安全问题数": len(findings_data),
     }
     ctx_json = json.dumps(context, ensure_ascii=False, indent=2)
 
@@ -643,7 +827,7 @@ def _build_report_prompt(
 - 颜色：橙色渐变
 
 ### 4. 网络扫描详情
-- 扫描目标：{', '.join(scan_targets) or '无'}
+- 扫描目标：{", ".join(scan_targets) or "无"}
 - 发现主机：{total_hosts} 台
 - 若有主机数据，列出 IP、端口、服务
 
@@ -669,7 +853,7 @@ def _build_report_prompt(
 - 每个建议对应一个问题
 
 ### 10. 页脚
-- 「本报告由玄枢·AI 攻防指挥官自动生成 | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}」
+- 「本报告由玄枢·AI 攻防指挥官自动生成 | 生成时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}」
 
 ## 完整演练数据（JSON）
 ```json
@@ -686,15 +870,20 @@ def _generate_drill_report(state: DrillState) -> str:
     from datetime import datetime
 
     # 单次遍历，按 severity 分组
-    grouped = {'critical': [], 'high': [], 'medium': [], 'info': []}
+    grouped = {"critical": [], "high": [], "medium": [], "info": []}
     for f in state.findings:
-        grouped.get(f.get('severity', 'info'), grouped['info']).append(f)
-    critical, high, medium, info = grouped['critical'], grouped['high'], grouped['medium'], grouped['info']
+        grouped.get(f.get("severity", "info"), grouped["info"]).append(f)
+    critical, high, medium, info = (
+        grouped["critical"],
+        grouped["high"],
+        grouped["medium"],
+        grouped["info"],
+    )
 
     report = f"""# 🛡️ 安全演练报告
 
-> **生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-> **目标网络**: {state.target_network or '未指定'}
+> **生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+> **目标网络**: {state.target_network or "未指定"}
 
 ---
 
@@ -732,15 +921,17 @@ def _generate_drill_report(state: DrillState) -> str:
 
 ## 扫描结果
 
-共执行 **{len(state.scan_results)}** 次网络扫描，发现 **{sum(r.get('result', {}).get('发现主机', 0) for r in state.scan_results)}** 台主机
+共执行 **{len(state.scan_results)}** 次网络扫描，发现 **{sum(r.get("result", {}).get("发现主机", 0) for r in state.scan_results)}** 台主机
 
 """
 
     for sr in state.scan_results:
-        r = sr.get('result', {})
-        hosts = r.get('主机列表', [])
+        r = sr.get("result", {})
+        hosts = r.get("主机列表", [])
         if hosts:
-            report += f"**目标 {sr.get('target', 'N/A')}** — {r.get('发现主机', 0)} 台主机\n"
+            report += (
+                f"**目标 {sr.get('target', 'N/A')}** — {r.get('发现主机', 0)} 台主机\n"
+            )
             for h in hosts[:10]:
                 report += f"- `{h.get('ip', 'N/A')}` : {h.get('ports', 'N/A')}\n"
 
@@ -756,13 +947,15 @@ def _generate_drill_report(state: DrillState) -> str:
 |----|------|-----|------|
 """
         for sr in state.screenshot_results:
-            screenshot_url = sr.get('screenshot_url', '')
+            screenshot_url = sr.get("screenshot_url", "")
             if screenshot_url:
                 report += f"| `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | ![截图]({screenshot_url}) |\n"
             else:
                 report += f"| `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | 无 |\n"
 
-    vulnerable_bf = [r for r in state.bruteforce_results if r.get('result', {}).get('vulnerable')]
+    vulnerable_bf = [
+        r for r in state.bruteforce_results if r.get("result", {}).get("vulnerable")
+    ]
     if vulnerable_bf:
         report += f"""
 ---
@@ -771,8 +964,8 @@ def _generate_drill_report(state: DrillState) -> str:
 
 """
         for r in vulnerable_bf:
-            result = r.get('result', {})
-            for cred in result.get('vulnerable_creds', []):
+            result = r.get("result", {})
+            for cred in result.get("vulnerable_creds", []):
                 report += f"- **{r.get('tool', '').upper()}** `{r.get('target', '')}` → 弱口令: `{cred.get('username')}` / `{cred.get('password')}`\n"
 
     if state.ban_records:

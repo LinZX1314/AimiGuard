@@ -831,11 +831,10 @@ function isEmptyAssistantMessage(msg?: Message): boolean {
 async function send(text: string, extraParams: any = {}, documentContent?: string) {
 
 
-  if (!text && !documentContent) return
+  if (!text && !documentContent && !(extraParams?.files?.length)) return
 
 
   if (sending.value) return
-
 
 
 
@@ -846,6 +845,8 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   const attachmentFiles = (extraParams?.files || []) as File[]
   const hasImageUpload = attachmentFiles.some(f => f.type.startsWith('image/'))
   const isDrill = hasImageUpload || wasDrillSession || !!documentContent || extraParams?.context_type === 'drill' || extraParams?.is_drill
+  
+  const effectiveDocContent = documentContent || text || (hasImageUpload ? '请分析我上传的图片。' : '')
 
 
 
@@ -862,7 +863,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   const composedText = isDrill ? text : composeTextWithAttachments(baseText, attachments)
 
 
-  const displayText = isDrill ? `【演练文档】\n${documentContent}` : composedText
+  const displayText = isDrill ? `【演练文档】\n${effectiveDocContent}` : composedText
 
 
   messages.value.push({ role: 'user', content: displayText })
@@ -925,7 +926,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   try {
 
 
-    const requestText = isDrill ? `【演练文档】${documentContent}` : baseText
+    const requestText = isDrill ? `【演练文档】${effectiveDocContent}` : baseText
 
 
     const token = localStorage.getItem('token')
@@ -1234,17 +1235,19 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
             ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: resultStr })
 
-
-
-
-
-
-
           }
 
+          // 演练报告内容 - 直接作为 post_content 显示
+          if (parsed.drill_report) {
+            if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
+            assistantMsg.post_content = (assistantMsg.post_content || '') + parsed.drill_report
+          }
 
-
-
+          // 演练报告链接 - 显示跳转按钮
+          if (parsed.drill_report_link) {
+            if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
+            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](/reports)\n`
+          }
 
           if (parsed.session_id && !resolvedSessionId) {
 
