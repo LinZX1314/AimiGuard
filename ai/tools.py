@@ -372,6 +372,7 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
                     continue
 
                 rule_text = f'{rule_id} deny host {target_ip}'
+                description = f'Block {target_ip}'
                 SwitchAclModel.add_rule(host, acl_number, rule_id, 'ban', target_ip, rule_text, description)
 
             elif action == 'unban':
