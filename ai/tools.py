@@ -84,7 +84,13 @@ def _get_active_switches(cfg: dict | None) -> list[dict]:
     description='查询锐捷交换机DHCP绑定表，获取当前网络中所有通过DHCP获取IP的设备列表（IP地址、MAC地址、租约时间）',
     parameters={
         'type': 'object',
-        'properties': {},
+        'properties': {
+            'switch_ip': {
+                'type': 'string',
+                'description': '交换机IP地址，默认为192.168.0.2',
+                'default': '192.168.0.2',
+            },
+        },
         'required': [],
     },
 )
@@ -97,13 +103,23 @@ def _dhcp_query(args: dict, cfg: dict = None) -> dict:
     if cfg is None:
         return {'ok': False, 'error': '缺少配置信息'}
 
+    # 获取交换机IP，默认192.168.0.2
+    switch_ip = args.get('switch_ip', '192.168.0.2')
+
     # 从配置获取交换机信息
     switches = _get_active_switches(cfg)
-    if not switches:
-        return {'ok': False, 'error': '未找到已启用的交换机配置'}
 
-    switch = switches[0]
-    host = switch.get('host', '192.168.0.1')
+    # 查找指定的交换机
+    switch = None
+    for sw in switches:
+        if sw.get('host') == switch_ip:
+            switch = sw
+            break
+
+    if not switch:
+        return {'ok': False, 'error': f'未找到交换机 {switch_ip} 的配置'}
+
+    host = switch.get('host', '192.168.0.2')
     port = switch.get('port', 23)
     password = switch.get('password', 'admin')
     secret = switch.get('secret', password)
