@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 
 interface TopMetrics {
   hfish_total: number
@@ -19,7 +19,6 @@ const animationStep = ref(0)
 let pulseTimer = 0
 let rollTimer = 0
 
-// 数字动画
 const animatedMetrics = ref({
   hfish_total: 0,
   hfish_high: 0,
@@ -28,14 +27,12 @@ const animatedMetrics = ref({
   blocked_ips: 0,
 })
 
-// 格式化数字
 const formatNumber = (num: number) => {
   if (num >= 10000) return (num / 10000).toFixed(1) + 'w'
   if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
   return num.toString()
 }
 
-// 计算威胁等级
 const threatLevel = computed(() => {
   const ratio = props.topMetrics.hfish_high / Math.max(props.topMetrics.hfish_total, 1)
   if (ratio > 0.3) return { level: '高危', color: 'text-red-400', bgColor: 'bg-red-500/20' }
@@ -43,12 +40,9 @@ const threatLevel = computed(() => {
   return { level: '安全', color: 'text-green-400', bgColor: 'bg-green-500/20' }
 })
 
-onMounted(() => {
-  // 入场动画
-  setTimeout(() => { mounted.value = true }, 100)
-
-  // 数字滚动动画
-  const targetValues = { ...props.topMetrics }
+function startRollAnimation(targetValues: TopMetrics) {
+  if (rollTimer) clearInterval(rollTimer)
+  
   const duration = 1500
   const steps = 30
   const interval = duration / steps
@@ -57,7 +51,7 @@ onMounted(() => {
   rollTimer = window.setInterval(() => {
     step++
     const progress = step / steps
-    const eased = 1 - Math.pow(1 - progress, 3) // easeOutCubic
+    const eased = 1 - Math.pow(1 - progress, 3)
 
     animatedMetrics.value = {
       hfish_total: Math.round(targetValues.hfish_total * eased),
@@ -69,19 +63,35 @@ onMounted(() => {
 
     if (step >= steps) {
       clearInterval(rollTimer)
+      rollTimer = 0
       animatedMetrics.value = { ...targetValues }
     }
   }, interval)
+}
 
-  // 脉冲动画循环
+watch(() => props.topMetrics, (newVal, oldVal) => {
+  if (oldVal && (newVal.hfish_total !== oldVal.hfish_total || 
+                  newVal.hfish_high !== oldVal.hfish_high ||
+                  newVal.nmap_online !== oldVal.nmap_online ||
+                  newVal.ai_decisions !== oldVal.ai_decisions ||
+                  newVal.blocked_ips !== oldVal.blocked_ips)) {
+    startRollAnimation(newVal)
+  }
+}, { deep: true })
+
+onMounted(() => {
+  setTimeout(() => { mounted.value = true }, 100)
+
   pulseTimer = window.setInterval(() => {
     animationStep.value = (animationStep.value + 1) % 3
   }, 2000)
+
+  startRollAnimation(props.topMetrics)
 })
 
 onUnmounted(() => {
-  clearInterval(rollTimer)
-  clearInterval(pulseTimer)
+  if (rollTimer) clearInterval(rollTimer)
+  if (pulseTimer) clearInterval(pulseTimer)
 })
 </script>
 
@@ -100,10 +110,6 @@ onUnmounted(() => {
         <article class="kpi-chip" :class="{ 'kpi-chip--active': animationStep === 0 }">
           <span>总攻击</span>
 <strong class="text-primary">{{ loading ? 0 : formatNumber(animatedMetrics.hfish_total) }}</strong>
-        </article>
-        <article class="kpi-chip" :class="{ 'kpi-chip--active': animationStep === 1 }">
-          <span>高危</span>
-          <strong class="text-red-400">{{ loading ? 0 : formatNumber(animatedMetrics.hfish_high) }}</strong>
         </article>
         <article class="kpi-chip" :class="{ 'kpi-chip--active': animationStep === 2 }">
           <span>在线主机</span>
