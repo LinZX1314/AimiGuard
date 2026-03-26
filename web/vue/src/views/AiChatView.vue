@@ -1170,7 +1170,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
 
 
-            const tcId = 'tc_' + Date.now()
+            const tcId = parsed.tool_call.id || 'tc_' + Date.now()
 
 
             ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, arguments: parsed.tool_call.arguments })
