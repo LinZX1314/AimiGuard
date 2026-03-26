@@ -852,7 +852,19 @@ def create_drill_stream(
             # 只有在无工具调用时才追加纯文本消息，避免与后面带 tool_calls 的消息重复
             if response_text:
                 history.append({"role": "assistant", "content": response_text})
-            unified_log("DrillExecutor", f"AI 无更多工具调用，演练结束（step={state.step_count}，tc_choice={tc_choice}）", "INFO")
+                # 无工具调用时也要发送 step_complete，以便保存到数据库
+                yield (
+                    json.dumps(
+                        {
+                            "step_complete": {
+                                "content": response_text,
+                                "tool_calls": [],
+                            }
+                        }
+                    )
+                    + "\n\n"
+                )
+            unified_log("DrillExecutor", f"AI 无更多工具调用，演练结束（step={state.step_count}）", "INFO")
             break
 
         # ─── 执行工具调用 ─────────────────────────────────────────────────
