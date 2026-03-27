@@ -43,6 +43,11 @@ desktop.ini
 .worktrees/
 err.txt
 
+# ── PyInstaller 构建产物 ──
+dgrd/client/build/
+dgrd/client/dist/
+dgrd/dist/
+
 # ── 扫描结果 ──
 result.txt
 fscan_result_*.json

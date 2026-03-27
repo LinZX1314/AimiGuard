@@ -149,7 +149,7 @@ const navItems = [
   { title: '演练报告',   icon: ClipboardList,   to: '/reports' },
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
   { title: 'AI交换机',   icon: EthernetPort,    to: '/switch-workbench' },
-  { title: 'AI工作流',   icon: GitBranchPlus,   to: '/workflows' },
+  // { title: 'AI工作流',   icon: GitBranchPlus,   to: '/workflows' },
 ]
 
 const currentNavItem = computed(() => {

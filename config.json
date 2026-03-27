@@ -9,7 +9,7 @@
   },
   "ai": {
     "enabled": true,
-    "auto_ban": false,
+    "auto_ban": true,
     "api_url": "http://192.168.0.4:1234",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
     "model": "Qwen/Qwen3.5-9B-no-thinking",
@@ -22,7 +22,8 @@
       "port": 23,
       "password": "admin",
       "acl_number": 30
-    },{
+    },
+    {
       "host": "192.168.0.1",
       "port": 23,
       "password": "admin",
