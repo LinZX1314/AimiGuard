@@ -44,12 +44,7 @@
         <section class="slide active" id="slide-1">
             <div class="hero-container">
                 <div class="shield-icon fade-up">
-                    <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="var(--primary)"
-                        stroke-width="1.5">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                        <path d="M12 8v4" />
-                        <path d="M12 16h.01" />
-                    </svg>
+                    <img src="images/logo.png" alt="Logo" style="width: 180px; height: auto; object-fit: contain;">
                 </div>
                 <h1 class="main-title fade-up delay-100">玄枢AI攻防系统</h1>
                 <h2 class="sub-title fade-up delay-200">平行组3-3团队</h2>
@@ -290,7 +285,7 @@
         <!-- ================= Slide 3: 项目背景 ================= -->
         <section class="slide" id="slide-3">
             <header class="slide-header fade-up">
-                <h2 class="slide-title">核心背景与行业痛点</h2>
+                <h2 class="slide-title">项目背景</h2>
             </header>
             <div class="content-split">
                 <div class="glass-panel text-content fade-up delay-100">
@@ -578,8 +573,8 @@
                 <h2 class="slide-title">核心产品方案</h2>
             </header>
             <div class="product-layout fade-up delay-100">
-                <div class="core-concept">
-                    <h1 class="main-title" style="font-size: 4rem;">玄枢 AI 智能助手</h1>
+                <div class="core-concept" style="margin-bottom: 0;">
+                    <h1 class="main-title" style="font-size: 5rem; letter-spacing: 4px; text-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);">玄枢 AI 智能助手</h1>
                     <div class="concept-tags">
                         <span class="tag">AI赋能</span>
                         <span class="tag">主动防御</span>
@@ -628,49 +623,10 @@
                     width: 100vw;
                     height: 100vh;
                     background: url('images/总揽大屏.jpeg') center/cover no-repeat;
-                    opacity: 0.5;
+                    opacity: 0.7;
                     z-index: -1;
-                    filter: blur(1.5px) brightness(0.5);
+                    filter: blur(0.5px) brightness(0.95);
                     pointer-events: none;
-                }
-
-                /* ---- 文本与元素适配大屏暗系背景：全白化处理 ---- */
-                #slide-4 .slide-title,
-                #slide-4 .main-title {
-                    background: none !important;
-                    -webkit-text-fill-color: #ffffff !important;
-                    color: #ffffff !important;
-                    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.5);
-                }
-
-                #slide-4 .product-desc {
-                    color: #ffffff !important;
-                    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
-                }
-
-                #slide-4 .tag {
-                    color: #ffffff !important;
-                    border-color: rgba(255, 255, 255, 0.4) !important;
-                    background: rgba(255, 255, 255, 0.1) !important;
-                }
-
-                #slide-4 .ai-core {
-                    background: rgba(10, 20, 30, 0.8) !important;
-                    color: #ffffff !important;
-                    border-color: rgba(255, 255, 255, 0.4) !important;
-                    box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
-                }
-
-                #slide-4 .module {
-                    background: rgba(20, 30, 40, 0.8) !important;
-                    color: #ffffff !important;
-                    border-color: rgba(255, 255, 255, 0.3) !important;
-                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-                }
-
-                #slide-4 .text-highlight {
-                    color: #00f2ff !important;
-                    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
                 }
 
                 #slide-4 .product-layout {
@@ -678,10 +634,21 @@
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    gap: 5rem;
-                    /* 👈 整体布局上下元素的间距 */
-                    height: 100%;
+                    gap: 1.5rem;
                     text-align: center;
+                    
+                    /* 偏白的磨砂玻璃效果，只针对有内容的地方 */
+                    background: rgba(255, 255, 255, 0.35);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.6);
+                    border-radius: 20px;
+                    padding: 3rem 2rem;
+                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+                    
+                    width: 95%;
+                    max-width: 1400px;
+                    margin: 0 auto;
                 }
 
                 .concept-tags {
@@ -694,26 +661,29 @@
                 }
 
                 .tag {
-                    padding: 6px 18px;
+                    padding: 8px 24px;
                     /* 👈 标签内边距 */
                     border: 1px solid var(--primary);
                     border-radius: 20px;
-                    font-size: 1.1rem;
+                    font-size: 1.4rem;
                     /* 👈 标签文字大小 */
                     color: var(--primary);
                     background: rgba(0, 136, 204, 0.1);
+                    font-weight: bold;
+                    box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
                 }
 
                 .product-desc {
-                    font-size: 1.8rem;
+                    font-size: 2.2rem;
                     /* 👈 底部描述文字的大号字体 */
-                    max-width: 1200px;
+                    max-width: 1400px;
                     /* 👈 文字最大显示宽度：控制换行位置 */
                     margin: 0 auto;
                     color: var(--text-muted);
-                    padding-bottom: 2rem;
+                    padding-bottom: 1rem;
                     line-height: 1.6;
                     /* 👈 文字行高 */
+                    font-weight: 500;
                 }
 
                 .architecture-diagram {
@@ -723,6 +693,7 @@
                     height: 400px;
                     /* 👈 架构图整体高度 */
                     margin: 0;
+                    transform: scale(1.1);
                 }
 
                 .ai-core {
@@ -1028,6 +999,10 @@
                         <li>自动化网页爬取与违规分析</li>
                         <li>截图留存提供直观证据</li>
                     </ul>
+
+                    <div class="demo-image-container mt-4">
+                        <img src="images/违规取证.png" alt="违规取证数据" class="demo-img">
+                    </div>
                 </div>
 
                 <div class="visual-panel fade-up delay-300">
@@ -1108,6 +1083,10 @@
                                 <span style="font-size: 0.9rem; color: #666;">切断特定VLAN公网连接保障课堂</span>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="demo-image-container mt-4">
+                        <img src="images/ai交换机.png" alt="AI交换机管控" class="demo-img">
                     </div>
                 </div>
                 <div class="visual-panel fade-up delay-300">
