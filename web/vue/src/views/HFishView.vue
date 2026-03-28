@@ -559,7 +559,7 @@ onMounted(async () => {
         <CardContent class="p-5">
           <div class="flex items-center gap-6">
             <div class="flex-shrink-0">
-              <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">HFish 攻击总量</p>
+              <p class="text-xs font-semibold tracking-[0.12em] text-primary uppercase">攻击总量</p>
               <h2 class="text-4xl font-bold text-primary mt-1">{{ totalAttacks }}</h2>
               <p class="text-xs text-muted-foreground mt-1">展示最近同步到本地的攻击聚合统计</p>
             </div>
