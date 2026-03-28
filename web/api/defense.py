@@ -24,10 +24,11 @@ def _build_terminal_hfish_logs():
     logs = []
     for index, item in enumerate(events):
         timestamp = int(item.get('mtime') or 0)
+        report_ip = item.get('report_ip') or item.get('terminal_ip') or item.get('client_ip') or '-'
         logs.append({
             'id': timestamp * 1000 + index,
-            'attack_ip': item.get('capture_summary') or '终端取证回传',
-            'ip_location': item.get('attack_source') or '终端取证节点',
+            'attack_ip': report_ip,
+            'ip_location': item.get('client_host') or '终端回传节点',
             'service_name': TERMINAL_COUNTER_SERVICE_NAME,
             'service_port': '-',
             'client_id': item.get('event_key') or '-',
@@ -39,19 +40,23 @@ def _build_terminal_hfish_logs():
             'payload': (
                 f"截图: {item.get('screenshot_filename') or '-'}; "
                 f"摄像头: {item.get('camera_filename') or '-'}; "
-                f"API: {item.get('upload_api') or '-'}; "
-                f"客户端时间: {item.get('client_time') or '-'}"
+                f"上报IP: {report_ip}; "
+                f"客户端时间: {item.get('client_time') or '-'}; "
+                f"终端IP: {item.get('terminal_ip') or item.get('client_ip') or '-'}"
             ),
             'preview_url': item.get('preview_url') or '',
             'screenshot_url': item.get('screenshot_url') or '',
             'camera_url': item.get('camera_url') or '',
             'screenshot_filename': item.get('screenshot_filename') or '',
             'camera_filename': item.get('camera_filename') or '',
-            'upload_api': item.get('upload_api') or '',
+            'upload_api': report_ip,
+            'report_ip': report_ip,
+            'upload_endpoint': item.get('upload_endpoint') or '',
             'client_time': item.get('client_time') or '',
             'client_name': item.get('client_name') or '终端取证客户端',
             'client_host': item.get('client_host') or '',
-            'client_ip': item.get('client_ip') or '',
+            'terminal_ip': item.get('terminal_ip') or item.get('client_ip') or '',
+            'client_ip': item.get('terminal_ip') or item.get('client_ip') or '',
             'capture_summary': item.get('capture_summary') or '截图',
             'jump_path': item.get('jump_path') or '/screenshots',
             'is_combined': bool(item.get('is_combined')),

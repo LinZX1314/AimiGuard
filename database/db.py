@@ -376,6 +376,18 @@ def init_db():
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_webhooks_token ON workflow_webhooks(token)"
     )
 
+    # ================= 终端取证元数据表 =================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS terminal_evidence_meta (
+            event_key TEXT PRIMARY KEY,
+            meta_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_terminal_evidence_meta_updated ON terminal_evidence_meta(updated_at DESC)"
+    )
+
     conn.commit()
     conn.close()
 

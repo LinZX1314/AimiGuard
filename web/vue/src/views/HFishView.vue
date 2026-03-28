@@ -68,9 +68,11 @@ interface HFishLogItem {
   camera_url?: string
   screenshot_filename?: string
   camera_filename?: string
+  report_ip?: string
   upload_api?: string
   client_time?: string
   client_host?: string
+  terminal_ip?: string
   client_ip?: string
   capture_summary?: string
   jump_path?: string
@@ -135,10 +137,10 @@ const detailPreviewMeta = computed(() => {
     { label: '取证类型', value: evidenceDetail.value.capture_summary || '-' },
     { label: '回传时间', value: evidenceDetail.value.time || '-' },
     { label: '客户端时间', value: evidenceDetail.value.client_time || '-' },
-    { label: '上报 API', value: evidenceDetail.value.upload_api || '-' },
+    { label: '上报 IP', value: evidenceDetail.value.report_ip || evidenceDetail.value.terminal_ip || evidenceDetail.value.client_ip || '-' },
     { label: '客户端名称', value: evidenceDetail.value.client_name || '-' },
     { label: '客户端主机', value: evidenceDetail.value.client_host || '-' },
-    { label: '客户端 IP', value: evidenceDetail.value.client_ip || '-' },
+    { label: '终端 IP', value: evidenceDetail.value.terminal_ip || evidenceDetail.value.client_ip || '-' },
     { label: '截图文件', value: evidenceDetail.value.screenshot_filename || '-' },
     { label: '摄像头文件', value: evidenceDetail.value.camera_filename || '-' },
     { label: '截图路径', value: evidenceDetail.value.screenshot_url || '-' },
@@ -426,11 +428,13 @@ function openTerminalLogDetail(log: HFishLogItem) {
     screenshot_url: log.screenshot_url || '',
     camera_filename: log.camera_filename || '',
     camera_url: log.camera_url || '',
-    upload_api: log.upload_api || '',
+    report_ip: log.report_ip || log.terminal_ip || log.client_ip || '-',
+    upload_api: log.report_ip || log.terminal_ip || log.client_ip || log.upload_api || '-',
     client_time: log.client_time || log.create_time_str || log.attack_time || '-',
     client_name: log.client_name || '终端取证客户端',
     client_host: log.client_host || '',
-    client_ip: log.client_ip || '',
+    terminal_ip: log.terminal_ip || log.client_ip || '',
+    client_ip: log.terminal_ip || log.client_ip || '',
     time: log.create_time_str || log.attack_time || '-',
     mtime: Number(log.create_time_timestamp || 0),
   })
@@ -530,7 +534,8 @@ async function copyLog(item: HFishLogItem) {
     `归属地: ${item.ip_location || '未知'}`,
     `节点名称: ${item.client_name || '-'}`,
     `攻击节点: ${item.client_id || '-'}`,
-    `上报API: ${item.upload_api || '-'}`,
+    `终端IP: ${item.terminal_ip || item.client_ip || '-'}`,
+    `上报IP: ${item.report_ip || item.terminal_ip || item.client_ip || item.upload_api || '-'}`,
     `客户端时间: ${item.client_time || '-'}`,
     `威胁等级: ${threatLabel(item.threat_level || '')}`,
     `详情: ${item.payload || '-'}`,
@@ -738,7 +743,7 @@ onMounted(async () => {
                           {{ log.screenshot_filename || log.camera_filename || log.client_id || '-' }}
                         </p>
                         <p class="text-[11px] text-red-100/80 truncate">攻击来源：{{ log.attack_ip || '-' }}</p>
-                        <p class="text-[11px] text-red-100/75 truncate">上报API：{{ log.upload_api || '-' }}</p>
+                        <p class="text-[11px] text-red-100/75 truncate">上报IP：{{ log.report_ip || log.terminal_ip || log.client_ip || log.upload_api || '-' }}</p>
                         <div class="text-[10px] text-red-100/70 flex items-center gap-1.5">
                           <Clock3 class="h-3 w-3" /> {{ log.create_time_str || log.attack_time || '-' }}
                         </div>

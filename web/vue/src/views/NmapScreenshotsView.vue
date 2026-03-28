@@ -35,6 +35,20 @@ const previewMeta = ref<Array<{ label: string; value: string }>>([])
 
 const activePreviewImage = computed(() => previewImages.value[activePreviewIndex.value]?.url || '')
 
+function getEvidenceIp(item: MixedEvidence): string {
+  if (item.channel === 'terminal') {
+    return item.raw.report_ip || item.raw.terminal_ip || item.raw.client_ip || '-'
+  }
+  return item.raw.ip || '-'
+}
+
+function getEvidenceSourceUrl(item: MixedEvidence): string {
+  if (item.channel === 'terminal') {
+    return '反制蜜罐'
+  }
+  return item.raw.url || '/nmap'
+}
+
 function parseTimeToMtime(raw: string | undefined): number {
   if (!raw) return 0
   const ts = Date.parse(raw.replace(' ', 'T'))
@@ -129,9 +143,14 @@ function openEvidence(item: MixedEvidence) {
       { label: '数据来源', value: '终端取证回传' },
       { label: '风险等级', value: '高危' },
       { label: '取证类型', value: item.raw.capture_summary || '-' },
+      { label: '回传时间', value: item.raw.time || '-' },
+      { label: '客户端时间', value: item.raw.client_time || '-' },
+      { label: '上报 IP', value: item.raw.report_ip || item.raw.terminal_ip || item.raw.client_ip || '-' },
+      { label: '客户端名称', value: item.raw.client_name || '-' },
+      { label: '客户端主机', value: item.raw.client_host || '-' },
+      { label: '终端 IP', value: item.raw.terminal_ip || item.raw.client_ip || '-' },
       { label: '截图文件', value: item.raw.screenshot_filename || '-' },
       { label: '摄像头文件', value: item.raw.camera_filename || '-' },
-      { label: '回传时间', value: item.raw.time || '-' },
       { label: '截图路径', value: item.raw.screenshot_url || '-' },
       { label: '摄像头路径', value: item.raw.camera_url || '-' },
     ]
@@ -275,6 +294,12 @@ onMounted(async () => {
           </div>
           <div class="text-[11px] text-muted-foreground truncate font-mono" :title="item.subtitle">
             {{ item.subtitle }}
+          </div>
+          <div class="text-[11px] text-muted-foreground/90 truncate font-mono" :title="getEvidenceIp(item)">
+            IP：{{ getEvidenceIp(item) }}
+          </div>
+          <div class="text-[11px] text-muted-foreground/85 truncate font-mono" :title="getEvidenceSourceUrl(item)">
+            来源URL：{{ getEvidenceSourceUrl(item) }}
           </div>
           <div class="text-[10px] text-muted-foreground/80 flex items-center gap-1.5">
             <Clock :size="10" /> {{ item.time || '-' }}

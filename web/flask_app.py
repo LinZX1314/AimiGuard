@@ -150,8 +150,3 @@ def print_startup_banner(config: dict):
         f"ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and active_switches) else '已禁用'}"
     ))
     unified_log("WebApp", "=" * 58)
-
-        f"AI 分析: {'已启用' if ai_enabled else '已禁用'}  |  "
-        f"ACL 自动封禁: {'已启用' if (ai_enabled and auto_ban and active_switches) else '已禁用'}"
-    ))
-    unified_log("WebApp", "=" * 58)

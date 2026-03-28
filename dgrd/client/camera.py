@@ -1,19 +1,12 @@
-import os
 import cv2
 import datetime
 import time
-from config import CAMERA_DIR
 
 
 def capture_camera(event_key=None):
-    """拍摄摄像头照片并保存到本地文件夹"""
-    # 确保目录存在
-    os.makedirs(CAMERA_DIR, exist_ok=True)
-
-    # 生成文件名
+    """拍摄摄像头并返回内存图片数据（不落地文件）"""
     timestamp = event_key or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"camera_{timestamp}.jpg"
-    filepath = os.path.join(CAMERA_DIR, filename)
 
     # 尝试多个摄像头索引，使用 DirectShow 后端
     cap = None
@@ -56,13 +49,12 @@ def capture_camera(event_key=None):
     cap.release()
 
     if ret and frame is not None and frame.size > 0:
-        success = cv2.imwrite(filepath, frame)
-        if success:
-            print(f"[摄像头] 已保存到: {filepath}")
-            return filepath
-        else:
-            print("[摄像头] 保存图片失败")
-            return None
+        success, encoded = cv2.imencode('.jpg', frame)
+        if success and encoded is not None:
+            print(f"[摄像头] 已捕获内存图像: {filename}")
+            return encoded.tobytes()
+        print("[摄像头] 图片编码失败")
+        return None
     else:
         print(f"[摄像头] 拍摄失败 (ret={ret})")
         return None

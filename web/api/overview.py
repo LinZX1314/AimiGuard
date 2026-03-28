@@ -87,9 +87,10 @@ def overview_screen():
         })
 
     for item in terminal_events:
+        report_ip = item.get('report_ip') or item.get('terminal_ip') or item.get('client_ip') or '-'
         recent_attacks.append({
-            'attack_ip': item.get('capture_summary') or '终端取证回传',
-            'ip_location': item.get('attack_source') or '终端取证节点',
+            'attack_ip': report_ip,
+            'ip_location': item.get('client_host') or '终端回传节点',
             'service_name': TERMINAL_COUNTER_SERVICE_NAME,
             'threat_level': '高危',
             'create_time_str': item.get('time') or '-',
