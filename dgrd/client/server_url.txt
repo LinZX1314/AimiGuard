@@ -1,0 +1,5 @@
+# 填写你的 AimiGuard 服务器地址（可写 IP 或域名）
+# 示例:
+# http://192.168.1.88:5000
+# https://aimiguard.example.com
+http://10.80.24.242:5000
