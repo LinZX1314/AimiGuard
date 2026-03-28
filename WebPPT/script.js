@@ -26,35 +26,38 @@ class Presentation {
     }
 
     buildSideNav() {
-        const sideNav = document.createElement('nav');
-        sideNav.className = 'side-nav';
+        const topNav = document.createElement('nav');
+        topNav.className = 'top-nav';
+        this.topNavElement = topNav;
         this.navItems = [];
 
-        this.slides.forEach((slide, index) => {
-            // Find title on the slide
-            const titleElem = slide.querySelector('.slide-title') || slide.querySelector('.main-title');
-            let titleText = titleElem ? titleElem.textContent.replace(/\n/g, ' ').trim() : `第 ${index + 1} 页`;
-            
-            // Format titles like "实战 01: AI 智能封禁" to "AI 智能封禁" to keep sidebar clean
-            if (titleText.includes(':')) {
-                titleText = titleText.split(':')[1].trim();
-            }
+        const navCategories = [
+            { title: '团队介绍', startIndex: 1 },
+            { title: '项目背景', startIndex: 2 },
+            { title: '项目介绍', startIndex: 3 },
+            { title: '功能演示', startIndex: 4 },
+            { title: '实战演示', startIndex: 7 },
+            { title: '总结', startIndex: 10 }
+        ];
 
+        navCategories.forEach((cat) => {
             const navItem = document.createElement('div');
             navItem.className = 'nav-item';
-            navItem.onclick = () => this.goToSlide(index);
+            navItem.onclick = () => this.goToSlide(cat.startIndex);
             
             navItem.innerHTML = `
-                <div class="nav-dot"></div>
-                <div class="nav-text">${titleText}</div>
+                <div class="nav-text">${cat.title}</div>
             `;
             
-            sideNav.appendChild(navItem);
-            this.navItems.push(navItem);
+            topNav.appendChild(navItem);
+            this.navItems.push({
+                element: navItem,
+                startIndex: cat.startIndex
+            });
         });
 
         // Add to main container
-        document.querySelector('.presentation-container').appendChild(sideNav);
+        document.querySelector('.presentation-container').appendChild(topNav);
     }
 
     initComparisonBoxes() {
@@ -84,14 +87,30 @@ class Presentation {
 
         // Update Nav Timeline
         if (this.navItems) {
+            let activeNavIdx = -1;
+            for (let i = this.navItems.length - 1; i >= 0; i--) {
+                if (this.currentSlideIndex >= this.navItems[i].startIndex) {
+                    activeNavIdx = i;
+                    break;
+                }
+            }
+
             this.navItems.forEach((item, index) => {
-                item.className = 'nav-item'; // Reset classes
-                if (index === this.currentSlideIndex) {
-                    item.classList.add('active');
-                } else if (index < this.currentSlideIndex) {
-                    item.classList.add('past');
+                item.element.className = 'nav-item'; // Reset classes
+                if (index === activeNavIdx) {
+                    item.element.classList.add('active');
                 }
             });
+        }
+
+        if (this.topNavElement) {
+            if (this.currentSlideIndex === 0) {
+                this.topNavElement.style.opacity = '0';
+                this.topNavElement.style.pointerEvents = 'none';
+            } else {
+                this.topNavElement.style.opacity = '1';
+                this.topNavElement.style.pointerEvents = 'auto';
+            }
         }
 
         // Update Progress Bar
