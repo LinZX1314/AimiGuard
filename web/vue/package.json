@@ -27,7 +27,6 @@
     "lucide-vue-next": "^0.577.0",
     "marked": "^15.0.12",
     "pinia": "^2.3.1",
-    "socket.io-client": "^4.8.3",
     "radix-vue": "^1.9.17",
     "reka-ui": "^2.9.2",
     "tailwind-merge": "^3.5.0",

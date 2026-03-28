@@ -10,8 +10,67 @@ from .helpers import (
     _parse_int_arg, _as_bool
 )
 from .runtime import run_hfish_sync, _run_daemon
+from .upload import (
+    TERMINAL_COUNTER_SERVICE_NAME,
+    collect_terminal_evidence_events,
+)
 
 defense_bp = Blueprint('defense', __name__, url_prefix='/api/v1/defense')
+
+
+def _build_terminal_hfish_logs():
+    """将终端取证事件映射为蜜罐日志结构，便于与现有前端统一展示。"""
+    events = collect_terminal_evidence_events()
+    logs = []
+    for index, item in enumerate(events):
+        timestamp = int(item.get('mtime') or 0)
+        logs.append({
+            'id': timestamp * 1000 + index,
+            'attack_ip': item.get('capture_summary') or '终端取证回传',
+            'ip_location': item.get('attack_source') or '终端取证节点',
+            'service_name': TERMINAL_COUNTER_SERVICE_NAME,
+            'service_port': '-',
+            'client_id': item.get('event_key') or '-',
+            'client_name': '终端取证',
+            'attack_time': item.get('time') or '-',
+            'create_time_str': item.get('time') or '-',
+            'create_time_timestamp': timestamp,
+            'threat_level': 'high',
+            'payload': (
+                f"截图: {item.get('screenshot_filename') or '-'}; "
+                f"摄像头: {item.get('camera_filename') or '-'}; "
+                f"API: {item.get('upload_api') or '-'}; "
+                f"客户端时间: {item.get('client_time') or '-'}"
+            ),
+            'preview_url': item.get('preview_url') or '',
+            'screenshot_url': item.get('screenshot_url') or '',
+            'camera_url': item.get('camera_url') or '',
+            'screenshot_filename': item.get('screenshot_filename') or '',
+            'camera_filename': item.get('camera_filename') or '',
+            'upload_api': item.get('upload_api') or '',
+            'client_time': item.get('client_time') or '',
+            'client_name': item.get('client_name') or '终端取证客户端',
+            'client_host': item.get('client_host') or '',
+            'client_ip': item.get('client_ip') or '',
+            'capture_summary': item.get('capture_summary') or '截图',
+            'jump_path': item.get('jump_path') or '/screenshots',
+            'is_combined': bool(item.get('is_combined')),
+            'attack_count': 1,
+        })
+    return logs
+
+
+@defense_bp.route('/terminal-evidence', methods=['GET'])
+@require_auth
+def defense_terminal_evidence():
+    """终端取证列表：归属于防御域，供首页/蜜罐/截图取证统一消费。"""
+    limit = _parse_int_arg('limit', 200, max_value=1000)
+    items = collect_terminal_evidence_events(limit=limit)
+    return ok({
+        'items': items,
+        'total': len(items),
+        'high_count': len(items),
+    })
 
 
 @defense_bp.route('/hfish/logs', methods=['GET'])
@@ -23,6 +82,36 @@ def defense_hfish_logs():
     offset = (page - 1) * page_size
     aggregated = _as_bool(request.args.get('aggregated', '0'))
     service_name = request.args.get('service_name')
+
+    # 终端取证是反制蜜罐的一部分：按单次取证事件返回。
+    if service_name == TERMINAL_COUNTER_SERVICE_NAME:
+        terminal_logs = _build_terminal_hfish_logs()
+        total = len(terminal_logs)
+
+        if aggregated:
+            grouped: dict[str, dict] = {}
+            for row in terminal_logs:
+                key = row['attack_ip']
+                hit = grouped.get(key)
+                if hit is None:
+                    grouped[key] = {
+                        'attack_ip': row['attack_ip'],
+                        'ip_location': row['ip_location'],
+                        'service_name': TERMINAL_COUNTER_SERVICE_NAME,
+                        'attack_count': 1,
+                        'latest_time': row['create_time_str'],
+                    }
+                else:
+                    hit['attack_count'] += 1
+                    if str(row['create_time_str']) > str(hit['latest_time']):
+                        hit['latest_time'] = row['create_time_str']
+
+            grouped_rows = sorted(grouped.values(), key=lambda x: x['attack_count'], reverse=True)
+            paged_grouped = grouped_rows[offset: offset + page_size]
+            return ok({'items': paged_grouped, 'total': total, 'page': page, 'page_size': page_size})
+
+        paged_logs = terminal_logs[offset: offset + page_size]
+        return ok({'items': paged_logs, 'total': total, 'page': page, 'page_size': page_size})
 
     conn = get_connection()
     c = conn.cursor()
@@ -83,6 +172,9 @@ def defense_hfish_stats():
     c.execute('SELECT COUNT(DISTINCT service_name) as service_count FROM attack_logs')
     service_count = c.fetchone()['service_count']
 
+    terminal_events = collect_terminal_evidence_events()
+    terminal_total = len(terminal_events)
+
     # Get per-service stats (service_stats for frontend compatibility)
     c.execute("""
         SELECT
@@ -93,6 +185,12 @@ def defense_hfish_stats():
         ORDER BY count DESC
     """)
     service_stats = [{'name': r['name'], 'count': r['count']} for r in c.fetchall()]
+
+    if terminal_total > 0:
+        service_stats.append({'name': TERMINAL_COUNTER_SERVICE_NAME, 'count': terminal_total})
+        service_stats.sort(key=lambda x: x['count'], reverse=True)
+        service_count += 1
+        total += terminal_total
 
     conn.close()
     return ok({

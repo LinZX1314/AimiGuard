@@ -72,7 +72,9 @@ async function loadScreen() {
 let timer: ReturnType<typeof setInterval>
 onMounted(() => {
   loadScreen()
-  timer = setInterval(loadScreen, 15_000)
+  timer = setInterval(() => {
+    loadScreen()
+  }, 15_000)
 })
 onUnmounted(() => {
   clearInterval(timer)

@@ -13,7 +13,6 @@ import {
   Filler,
 } from 'chart.js'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Activity } from 'lucide-vue-next'
 import TechCard from './shared/TechCard.vue'
 
@@ -207,6 +206,7 @@ function getChainStatus(key: string): boolean {
         </div>
       </div>
     </TechCard>
+
   </aside>
 </template>
 

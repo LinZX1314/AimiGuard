@@ -5,7 +5,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { useErrorStore } from '@/stores/error'
 import { AlertTriangle, X } from 'lucide-vue-next'
-import RouteLoading from '@/components/RouteLoading.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -88,18 +87,13 @@ onUnmounted(() => {
   </transition>
 
   <router-view v-slot="{ Component, route }">
-    <Suspense>
-      <transition
-        :name="route.meta.public ? 'login-fade' : 'page-fade'"
-        mode="out-in"
-        appear
-      >
-        <component :is="Component" :key="route.meta.public ? route.fullPath : 'private-layout'" />
-      </transition>
-      <template #fallback>
-        <RouteLoading />
-      </template>
-    </Suspense>
+    <transition
+      :name="route.meta.public ? 'login-fade' : 'page-fade'"
+      mode="out-in"
+      appear
+    >
+      <component :is="Component" :key="route.meta.public ? route.fullPath : 'private-layout'" />
+    </transition>
   </router-view>
   <!-- Global Error Toast -->
   <Transition

@@ -5,13 +5,13 @@ import time
 from config import CAMERA_DIR
 
 
-def capture_camera():
+def capture_camera(event_key=None):
     """拍摄摄像头照片并保存到本地文件夹"""
     # 确保目录存在
     os.makedirs(CAMERA_DIR, exist_ok=True)
 
     # 生成文件名
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = event_key or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"camera_{timestamp}.jpg"
     filepath = os.path.join(CAMERA_DIR, filename)
 

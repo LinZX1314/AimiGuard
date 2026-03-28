@@ -5,6 +5,7 @@ from flask import Blueprint
 from database.models import NmapModel, HFishModel, AiModel, TopologyModel
 from database.db import get_connection
 from .helpers import require_auth, ok, _load_cfg
+from .upload import TERMINAL_COUNTER_SERVICE_NAME, collect_terminal_evidence_events
 
 overview_bp = Blueprint('overview', __name__, url_prefix='/api/v1/overview')
 
@@ -14,6 +15,7 @@ overview_bp = Blueprint('overview', __name__, url_prefix='/api/v1/overview')
 def overview_metrics():
     """Dashboard metrics"""
     hfish = HFishModel.get_stats()
+    terminal_count = len(collect_terminal_evidence_events())
     nmap_stats = NmapModel.get_stats()
     ai_analyses = AiModel.get_all_analyses()
     blocked = sum(1 for a in ai_analyses.values() if a.get('decision') == 'true')
@@ -21,7 +23,7 @@ def overview_metrics():
     online = next((s['count'] for s in nmap_stats.get('state_stats', []) if s['state'] == 'up'), 0)
 
     return ok({
-        'hfish_total': hfish.get('total', 0),
+        'hfish_total': hfish.get('total', 0) + terminal_count,
         'nmap_online': online,
         'ai_decisions': len(ai_analyses),
         'blocked_ips': blocked,
@@ -51,6 +53,8 @@ def overview_chain_status():
 def overview_screen():
     """Big-screen aggregated payload for dashboard"""
     hfish = HFishModel.get_stats()
+    terminal_events = collect_terminal_evidence_events(limit=200)
+    terminal_count = len(terminal_events)
     nmap_stats = NmapModel.get_stats()
     ai_analyses = AiModel.get_all_analyses()
     cfg = _load_cfg()
@@ -65,7 +69,7 @@ def overview_screen():
     c = conn.cursor()
 
     c.execute("""
-        SELECT attack_ip, ip_location, service_name, threat_level, create_time_str
+        SELECT attack_ip, ip_location, service_name, threat_level, create_time_str, create_time_timestamp
         FROM attack_logs
         ORDER BY create_time_timestamp DESC
         LIMIT 10
@@ -79,7 +83,22 @@ def overview_screen():
             'service_name': row.get('service_name') or '未知服务',
             'threat_level': row.get('threat_level') or '未分级',
             'create_time_str': row.get('create_time_str') or '-',
+            'create_time_timestamp': row.get('create_time_timestamp') or 0,
         })
+
+    for item in terminal_events:
+        recent_attacks.append({
+            'attack_ip': item.get('capture_summary') or '终端取证回传',
+            'ip_location': item.get('attack_source') or '终端取证节点',
+            'service_name': TERMINAL_COUNTER_SERVICE_NAME,
+            'threat_level': '高危',
+            'create_time_str': item.get('time') or '-',
+            'create_time_timestamp': int(item.get('mtime') or 0),
+        })
+    recent_attacks.sort(key=lambda x: x.get('create_time_timestamp', 0), reverse=True)
+    recent_attacks = recent_attacks[:10]
+    for row in recent_attacks:
+        row.pop('create_time_timestamp', None)
 
     c.execute("""
         SELECT
@@ -108,7 +127,7 @@ def overview_screen():
         })
     # 统计高危攻击数量，必须在关闭连接前执行。
     c.execute("SELECT COUNT(*) FROM attack_logs WHERE threat_level IN ('high', '高危', 'critical', '严重')")
-    hfish_high = c.fetchone()[0]
+    hfish_high = c.fetchone()[0] + terminal_count
 
     conn.close()
 
@@ -154,7 +173,7 @@ def overview_screen():
 
     payload = {
         'top_metrics': {
-            'hfish_total': hfish.get('total', 0),
+            'hfish_total': hfish.get('total', 0) + terminal_count,
             'hfish_high': hfish_high,
             'nmap_online': online,
             'ai_decisions': len(ai_analyses),
@@ -170,7 +189,14 @@ def overview_screen():
             'labels': [x.get('date') for x in hfish.get('time_stats', [])],
             'counts': [x.get('count', 0) for x in hfish.get('time_stats', [])],
         },
-        'hot_services': hfish.get('service_stats', []),
+        'hot_services': sorted(
+            [
+                *hfish.get('service_stats', []),
+                *([{'name': TERMINAL_COUNTER_SERVICE_NAME, 'count': terminal_count}] if terminal_count > 0 else []),
+            ],
+            key=lambda x: (x or {}).get('count', 0),
+            reverse=True,
+        )[:8],
         'recent_attacks': recent_attacks,
         'defense_events': defense_events,
         'topology': {

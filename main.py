@@ -44,7 +44,7 @@ def main():
         sys.exit(1)
 
     # 构建 Flask 应用
-    from web.flask_app import create_app, print_startup_banner, socketio
+    from web.flask_app import create_app, print_startup_banner
     from web.api.runtime import start_runtime_workers
 
     app = create_app()
@@ -68,7 +68,7 @@ def main():
     import flask.cli
     flask.cli.show_server_banner = lambda *a, **kw: None
 
-    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+    app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == "__main__":

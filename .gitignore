@@ -57,3 +57,4 @@ fscan_result_*.json
 .breezell
 docs/
 screenshots
+web/vue/public/uploads/camera/

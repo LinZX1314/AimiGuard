@@ -14,6 +14,7 @@ from .nmap_routes import nmap_bp
 from .switch_workbench import switch_workbench_bp
 from .legacy import legacy_bp
 from .topology_routes import topology_bp
+from .upload import upload_bp
 
 
 def register_blueprints(app):
@@ -28,9 +29,11 @@ def register_blueprints(app):
     app.register_blueprint(switch_workbench_bp)
     app.register_blueprint(legacy_bp)
     app.register_blueprint(topology_bp)
-
-
-# Export for external use
+    app.register_blueprint(upload_bp)
+    
+    # 打印所有注册的路由，以便在日志中确认
+    for rule in app.url_map.iter_rules():
+        print(f"Registered route: {rule}")
 __all__ = [
     'register_blueprints',
     'auth_bp',
