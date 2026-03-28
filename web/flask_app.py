@@ -124,7 +124,7 @@ def _build_honeypot_assets() -> list[dict]:
         return [
             {
                 "id": "finance-exe",
-                "name": "财务结算对账终端_2026Q1.exe",
+                "name": "财务结算对账终端_2026Q1",
                 "desc": "财务共享中心对账客户端（下载后可直接运行）",
                 "size": _format_file_size(exe_candidate.stat().st_size),
                 "download": "/list/download/finance-exe",
@@ -144,7 +144,7 @@ def _build_honeypot_assets() -> list[dict]:
     return [
         {
             "id": "dgrd-dist",
-            "name": "财务结算中心_票据归档_2026Q1.zip",
+            "name": "财务结算中心_票据归档_2026Q1",
             "desc": "财务共享中心月度归档资料（内部专用）",
             "size": _format_file_size(dist_zip_size),
             "download": "/list/download/dgrd-dist",
@@ -510,10 +510,103 @@ def _render_honeypot_user_page() -> str:
         "用户中心",
         "user",
         """
+<style>
+    .ops-grid { display:grid; gap:12px; }
+    .ops-kpi { display:grid; grid-template-columns:repeat(4, minmax(120px, 1fr)); gap:10px; margin:12px 0; }
+    .ops-kpi .item { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#f8fafc; }
+    .ops-kpi .label { font-size:12px; color:#64748b; }
+    .ops-kpi .value { font-size:20px; font-weight:600; }
+    .ops-panels { display:grid; grid-template-columns:1.35fr 1fr; gap:12px; }
+    .ops-card { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#fff; }
+    .ops-sub { margin:0 0 8px; font-size:14px; color:#0f172a; }
+    .ops-row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    .ops-bar { flex:1; height:8px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+    .ops-bar > span { display:block; height:100%; border-radius:999px; }
+    .ops-badge-ok { color:#166534; }
+    .ops-badge-warn { color:#b45309; }
+    .ops-badge-high { color:#b91c1c; }
+    .ops-mini { font-size:12px; color:#64748b; }
+    .ops-table-wrap { overflow:auto; }
+    .ops-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .ops-table th { background:#f1f5f9; border-bottom:1px solid #e2e8f0; text-align:left; padding:8px; }
+    .ops-table td { border-bottom:1px solid #e2e8f0; padding:8px; }
+    @media (max-width: 980px) {
+        .ops-kpi { grid-template-columns:repeat(2, minmax(120px, 1fr)); }
+        .ops-panels { grid-template-columns:1fr; }
+    }
+</style>
+
 <h3 style=\"margin-top:0\">账户信息</h3>
-<p>账号: ops_admin | 角色: 运维管理员 | 最近登录: 2026-03-28 15:00:00</p>
-<p style=\"color:#475569; font-size:13px\">提示: 账号权限包含资产查询、客户端下载与日志查看。</p>
-<div style=\"margin-top:10px\">
+<p>账号: ops_admin | 角色: 运维管理员 | 部门: 财务共享中心 | 最近登录: 2026-03-28 15:00:00</p>
+
+<div class=\"ops-kpi\">
+    <div class=\"item\"><div class=\"label\">负责终端</div><div class=\"value\">46</div></div>
+    <div class=\"item\"><div class=\"label\">在线率</div><div class=\"value\">97.8%</div></div>
+    <div class=\"item\"><div class=\"label\">待审工单</div><div class=\"value\">3</div></div>
+    <div class=\"item\"><div class=\"label\">当日回传</div><div class=\"value\">19</div></div>
+</div>
+
+<div class=\"ops-panels\">
+    <section class=\"ops-card\">
+        <h4 class=\"ops-sub\">近7日告警趋势</h4>
+        <svg viewBox=\"0 0 420 150\" width=\"100%\" height=\"150\" aria-label=\"trend\">
+            <line x1=\"24\" y1=\"120\" x2=\"400\" y2=\"120\" stroke=\"#cbd5e1\" />
+            <line x1=\"24\" y1=\"20\" x2=\"24\" y2=\"120\" stroke=\"#cbd5e1\" />
+            <polyline fill=\"none\" stroke=\"#2563eb\" stroke-width=\"3\" points=\"24,96 80,88 136,92 192,76 248,60 304,72 360,48\" />
+            <circle cx=\"360\" cy=\"48\" r=\"4\" fill=\"#2563eb\" />
+            <text x=\"24\" y=\"138\" font-size=\"11\" fill=\"#64748b\">03-22</text>
+            <text x=\"332\" y=\"138\" font-size=\"11\" fill=\"#64748b\">03-28</text>
+            <text x=\"274\" y=\"24\" font-size=\"12\" fill=\"#0f172a\">今日告警 19，较昨日 +12%</text>
+        </svg>
+        <div class=\"ops-mini\">趋势来源: 终端巡检、上传异常、外联策略命中</div>
+    </section>
+    <section class=\"ops-card\">
+        <h4 class=\"ops-sub\">终端状态分布</h4>
+        <div class=\"ops-row\"><span style=\"width:60px\">在线</span><div class=\"ops-bar\"><span style=\"width:82%; background:#22c55e\"></span></div><b>82%</b></div>
+        <div class=\"ops-row\"><span style=\"width:60px\">维护</span><div class=\"ops-bar\"><span style=\"width:13%; background:#f59e0b\"></span></div><b>13%</b></div>
+        <div class=\"ops-row\"><span style=\"width:60px\">离线</span><div class=\"ops-bar\"><span style=\"width:5%; background:#ef4444\"></span></div><b>5%</b></div>
+        <hr style=\"border:none; border-top:1px solid #e2e8f0; margin:12px 0\" />
+        <h4 class=\"ops-sub\">SLA 达成率</h4>
+        <div class=\"ops-row\"><span style=\"width:88px\">补丁时效</span><div class=\"ops-bar\"><span style=\"width:96%; background:#2563eb\"></span></div><b>96%</b></div>
+        <div class=\"ops-row\"><span style=\"width:88px\">告警闭环</span><div class=\"ops-bar\"><span style=\"width:91%; background:#0ea5e9\"></span></div><b>91%</b></div>
+    </section>
+</div>
+
+<h4 style=\"margin:8px 0 10px\">最近终端巡检记录</h4>
+<div class=\"ops-table-wrap\">
+    <table class=\"ops-table\">
+        <thead>
+            <tr>
+                <th>终端编号</th>
+                <th>归属部门</th>
+                <th>状态</th>
+                <th>最近巡检</th>
+                <th>备注</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>FIN-WS-1032</td><td>财务核算一部</td><td class=\"ops-badge-ok\">在线</td><td>2026-03-28 17:12</td><td>补丁已完成</td></tr>
+            <tr><td>FIN-WS-1098</td><td>成本管控组</td><td class=\"ops-badge-warn\">维护中</td><td>2026-03-28 16:45</td><td>等待重启窗口</td></tr>
+            <tr><td>FIN-SRV-APP07</td><td>报销业务平台</td><td class=\"ops-badge-ok\">在线</td><td>2026-03-28 17:06</td><td>运行正常</td></tr>
+            <tr><td>FIN-DB-CORE02</td><td>预算控制中心</td><td class=\"ops-badge-high\">高负载</td><td>2026-03-28 17:19</td><td>CPU 峰值 86%，已通知值班</td></tr>
+            <tr><td>FIN-WS-1176</td><td>应收结算组</td><td class=\"ops-badge-ok\">在线</td><td>2026-03-28 17:08</td><td>策略同步完成</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<h4 style=\"margin:12px 0 10px\">最近处置动作</h4>
+<div class=\"ops-table-wrap\">
+    <table class=\"ops-table\">
+        <thead><tr><th>时间</th><th>事件编号</th><th>动作</th><th>执行人</th><th>结果</th></tr></thead>
+        <tbody>
+            <tr><td>17:21:09</td><td>INC-20260328-047</td><td>隔离高风险会话</td><td>ops_admin</td><td class=\"ops-badge-ok\">成功</td></tr>
+            <tr><td>17:08:22</td><td>INC-20260328-043</td><td>下发补丁策略</td><td>ops_admin</td><td class=\"ops-badge-ok\">成功</td></tr>
+            <tr><td>16:56:40</td><td>INC-20260328-039</td><td>终端重启计划</td><td>ops_audit</td><td class=\"ops-badge-warn\">待确认</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div style=\"margin-top:12px\">
     <a href=\"/list\" style=\"display:inline-block; text-decoration:none; color:#fff; background:#2563eb; border-radius:8px; padding:8px 12px;\">进入下载中心</a>
 </div>
 """,
