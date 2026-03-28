@@ -45,6 +45,12 @@
   "server": {
     "port": 5000
   },
+  "security": {
+    "admin_entry": "/aixuanshu",
+    "honeypot_enabled": true,
+    "gate_cookie_name": "aimiguard_admin_gate",
+    "gate_cookie_token": ""
+  },
   "logging": {
     "api_request_log": true,
     "sync_log": true,
