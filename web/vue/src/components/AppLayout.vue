@@ -429,7 +429,7 @@ const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
 
 
-{ title: 'HFish 蜜罐', icon: Bug,             to: '/hfish' },
+{ title: '蜜罐', icon: Bug,             to: '/hfish' },
 
 
   { title: '主机探测',  icon: Radar,           to: '/nmap' },
@@ -441,7 +441,7 @@ const navItems = [
   { title: '防御事件',   icon: ShieldAlert,     to: '/defense' },
 
 
-  { title: '演练报告',   icon: ClipboardList,   to: '/reports' },
+  { title: '报告中心',   icon: ClipboardList,   to: '/reports' },
 
 
   { title: 'AI 助手',    icon: Bot,             to: '/ai' },
@@ -862,7 +862,7 @@ onUnmounted(() => {
                 <div class="flex items-center justify-between">
 
 
-<span class="text-sm font-medium">HFish 蜜罐</span>
+<span class="text-sm font-medium">蜜罐</span>
 
 
                   <Badge

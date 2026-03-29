@@ -194,9 +194,6 @@ onMounted(() => {
               <div class="flex items-center justify-between">
                 <span class="text-xs font-mono text-muted-foreground">{{ report.session_id }}</span>
                 <div class="flex items-center gap-1">
-                  <Badge variant="outline" class="text-[10px] px-1.5 h-4 bg-background/50 border-primary/20 text-primary">
-                    演练模式
-                  </Badge>
                   <div class="relative">
                     <button
                       class="p-1 rounded hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"

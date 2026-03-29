@@ -1045,6 +1045,8 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
 
     let typeQueue = ''
+    let postTypewriterQueue = ''
+    let postTypewriterInterval: any = null
 
 
     let typeInterval: any = null
@@ -1246,6 +1248,30 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
           // 演练报告链接 - 显示跳转按钮
           if (parsed.drill_report_link) {
+            if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
+            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](/reports)\n`
+          }
+
+          // 应急响应报告分块内容 - 通过post_typeQueue和postTypewriter显示
+          if (parsed.incident_report_chunk) {
+            if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
+            if (!postTypewriterInterval) {
+              postTypewriterInterval = setInterval(() => {
+                if (postTypewriterQueue.length > 0) {
+                  const popCount = Math.max(1, Math.ceil(postTypewriterQueue.length / 15))
+                  assistantMsg.post_content = (assistantMsg.post_content || '') + postTypewriterQueue.slice(0, popCount)
+                  postTypewriterQueue = postTypewriterQueue.slice(popCount)
+                } else {
+                  clearInterval(postTypewriterInterval)
+                  postTypewriterInterval = null
+                }
+              }, 30)
+            }
+            postTypewriterQueue += parsed.incident_report_chunk
+          }
+
+          // 应急响应报告链接 - 显示跳转按钮
+          if (parsed.incident_report_link) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
             assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](/reports)\n`
           }

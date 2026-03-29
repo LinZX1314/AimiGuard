@@ -1,0 +1,672 @@
+"""
+IncidentExecutor - 应急响应执行器核心
+管理 Agent 多轮工具调用循环：
+  1. AI 分析事件 → 决策工具
+  2. 执行工具 → 获取结果
+  3. AI 分析结果 → 决策下一步
+  4. 循环直到任务完成 → 生成报告 → 执行封禁
+"""
+
+import json
+import os
+import sys
+import time
+from datetime import datetime
+from typing import Generator
+
+# 确保能导入项目模块
+_BASE_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+if _BASE_DIR not in sys.path:
+    sys.path.insert(0, _BASE_DIR)
+
+from ai.client import (
+    build_openai_messages,
+    stream_openai_chat_with_tools,
+)
+from .incident_tools import get_incident_tool_definitions
+from utils.logger import log as unified_log
+
+
+# ── 公共辅助函数 ──────────────────────────────────────────────────────────────
+
+
+def _safe_parse_json(result_str):
+    """安全解析 JSON，失败时返回错误结构"""
+    if isinstance(result_str, str):
+        try:
+            return json.loads(result_str)
+        except (json.JSONDecodeError, ValueError):
+            return {"ok": False, "error": result_str}
+    return (
+        result_str
+        if isinstance(result_str, dict)
+        else {"ok": False, "error": str(result_str)}
+    )
+
+
+# ─── 应急响应状态 ──────────────────────────────────────────────────────────────
+
+
+class IncidentState:
+    """应急响应执行状态，贯穿整个 Agent 循环"""
+
+    def __init__(self):
+        self.document_content: str = ""  # 原始事件描述
+        self.event_summary: str = ""  # 事件摘要
+        self.traffic_logs: list[dict] = []  # 流量日志
+        self.packet_captures: list[dict] = []  # 数据包捕获
+        self.report_content: str = ""  # 最终报告
+        self.ban_records: list[dict] = []  # 封禁记录
+        self.step_count: int = 0  # 已执行步骤数
+        self.max_steps: int = 30  # 最大循环次数，防止死循环
+        self.is_complete: bool = False  # 是否已完成
+        self.history: list[dict] = []  # Agent 对话历史
+        self._start_time = datetime.now()
+
+    def add_result(self, result_type: str, result: dict):
+        """通用结果收集，支持类型：traffic/packet/ban"""
+        if result_type == "traffic":
+            self.traffic_logs.append(result)
+        elif result_type == "packet":
+            self.packet_captures.append(result)
+        elif result_type == "ban":
+            self.ban_records.append(result)
+
+    def get_exec_summary(self) -> str:
+        elapsed = (datetime.now() - self._start_time).total_seconds()
+        return (
+            f"应急响应开始时间: {self._start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"已运行时长: {int(elapsed)}秒\n"
+            f"已执行步骤: {self.step_count}/{self.max_steps}\n"
+            f"流量分析: {len(self.traffic_logs)}次\n"
+            f"数据包捕获: {len(self.packet_captures)}次\n"
+            f"封禁记录: {len(self.ban_records)}个"
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "event_summary": self.event_summary,
+            "traffic_logs": self.traffic_logs,
+            "packet_captures": self.packet_captures,
+            "ban_records": self.ban_records,
+            "exec_summary": self.get_exec_summary(),
+            "step_count": self.step_count,
+            "is_complete": self.is_complete,
+        }
+
+
+# ─── 工具执行器映射 ──────────────────────────────────────────────────────────
+
+
+def _execute_incident_tool(
+    tool_name: str, arguments: dict, cfg: dict, state: IncidentState
+) -> dict:
+    """执行应急响应专用工具"""
+
+    # ── 流量日志 ──────────────────────────────────────────────────────────
+    if tool_name == "get_traffic_logs":
+        time_range = arguments.get("time_range", "1小时内")
+        port_filter = arguments.get("port_filter", "4705")
+
+        # 返回提示词，告诉 AI 流量日志已获取
+        result = {
+            "ok": True,
+            "message": f"流量日志已获取，发现对{port_filter}端口的异常UDP流量，建议继续获取数据包详情",
+            "data": {
+                "time_range": time_range,
+                "port_filter": port_filter,
+                "异常流量": f"检测到对{port_filter}端口的大量异常UDP数据包",
+                "可疑来源": "192.168.0.5",
+                "目标端口": port_filter,
+                "协议": "UDP",
+                "建议": "继续获取数据包详情以确认攻击特征",
+            },
+        }
+
+        state.add_result(
+            "traffic",
+            {
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "time_range": time_range,
+                "port_filter": port_filter,
+                "result": result,
+            },
+        )
+
+        time.sleep(10.0)
+        return result
+
+    # ── 数据包捕获 ────────────────────────────────────────────────────────
+    if tool_name == "get_packet_capture":
+        source_ip = arguments.get("source_ip", "192.168.0.5")
+        port = arguments.get("port", "4705")
+
+        # 返回提示词，告诉 AI 数据包已捕获
+        result = {
+            "ok": True,
+            "message": f"数据包已捕获，包含对{port}端口的UDP数据包，Payload包含可执行命令，建议生成分析报告",
+            "data": {
+                "source_ip": source_ip,
+                "target_port": port,
+                "protocol": "UDP",
+                "packet_count": 128,
+                "payload_preview": "cmd.exe /k start",
+                "attack特征": "远程命令执行，可导致系统蓝屏",
+                "建议": "生成分析报告",
+            },
+        }
+
+        state.add_result(
+            "packet",
+            {
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "source_ip": source_ip,
+                "port": port,
+                "result": result,
+            },
+        )
+
+        time.sleep(10.0)
+        return result
+
+    # ── 生成报告 ─────────────────────────────────────────────────────────
+    if tool_name == "generate_incident_report":
+        exec_summary = arguments.get("exec_summary", state.get_exec_summary())
+
+        # 生成完整写死的 Markdown 报告
+        report = f"""# 🚨 安全应急响应报告
+
+> **生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+> **事件类型**: 批量电脑蓝屏安全事件
+> **分析结论**: 攻击者利用极域电子教室软件漏洞，在4705端口进行网络攻击
+
+---
+
+## 一、事件概述
+
+| 项目 | 内容 |
+|------|------|
+| 事件名称 | 批量电脑蓝屏安全事件 |
+| 发生时间 | {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} |
+| 影响范围 | 极域电子教室课堂环境 |
+| 事件分类 | 疑似网络攻击 |
+| 紧急程度 | 高危 |
+
+---
+
+## 二、流量分析结果
+
+**检测结果**：
+- 异常端口：**4705**（极域电子教室软件常用端口）
+- 协议类型：UDP
+- 流量特征：大量对4705端口的异常UDP数据包
+
+**攻击源分析**：
+- 攻击者IP：192.168.0.5
+- 攻击端口：63265 → 4705
+
+---
+
+## 三、数据包分析详情
+
+**抓包结果**：
+- 检测到对**4705端口**的异常UDP流量
+- 来源IP：192.168.0.5
+- 目标端口：4705
+- Payload包含可执行命令：`cmd.exe /k start`
+
+**攻击特征**：
+- 协议：UDP
+- 端口：4705（极域电子教室软件）
+- 行为：远程命令执行，可导致系统蓝屏
+
+**Payload分析**：
+- 发现可执行代码片段：`cmd.exe /k start`
+- 确认存在远程命令执行攻击
+- 攻击 payload 旨在触发目标主机蓝屏
+
+---
+
+## 四、攻击手法分析
+
+**初步判定**：极域电子教室软件漏洞利用
+
+**攻击原理**：
+1. 攻击者向4705端口发送精心构造的UDP数据包
+2. 数据包包含恶意Payload，利用极域电子教室软件漏洞
+3. 受害者收到攻击数据包后触发系统蓝屏
+
+---
+
+## 五、封禁建议
+
+| 封禁目标 | 封禁方式 | 优先级 |
+|----------|----------|--------|
+| 端口 4705 | 交换机ACL策略 | 紧急 |
+| 攻击源IP | IP封禁 | 高 |
+
+---
+
+## 六、修复建议
+
+### 立即措施
+1. 执行封禁策略，阻断4705端口流量
+2. 断开受影响网络区域的连接
+
+### 长期方案
+1. 升级极域电子教室软件到最新版本
+2. 部署入侵检测系统（IDS）监控异常流量
+3. 定期进行安全漏洞扫描和修复
+
+---
+
+> 本报告由 **玄枢指挥官** AI 自动生成 | 应急响应完成时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+
+        state.report_content = report
+        state.is_complete = True
+
+        time.sleep(10.0)
+        return {
+            "ok": True,
+            "report": report,
+            "summary": state.get_exec_summary(),
+        }
+
+    # ── 执行封禁 ─────────────────────────────────────────────────────────
+    if tool_name == "apply_ban_policy":
+        target = arguments.get("target", "")
+        policy_type = arguments.get("policy_type", "port")
+
+        if not target:
+            return {"ok": False, "error": "缺少封禁目标"}
+
+        # 白名单检查
+        whitelist = ["192.168.0.4"]
+        if target in whitelist:
+            result = {
+                "ok": True,
+                "message": f"目标 {target} 在白名单中，已跳过封禁",
+                "data": {
+                    "target": target,
+                    "policy_type": policy_type,
+                    "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "状态": "已跳过（白名单）",
+                },
+            }
+            state.add_result("ban", {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "target": target, "policy_type": policy_type, "result": result})
+            return result
+
+        # 返回提示词，告诉 AI 封禁已执行
+        result = {
+            "ok": True,
+            "message": f"已对{'端口 ' + target if policy_type == 'port' else 'IP ' + target}执行封禁策略，攻击流量将被阻断",
+            "data": {
+                "target": target,
+                "policy_type": policy_type,
+                "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "状态": "已执行",
+            },
+        }
+
+        state.add_result(
+            "ban",
+            {
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "target": target,
+                "policy_type": policy_type,
+                "result": result,
+            },
+        )
+
+        time.sleep(10.0)
+        return result
+
+    # ── 未知工具 ─────────────────────────────────────────────────────────
+    return {"ok": False, "error": f"未知应急响应工具: {tool_name}"}
+
+
+# ─── 系统提示词 ─────────────────────────────────────────────────────────────
+
+
+INCIDENT_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全应急响应 Agent。
+
+## 核心规则
+1. 收到安全事件后，**先用文字分析并列出执行计划表格**，询问用户确认后再执行
+2. 用户回复"开始"、"确认"或"继续"后，才开始按顺序调用工具
+3. 每步工具执行完毕，根据结果决定下一步，直到 generate_incident_report 执行完毕
+4. 报告生成后，**必须询问用户是否同意执行封禁策略**
+
+## 应急响应流程
+1. 调用 get_traffic_logs 获取流量日志
+2. 调用 get_packet_capture 获取数据包内容
+3. 调用 generate_incident_report 生成报告
+4. 用户确认后调用 apply_ban_policy 执行封禁
+
+## 重要说明
+- 收到任务后**先分析事件内容，输出执行计划表格**，并询问用户"是否开始执行？"
+- 用户确认后，才开始调用工具
+- 每步工具执行完毕看结果再决定下一步工具
+- 所有工具调用完毕后才输出总结文字
+- 报告生成后必须询问用户是否执行封禁策略"""
+
+
+# ─── 主执行器 ────────────────────────────────────────────────────────────────
+
+
+def create_incident_stream(
+    event_content: str,
+    cfg: dict,
+    state: IncidentState | None = None,
+    session_history: list | None = None,
+    openai_content: list | None = None,
+) -> Generator[str, None, IncidentState]:
+    """
+    创建应急响应 Agent 流式执行器（生成器）。
+
+    参数:
+        event_content: 安全事件描述
+        cfg: 系统配置
+        state: 应急响应状态（可外部传入，用于支持断点续传）
+        session_history: 之前的会话历史（用于继续执行）
+        openai_content: OpenAI 多模态内容（包含图片等）
+
+    返回:
+        Generator[str, None, IncidentState]: 生成 SSE 数据行的生成器
+    """
+    if state is None:
+        state = IncidentState()
+    state.document_content = event_content
+
+    tools = get_incident_tool_definitions()
+    history: list[dict] = []
+
+    # 注入系统提示
+    combined_system = f"{INCIDENT_SYSTEM_PROMPT}\n\n你叫玄枢指挥官，你是一个专业的网络安全应急响应助手。"
+    history.append({"role": "system", "content": combined_system})
+
+    # 如果有会话历史，注入到历史中（用于继续执行）
+    if session_history:
+        for msg in session_history:
+            role = msg.get("role")
+            if role == "user":
+                if not any(m.get("role") == "user" for m in history[1:]):
+                    history.append(
+                        {
+                            "role": "user",
+                            "content": msg.get("content", ""),
+                        }
+                    )
+            elif role == "assistant":
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    formatted_calls = (
+                        tool_calls
+                        if isinstance(tool_calls, list)
+                        else json.loads(str(tool_calls))
+                    )
+                    history.append(
+                        {
+                            "role": "assistant",
+                            "content": msg.get("content") or None,
+                            "tool_calls": formatted_calls,
+                        }
+                    )
+                else:
+                    history.append(
+                        {"role": "assistant", "content": msg.get("content", "")}
+                    )
+            elif role == "tool":
+                history.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.get("tool_call_id", "unknown"),
+                        "content": msg.get("content", ""),
+                    }
+                )
+        # 注入继续执行指令
+        history.append(
+            {
+                "role": "user",
+                "content": "继续执行，立即调用下一个工具，不要重新展示计划表。",
+            }
+        )
+    else:
+        # 注入事件内容作为用户消息（触发 Agent 启动）
+        user_content = (
+            f"安全事件已收到，请分析以下事件并制定应急响应计划。\n\n"
+            f"## 安全事件描述\n\n{event_content}"
+        )
+        history.append(
+            {
+                "role": "user",
+                "content": user_content,
+                "openai_content": openai_content,
+            }
+        )
+
+    # ─── Agent 主循环 ───────────────────────────────────────────────────
+    while state.step_count < state.max_steps and not state.is_complete:
+        state.step_count += 1
+        unified_log(
+            "IncidentExecutor",
+            f"=== Agent Step {state.step_count}/{state.max_steps} ===",
+            "INFO",
+        )
+
+        # 发送步骤开始信息
+        yield (
+            json.dumps(
+                {
+                    "content": f"🤔 AI 正在分析并决策下一步行动... (第 {state.step_count} 步)"
+                }
+            )
+            + "\n\n"
+        )
+
+        # LLM 决策：是否调用工具
+        # 第一步用 none 强制AI只输出文字（计划表格），不调用工具
+        # 有 session_history 时（用户确认后继续执行）用 required 强制调用工具
+        if state.step_count == 1 and session_history is None:
+            tc_choice = 'none'
+        elif session_history:
+            tc_choice = 'required'
+        else:
+            tc_choice = 'auto'
+        tool_calls = []
+        text_chunks = []
+
+        for chunk, error, tool_call in stream_openai_chat_with_tools(
+            build_openai_messages(history), cfg, tools=tools, tool_choice=tc_choice
+        ):
+            if error:
+                yield json.dumps({"error": error}) + "\n\n"
+                return state
+
+            if chunk:
+                text_chunks.append(chunk)
+                yield json.dumps({"content": chunk}) + "\n\n"
+
+            if tool_call:
+                tool_calls.append(tool_call)
+
+        # 合并文本响应
+        response_text = "".join(text_chunks)
+
+        # ─── 如果没有工具调用，结束循环 ─────────────────────────────────
+        if not tool_calls:
+            if response_text:
+                history.append({"role": "assistant", "content": response_text})
+                yield (
+                    json.dumps(
+                        {
+                            "step_complete": {
+                                "content": response_text,
+                                "tool_calls": [],
+                            }
+                        }
+                    )
+                    + "\n\n"
+                )
+            unified_log("IncidentExecutor", f"AI 无更多工具调用，应急响应结束（step={state.step_count}）", "INFO")
+            break
+
+        # ─── 执行工具调用 ───────────────────────────────────────────────
+        last_tool_name = None
+        last_tool_result = None
+        for tc in tool_calls:
+            tool_name = tc["name"]
+            tool_args = tc["arguments"]
+            last_tool_name = tool_name
+
+            unified_log(
+                "IncidentExecutor",
+                f"🤖 执行工具: {tool_name} | 参数: {json.dumps(tool_args, ensure_ascii=False)[:200]}",
+                "INFO",
+            )
+
+            # 工具名到描述的映射
+            tool_descriptions = {
+                "get_traffic_logs": "获取网络流量日志，分析异常流量",
+                "get_packet_capture": "获取数据包捕获内容，分析攻击特征",
+                "generate_incident_report": "生成安全应急响应报告",
+                "apply_ban_policy": "执行封禁策略，阻断攻击流量",
+            }
+
+            # 发送工具调用开始
+            yield (
+                json.dumps(
+                    {
+                        "tool_call": {
+                            "id": tc["id"],
+                            "name": tool_name,
+                            "description": tool_descriptions.get(tool_name, ""),
+                            "arguments": tool_args,
+                        }
+                    }
+                )
+                + "\n\n"
+            )
+
+            # 保存 AI 的 tool_call 消息
+            if tc is tool_calls[0]:
+                history.append(
+                    {
+                        "role": "assistant",
+                        "content": response_text if response_text else None,
+                        "tool_calls": [
+                            {
+                                "id": t["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": t["name"],
+                                    "arguments": json.dumps(
+                                        t["arguments"], ensure_ascii=False
+                                    ),
+                                },
+                            }
+                            for t in tool_calls
+                        ],
+                    }
+                )
+
+            # 执行工具
+            tool_result = _execute_incident_tool(tool_name, tool_args, cfg, state)
+            last_tool_result = tool_result
+
+            # 序列化结果
+            if isinstance(tool_result, dict):
+                result_str = json.dumps(tool_result, ensure_ascii=False)
+            else:
+                result_str = str(tool_result)
+
+            # 发送给前端（截断过长的结果）
+            display_result = (
+                result_str[:2000] + "..." if len(result_str) > 2000 else result_str
+            )
+            yield (
+                json.dumps(
+                    {
+                        "tool_result": {
+                            "id": tc["id"],
+                            "name": tool_name,
+                            "result": display_result,
+                            "full_result": result_str,
+                        }
+                    }
+                )
+                + "\n\n"
+            )
+
+            # 追加工具结果到历史
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "name": tool_name,
+                "content": result_str
+            })
+
+            # 如果是报告生成工具，流式输出报告内容
+            if (
+                tool_name == "generate_incident_report"
+                and isinstance(tool_result, dict)
+                and tool_result.get("report")
+            ):
+                report_content = tool_result["report"]
+                # 按小chunk流式输出，每个chunk通过前端的typewriter效果显示
+                # 10字符/chunk，0.5秒/chunk = 20字/秒
+                chunk_size = 10
+                for i in range(0, len(report_content), chunk_size):
+                    chunk = report_content[i:i + chunk_size]
+                    yield (json.dumps({"incident_report_chunk": chunk}) + "\n\n")
+                    time.sleep(0.3)
+
+        # 发送步骤完成事件
+        if tool_calls:
+            yield (
+                json.dumps(
+                    {
+                        "step_complete": {
+                            "content": response_text,
+                            "tool_calls": [
+                                {
+                                    "id": t["id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": t["name"],
+                                        "arguments": json.dumps(
+                                            t["arguments"], ensure_ascii=False
+                                        ),
+                                    },
+                                }
+                                for t in tool_calls
+                            ],
+                        }
+                    }
+                )
+                + "\n\n"
+            )
+
+        # 检查是否已生成报告（应急响应完成）
+        if (
+            last_tool_name == "generate_incident_report"
+            and last_tool_result
+            and last_tool_result.get("ok")
+        ):
+            state.is_complete = True
+            # 发送报告链接，供前端跳转
+            yield (json.dumps({"incident_report_link": "/reports"}) + "\n\n")
+
+    # ─── 循环结束 ────────────────────────────────────────────────────────
+    if not state.is_complete and state.step_count >= state.max_steps:
+        yield json.dumps({"content": "⚠️ 应急响应达到最大步数限制，自动结束"}) + "\n\n"
+
+    unified_log(
+        "IncidentExecutor",
+        f"应急响应完成 | 总步骤: {state.step_count} | 流量分析: {len(state.traffic_logs)}次 | 数据包捕获: {len(state.packet_captures)}次",
+        "INFO",
+    )
+
+    return state

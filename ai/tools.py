@@ -333,6 +333,17 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
 
         rule_id = None
 
+        # 白名单检查
+        whitelist = ["192.168.0.4"]
+        if action == 'ban' and target_ip in whitelist:
+            results.append({
+                'host': host,
+                'switch_name': switch_name,
+                'ok': True,
+                'message': f'IP {target_ip} 在白名单中，已跳过封禁'
+            })
+            continue
+
         # ban 前检查目标IP是否已存在（去重）
         if action == 'ban':
             existing_rules = SwitchAclModel.get_rules(host, acl_number)

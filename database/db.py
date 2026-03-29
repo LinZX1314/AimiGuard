@@ -182,6 +182,13 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        cursor.execute(
+            "ALTER TABLE ai_chat_sessions ADD COLUMN is_incident_mode INTEGER DEFAULT 0"
+        )
+    except Exception:
+        pass
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

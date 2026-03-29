@@ -58,7 +58,7 @@ def timestamp_to_time(timestamp):
 def _format_error(host_port, err_msg):
     """格式化控制台错误输出"""
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f""" [{ts}] HFish 蜜罐连接异常，地址: {host_port} """
+    return f""" [{ts}] 罐连接异常，地址: {host_port} """
 
 
 def get_attack_logs(start_time, end_time, host_port, api_key, api_base_url=''):

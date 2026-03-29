@@ -144,6 +144,13 @@ IP信息：
 
         # 自动封禁
         if auto_ban and should_ban:
+            # 白名单检查
+            whitelist = ["192.168.0.4"]
+            if ip in whitelist:
+                logger.info(f"IP {ip} 在白名单中，已跳过封禁")
+                AiModel.save_analysis(ip, analysis_text, '已跳过（白名单）', status='whitelisted')
+                continue
+
             logger.info(f"开始封禁IP: {ip}")
 
             # 使用 ai/tools.py 中的工具封禁

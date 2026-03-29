@@ -15,6 +15,8 @@ from ai import (
 from ai.skills.drill_executor.drill_tools import get_drill_tool_definitions
 from ai.skills.drill_executor import DrillState
 from ai.skills.drill_executor.executor import DRILL_SYSTEM_PROMPT, create_drill_stream
+from ai.skills.incident_executor import IncidentState
+from ai.skills.incident_executor.executor import INCIDENT_SYSTEM_PROMPT, create_incident_stream
 from database.models import AiModel
 from .helpers import require_auth, ok, err, _body, _load_cfg, _save_cfg, _now_iso
 from utils.logger import log as unified_log
@@ -283,6 +285,10 @@ def ai_chat_stream():
     is_drill_mode = body.get("drill_mode", False) or has_image
     drill_state: DrillState | None = None
 
+    # 检查是否进入应急响应模式（检测"上课"关键字）
+    is_incident_mode = "上课" in message
+    incident_state: IncidentState | None = None
+
     # 检查是否是继续执行演练的确认消息
     CONFIRM_MSGS = {"开始", "继续", "确认", "开始执行", "继续执行"}
     is_confirm_msg = message.strip() in CONFIRM_MSGS
@@ -295,9 +301,16 @@ def ai_chat_stream():
         session_is_drill = AiModel.get_session_drill_mode(sid)
         if session_is_drill:
             is_drill_mode = True
+        # 检查会话是否已经是应急响应模式
+        session_is_incident = AiModel.get_session_incident_mode(sid)
+        if session_is_incident:
+            is_incident_mode = True
         # 如果是已有会话进入了演练模式，更新会话标记
         if is_drill_mode:
             AiModel.update_session_drill_mode(sid, 1)
+        # 如果是已有会话进入了应急响应模式，更新会话标记
+        if is_incident_mode:
+            AiModel.update_session_incident_mode(sid, 1)
     else:
         # 创建新会话
         title = message[:20] + "..." if len(message) > 20 else message
@@ -306,6 +319,7 @@ def ai_chat_stream():
             context_type=context_type,
             context_id=context_id,
             is_drill_mode=1 if is_drill_mode else 0,
+            is_incident_mode=1 if is_incident_mode else 0,
         )
         history = []
 
@@ -346,6 +360,20 @@ def ai_chat_stream():
                 break
         unified_log("AIChat", f"继续演练模式 | 确认消息={message}", "INFO")
 
+    # 初始化应急响应状态（如果是应急响应模式）
+    if is_incident_mode and not is_confirm_msg:
+        incident_state = IncidentState()
+        incident_state.document_content = message
+        unified_log("AIChat", f"进入应急响应模式 | event_len={len(message)}", "INFO")
+    elif is_incident_mode and is_confirm_msg and history:
+        # 从历史中重建应急响应状态
+        incident_state = IncidentState()
+        for msg in reversed(history):
+            if msg.get("role") == "user" and len(str(msg.get("content", ""))) > 50:
+                incident_state.document_content = msg.get("content", "")
+                break
+        unified_log("AIChat", f"继续应急响应模式 | 确认消息={message}", "INFO")
+
     # 2. 保存并追加用户消息
     history.append(
         {
@@ -358,7 +386,7 @@ def ai_chat_stream():
     AiModel.save_message(sid, "user", message, openai_content=openai_content)
 
     def generate():
-        nonlocal drill_state
+        nonlocal drill_state, incident_state
         # 如果是新会话，流开始的第一帧直接告诉前端建立的会话 ID
         if not session_id:
             yield f"data: {json.dumps({'session_id': sid}, ensure_ascii=False)}\n\n"
@@ -437,6 +465,85 @@ def ai_chat_stream():
                                 )
                 except:
                     logging.info(f"[DrillSSE] raw: {chunk[:100]}")
+                yield f"data: {chunk.rstrip()}\n\n"
+
+            yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
+            return
+
+        # ── 应急响应模式 ─────────────────────────────────────────────────────────
+        if is_incident_mode and incident_state:
+            # 发送应急响应启动消息
+            if is_confirm_msg:
+                yield f"data: {json.dumps({'content': '🚀 继续执行应急响应...'}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'content': '🚀 应急响应启动：AI 正在分析安全事件，制定应对计划...'}, ensure_ascii=False)}\n\n"
+
+            # 获取会话历史（用于继续执行）
+            session_history = AiModel.get_messages(sid) if is_confirm_msg else None
+
+            # 应急响应执行器会发送 step_complete 事件，每步完成后保存到数据库
+            for chunk in create_incident_stream(
+                event_content=incident_state.document_content,
+                cfg=cfg_now,
+                state=incident_state,
+                session_history=session_history,
+                openai_content=openai_content,
+            ):
+                import logging
+
+                try:
+                    parsed_chunk = json.loads(chunk.strip())
+                    chunk_type = (
+                        "tool_result"
+                        if "tool_result" in parsed_chunk
+                        else (
+                            "tool_call"
+                            if "tool_call" in parsed_chunk
+                            else (
+                                "content"
+                                if "content" in parsed_chunk
+                                else (
+                                    "step_complete"
+                                    if "step_complete" in parsed_chunk
+                                    else "other"
+                                )
+                            )
+                        )
+                    )
+                    logging.info(f"[IncidentSSE] {chunk_type}: {str(parsed_chunk)[:200]}")
+                    # step_complete 事件包含完整的 assistant message，保存到数据库
+                    if parsed_chunk.get("step_complete"):
+                        step_data = parsed_chunk["step_complete"]
+                        AiModel.save_message(
+                            sid,
+                            "assistant",
+                            step_data.get("content") or "",
+                            tool_calls=step_data.get("tool_calls"),
+                        )
+                    # tool_result 事件也需要保存为 role='tool'
+                    if parsed_chunk.get("tool_result"):
+                        tr = parsed_chunk["tool_result"]
+                        # 如果是报告生成工具，保存完整的报告内容
+                        if tr.get("name") == "generate_incident_report" and tr.get(
+                            "full_result"
+                        ):
+                            try:
+                                full_result = json.loads(tr["full_result"])
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr["full_result"],
+                                    tool_call_id=tr.get("id"),
+                                )
+                            except:
+                                AiModel.save_message(
+                                    sid,
+                                    "tool",
+                                    tr.get("result", ""),
+                                    tool_call_id=tr.get("id"),
+                                )
+                except:
+                    logging.info(f"[IncidentSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
 
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"

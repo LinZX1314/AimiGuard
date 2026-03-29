@@ -356,7 +356,7 @@ class ScannerModel:
 
 
 class HFishModel:
-    """HFish 蜜罐数据模型"""
+    """蜜罐数据模型"""
 
     @staticmethod
     def get_attack_logs(limit=50, offset=0, service_name=None):
@@ -591,17 +591,17 @@ class AiModel:
 
     @staticmethod
     def create_session(
-        title="新对话", context_type=None, context_id=None, is_drill_mode=0
+        title="新对话", context_type=None, context_id=None, is_drill_mode=0, is_incident_mode=0
     ):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO ai_chat_sessions (title, context_type, context_id, is_drill_mode, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO ai_chat_sessions (title, context_type, context_id, is_drill_mode, is_incident_mode, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-            (title, context_type, context_id, is_drill_mode, now, now),
+            (title, context_type, context_id, is_drill_mode, is_incident_mode, now, now),
         )
         session_id = cursor.lastrowid
         conn.commit()
@@ -632,6 +632,31 @@ class AiModel:
         row = cursor.fetchone()
         conn.close()
         return row["is_drill_mode"] if row else 0
+
+    @staticmethod
+    def update_session_incident_mode(session_id, is_incident_mode):
+        """更新会话的应急响应模式标记"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE ai_chat_sessions SET is_incident_mode = ? WHERE id = ?",
+            (is_incident_mode, session_id),
+        )
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def get_session_incident_mode(session_id):
+        """获取会话的应急响应模式标记"""
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT is_incident_mode FROM ai_chat_sessions WHERE id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row["is_incident_mode"] if row else 0
 
     @staticmethod
     def list_sessions(limit=50):
@@ -730,7 +755,7 @@ class AiModel:
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE is_drill_mode = 1 ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, title, created_at, updated_at, is_drill_mode, is_incident_mode FROM ai_chat_sessions WHERE is_drill_mode = 1 OR is_incident_mode = 1 ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             )
             sessions = [dict(row) for row in cursor.fetchall()]
@@ -778,6 +803,8 @@ class AiModel:
                                 "summary": data.get("summary"),
                                 "is_html": data.get("is_html", False),
                                 "original_input": original_input,
+                                "is_drill_mode": s.get("is_drill_mode", 0),
+                                "is_incident_mode": s.get("is_incident_mode", 0),
                             }
                         )
                     except Exception as e:
@@ -795,6 +822,8 @@ class AiModel:
                             "summary": None,
                             "is_html": False,
                             "original_input": None,
+                            "is_drill_mode": s.get("is_drill_mode", 0),
+                            "is_incident_mode": s.get("is_incident_mode", 0),
                         }
                     )
         except Exception:
