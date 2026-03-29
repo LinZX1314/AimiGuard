@@ -32,11 +32,11 @@
   ],
   "nmap": {
     "ip_ranges": [
-      "10.24.100.0/25"
+      "192.168.0.0/25"
     ],
     "fscan_timeout": 6000,
     "scan_interval": 604800,
-    "scan_enabled": false
+    "scan_enabled": true
   },
   "workflow": {
     "enabled": true,

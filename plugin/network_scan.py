@@ -368,9 +368,8 @@ def main(ip_ranges=None, timeout=6000, scan_interval=0):
                     total_hosts += len(hosts_data)
 
             # 截图：所有网段扫描完成后统一截图
-            # 注释掉自动截图功能
-            # if all_hosts_data:
-            #     capture_web_screenshots(all_hosts_data, scan_time, scan_id)
+            if all_hosts_data:
+                capture_web_screenshots(all_hosts_data, scan_time, scan_id)
 
             log("Fscan", f"扫描完成，发现 {total_hosts} 台主机")
 
