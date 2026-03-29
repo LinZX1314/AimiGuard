@@ -49,7 +49,9 @@
     "admin_entry": "/aixuanshu",
     "honeypot_enabled": true,
     "gate_cookie_name": "aimiguard_admin_gate",
-    "gate_cookie_token": ""
+    "gate_cookie_token": "",
+    "fake_login_username": "ops_admin",
+    "fake_login_password": "ops_admin@2026"
   },
   "logging": {
     "api_request_log": true,

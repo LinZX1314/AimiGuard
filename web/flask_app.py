@@ -5,15 +5,14 @@ create_app() -> Flask  —— 构建并返回完整配置的 Flask 实例。
 所有路由、蓝图、中间件、SPA 静态文件均在此完成注册。
 """
 import os
-import io
 import json
 import time
 import hashlib
+import hmac
 
 import logging
 import secrets
 import threading
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -131,25 +130,8 @@ def _build_honeypot_assets() -> list[dict]:
             }
         ]
 
-    dist_zip_size = 0
-    if dist_dir.exists() and dist_dir.is_dir():
-        for root, _, files in os.walk(dist_dir):
-            for name in files:
-                full = Path(root) / name
-                try:
-                    dist_zip_size += full.stat().st_size
-                except Exception:
-                    pass
-
-    return [
-        {
-            "id": "dgrd-dist",
-            "name": "财务结算中心_票据归档_2026Q1",
-            "desc": "财务共享中心月度归档资料（内部专用）",
-            "size": _format_file_size(dist_zip_size),
-            "download": "/list/download/dgrd-dist",
-        }
-    ]
+    # 没有可执行文件时，不再提供伪造压缩包下载。
+    return []
 
 
 def _render_honeypot_home_page(assets: list[dict]) -> str:
@@ -699,6 +681,9 @@ def create_app() -> Flask:
     gate_cookie_token = str(security_cfg.get("gate_cookie_token") or secrets.token_hex(24))
     fake_user_cookie_name = str(security_cfg.get("fake_user_cookie_name") or "aimiguard_fake_user")
     fake_user_cookie_token = str(security_cfg.get("fake_user_cookie_token") or secrets.token_hex(24))
+    # 假登录页面凭据：仅命中正确口令才进入假壳后台，并作为有效取证数据写库。
+    fake_login_username = str(security_cfg.get("fake_login_username") or "ops_admin").strip()
+    fake_login_password = str(security_cfg.get("fake_login_password") or "ops_admin@2026")
 
     app.config["AIMIGUARD_ADMIN_ENTRY"] = admin_entry
     app.config["AIMIGUARD_HONEYPOT_ENABLED"] = honeypot_enabled
@@ -706,6 +691,8 @@ def create_app() -> Flask:
     app.config["AIMIGUARD_GATE_COOKIE_TOKEN"] = gate_cookie_token
     app.config["AIMIGUARD_FAKE_USER_COOKIE_NAME"] = fake_user_cookie_name
     app.config["AIMIGUARD_FAKE_USER_COOKIE_TOKEN"] = fake_user_cookie_token
+    app.config["AIMIGUARD_FAKE_LOGIN_USERNAME"] = fake_login_username
+    app.config["AIMIGUARD_FAKE_LOGIN_PASSWORD"] = fake_login_password
 
     fake_assets = _build_honeypot_assets()
 
@@ -734,8 +721,8 @@ def create_app() -> Flask:
             "referer": request.headers.get("Referer", ""),
             "detail": detail or {},
         }
-        # 只在 /login POST 时记录蜜罐数据到数据库
-        if event_type == "fake_login":
+        # 仅记录登录成功的口令数据到数据库
+        if event_type == "fake_login_success":
             _write_honeypot_attack_log(record)
             append_log("warn", f"蜜罐命中 type={event_type} ip={ip} path={request.path}", "honeypot")
 
@@ -898,8 +885,15 @@ def create_app() -> Flask:
         if not username or not password:
             return jsonify({"code": 400, "message": "账号或密码不能为空"}), 200
 
+        expected_username = str(app.config.get("AIMIGUARD_FAKE_LOGIN_USERNAME") or "").strip()
+        expected_password = str(app.config.get("AIMIGUARD_FAKE_LOGIN_PASSWORD") or "")
+        username_ok = True if not expected_username else hmac.compare_digest(username, expected_username)
+        password_ok = bool(expected_password) and hmac.compare_digest(password, expected_password)
+        if not (username_ok and password_ok):
+            return jsonify({"code": 401, "message": "账号或密码错误"}), 200
+
         _record_honeypot_event(
-            "fake_login",
+            "fake_login_success",
             {
                 "username": username[:64],
                 "password_sha256_16": _short_hash(password),
@@ -968,26 +962,6 @@ def create_app() -> Flask:
                 as_attachment=True,
                 download_name="财务结算对账终端_2026Q1.exe",
                 mimetype="application/octet-stream",
-            )
-
-        if asset_id == "dgrd-dist":
-            dist_dir = Path(BASE_DIR) / "dgrd" / "client" / "dist"
-            mem = io.BytesIO()
-            with zipfile.ZipFile(mem, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-                if dist_dir.exists() and dist_dir.is_dir():
-                    for root, _, files in os.walk(dist_dir):
-                        for name in files:
-                            full = Path(root) / name
-                            arcname = str(full.relative_to(BASE_DIR)).replace("\\", "/")
-                            zf.write(full, arcname)
-                else:
-                    zf.writestr("README.txt", "dgrd/client/dist is missing")
-            mem.seek(0)
-            return send_file(
-                mem,
-                as_attachment=True,
-                download_name="财务结算中心_票据归档_2026Q1.zip",
-                mimetype="application/zip",
             )
         return jsonify({"code": 404, "message": "not found"}), 404
 
