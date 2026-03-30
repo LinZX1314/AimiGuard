@@ -10,9 +10,9 @@
   "ai": {
     "enabled": true,
     "auto_ban": true,
-    "api_url": "http://192.168.0.4:1234",
-    "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
-    "model": "Qwen/Qwen3.5-9B-no-thinking",
+    "api_url": "https://npi.linzzx.top",
+    "api_key": "sk-Xz6we6IfxjHa18GzJsVptwvFdCwVK1dnIoJ61ynhSAbrC6m3",
+    "model": "MiniMax-M2.7",
     "timeout": 160,
     "ban_threshold": 80
   },

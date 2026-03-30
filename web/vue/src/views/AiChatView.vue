@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onActivated, onBeforeUnmount, nextTick, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/index'
 import { marked } from 'marked'
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 
-
+defineOptions({ name: 'AiChatView' })
 
 
 interface ToolCall {
@@ -1512,6 +1512,15 @@ onMounted(async () => {
 
 
 
+
+
+onActivated(() => {
+
+
+  loadSessions()
+
+
+})
 
 
 onBeforeUnmount(() => {

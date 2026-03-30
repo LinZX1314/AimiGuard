@@ -211,6 +211,12 @@ def init_db():
     except:
         pass
 
+    # 迁移：添加 name 字段（工具消息的工具名称）
+    try:
+        cursor.execute("ALTER TABLE ai_chat_history ADD COLUMN name TEXT")
+    except:
+        pass
+
     # ================= 交换机ACL策略表 =================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS switch_acl_rules (

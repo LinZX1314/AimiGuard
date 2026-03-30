@@ -441,28 +441,16 @@ def ai_chat_stream():
                             step_data.get("content") or "",
                             tool_calls=step_data.get("tool_calls"),
                         )
-                    # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
+                    # 所有 tool_result 事件均保存到 DB（full_result 优先）
                     if parsed_chunk.get("tool_result"):
                         tr = parsed_chunk["tool_result"]
-                        # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
-                        if tr.get("name") == "generate_report" and tr.get(
-                            "full_result"
-                        ):
-                            try:
-                                full_result = json.loads(tr["full_result"])
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr["full_result"],
-                                    tool_call_id=tr.get("id"),
-                                )
-                            except:
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr.get("result", ""),
-                                    tool_call_id=tr.get("id"),
-                                )
+                        AiModel.save_message(
+                            sid,
+                            "tool",
+                            tr.get("full_result") or tr.get("result", ""),
+                            tool_call_id=tr.get("id"),
+                            name=tr.get("name"),
+                        )
                 except:
                     logging.info(f"[DrillSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
@@ -520,28 +508,16 @@ def ai_chat_stream():
                             step_data.get("content") or "",
                             tool_calls=step_data.get("tool_calls"),
                         )
-                    # tool_result 事件也需要保存为 role='tool'
+                    # 所有 tool_result 事件均保存到 DB（full_result 优先）
                     if parsed_chunk.get("tool_result"):
                         tr = parsed_chunk["tool_result"]
-                        # 如果是报告生成工具，保存完整的报告内容
-                        if tr.get("name") == "generate_incident_report" and tr.get(
-                            "full_result"
-                        ):
-                            try:
-                                full_result = json.loads(tr["full_result"])
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr["full_result"],
-                                    tool_call_id=tr.get("id"),
-                                )
-                            except:
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr.get("result", ""),
-                                    tool_call_id=tr.get("id"),
-                                )
+                        AiModel.save_message(
+                            sid,
+                            "tool",
+                            tr.get("full_result") or tr.get("result", ""),
+                            tool_call_id=tr.get("id"),
+                            name=tr.get("name"),
+                        )
                 except:
                     logging.info(f"[IncidentSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
@@ -626,28 +602,16 @@ def ai_chat_stream():
                             step_data.get("content") or "",
                             tool_calls=step_data.get("tool_calls"),
                         )
-                    # tool_result 事件也需要保存为 role='tool'，这样 get_reports 才能找到报告
+                    # 所有 tool_result 事件均保存到 DB（full_result 优先）
                     if parsed_chunk.get("tool_result"):
                         tr = parsed_chunk["tool_result"]
-                        # 如果是报告生成工具，保存完整的报告内容（get_reports 查找 role='tool' 且 content 包含 "report": 的记录）
-                        if tr.get("name") == "generate_report" and tr.get(
-                            "full_result"
-                        ):
-                            try:
-                                full_result = json.loads(tr["full_result"])
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr["full_result"],
-                                    tool_call_id=tr.get("id"),
-                                )
-                            except:
-                                AiModel.save_message(
-                                    sid,
-                                    "tool",
-                                    tr.get("result", ""),
-                                    tool_call_id=tr.get("id"),
-                                )
+                        AiModel.save_message(
+                            sid,
+                            "tool",
+                            tr.get("full_result") or tr.get("result", ""),
+                            tool_call_id=tr.get("id"),
+                            name=tr.get("name"),
+                        )
                 except:
                     logging.info(f"[DrillSSE] raw: {chunk[:100]}")
                 yield f"data: {chunk.rstrip()}\n\n"
