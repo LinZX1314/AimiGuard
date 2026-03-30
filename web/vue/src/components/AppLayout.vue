@@ -1225,7 +1225,13 @@ onUnmounted(() => {
             <transition name="fade-slide" mode="out-in">
 
 
-              <component :is="Component" :key="route.fullPath" />
+              <KeepAlive include="AiChatView" :max="1">
+
+
+                <component :is="Component" :key="route.fullPath" />
+
+
+              </KeepAlive>
 
 
             </transition>

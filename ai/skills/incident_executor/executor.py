@@ -149,10 +149,30 @@ def _execute_incident_tool(
         packet_time = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
 
         # 返回提示词，告诉 AI 数据包已捕获
-        packet_summary = """No.     Time           Source                Destination           Protocol Length Info
-    997 """ + packet_time + """   10.24.101.246         10.24.102.113         UDP      948    63265 → 4705 Len=906
+        packet_summary = (
+"""==== Wireshark 数据包捕获分析 ====
+捕获接口: \\Device\\NPF_{DEE85806-3469-4370-84A6-CCE3A4CD90A4}
+捕获时间: """ + packet_time + """
+统计: 共捕获 128 个异常 UDP 数据包，以下为典型帧
 
-Frame 997: Packet, 948 bytes on wire (7584 bits), 948 bytes captured (7584 bits) on interface \\Device\\NPF_{DEE85806-3469-4370-84A6-CCE3A4CD90A4}, id 0
+No.   时间            源地址               目标地址             协议  长度  信息
+ 953  """ + packet_time + """  10.24.101.246        10.24.102.83         UDP   948   63265 → 4705 Len=906
+ 997  """ + packet_time + """  10.24.101.246        10.24.102.113        UDP   948   63265 → 4705 Len=906
+1041  """ + packet_time + """  10.24.101.246        10.24.102.150        UDP   948   63265 → 4705 Len=906
+
+──── Frame 953 详细解析 ─────────────────────────────────────────────────────────
+Frame 953: 948 bytes on wire, 948 bytes captured
+Ethernet II, Src: CompalInform_6e:4d:63 (40:c2:ba:6e:4d:63), Dst: CompalInform_6e:4c:bb (40:c2:ba:6e:4c:bb)
+Internet Protocol Version 4, Src: 10.24.101.246, Dst: 10.24.102.83
+User Datagram Protocol, Src Port: 63265, Dst Port: 4705
+Data (906 bytes)
+
+0000  4f 4f 4e 43 00 00 01 00 10 00 00 00 19 6d 6a f9   OONC.........mj.
+0010  29 5b b9 46 ab 95 8a 14 3e cd dc 26 0a 18 66 70   )[.F....>..&..fp
+0020  1a 00 00 00 00 00 00 02 1f 55 00 00               .........U..
+
+──── Frame 997 详细解析 (含恶意 Payload) ────────────────────────────────────────
+Frame 997: 948 bytes on wire, 948 bytes captured
 Ethernet II, Src: CompalInform_6e:4d:63 (40:c2:ba:6e:4d:63), Dst: VMware_89:8f:f7 (00:50:56:89:8f:f7)
 Internet Protocol Version 4, Src: 10.24.101.246, Dst: 10.24.102.113
 User Datagram Protocol, Src Port: 63265, Dst Port: 4705
@@ -162,17 +182,22 @@ Data (906 bytes)
 0010  6f 61 64 4d a7 92 f0 47 00 c5 a4 0e 20 4e 00 00   oadM...G.... N..
 0020  c0 a8 64 86 61 03 00 00 61 03 00 00 00 02 00 00   ..d.a...a.......
 0030  00 00 00 00 0f 00 00 00 01 00 00 00 43 00 3a 00   ............C.:.
-0040  5c 00 57 00 69 00 6e 00 64 00 6f 00 77 00 73 00   \\.W.i.n.d.o.w.s.
-0050  5c 00 73 00 79 00 73 00 74 00 65 00 6d 00 33 00   \\.s.y.s.t.e.m.3.
-0060  32 00 5c 00 63 00 6d 00 64 00 2e 00 65 00 78 00   2.\\.c.m.d...e.x.
+0040  5c 00 57 00 69 00 6e 00 64 00 6f 00 77 00 73 00   \.W.i.n.d.o.w.s.
+0050  5c 00 73 00 79 00 73 00 74 00 65 00 6d 00 33 00   \.s.y.s.t.e.m.3.
+0060  32 00 5c 00 63 00 6d 00 64 00 2e 00 65 00 78 00   2.\.c.m.d...e.x.
 0070  65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   e...............
+... [中间数据已省略 360 字节] ...
 0230  00 00 00 00 00 00 00 00 00 00 00 00 2f 00 63 00   ............/.c.
 0240  20 00 73 00 74 00 61 00 72 00 74 00 20 00 63 00    .s.t.a.r.t. .c.
 0250  6d 00 64 00 20 00 2f 00 6b 00 20 00 74 00 61 00   m.d. ./.k. .t.a.
 0260  73 00 6b 00 6b 00 69 00 6c 00 6c 00 20 00 2f 00   s.k.k.i.l.l. ./.
 0270  69 00 6d 00 20 00 73 00 76 00 63 00 68 00 6f 00   i.m. .s.v.c.h.o.
 0280  73 00 74 00 2e 00 65 00 78 00 65 00 20 00 2f 00   s.t...e.x.e. ./.
-0290  66 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   f..............."""
+0290  66 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   f...............
+
+[!] 关键发现: Frame 997 Payload 解码为 UTF-16LE 字符串:
+    C:\Windows\system32\cmd.exe /c start cmd /k taskkill /im svchost.exe /f
+    → 远程命令执行攻击，可触发目标主机系统崩溃（蓝屏）""")
 
         result = {
             "ok": True,
@@ -207,23 +232,53 @@ Data (906 bytes)
     if tool_name == "generate_incident_report":
         exec_summary = arguments.get("exec_summary", state.get_exec_summary())
 
-        # 获取数据包分析结果
+        # 获取数据包分析结果（结构: {result: {data: {packet_summary: ...}}}）
         packet_result = ""
         if state.packet_captures:
             last_packet = state.packet_captures[-1]
-            if last_packet.get("result", {}).get("data", {}).get("packet_summary"):
-                packet_result = last_packet["result"]["data"]["packet_summary"]
+            pkt_data = last_packet.get("result", {}).get("data", {})
+            if pkt_data.get("packet_summary"):
+                packet_result = pkt_data["packet_summary"]
+
+        # 获取流量分析结果
+        traffic_stats = ""
+        if state.traffic_logs:
+            tlog = state.traffic_logs[-1]
+            t_time = tlog.get("time", "")
+            t_port = tlog.get("port_filter", "4705")
+            traffic_stats = f"捕获时间: {t_time}，端口: {t_port}，协议: UDP，数据包总数: 128 个"
+
+        # 获取封禁执行记录
+        ban_summary_rows = ""
+        for br in state.ban_records:
+            br_target = br.get("target", "")
+            br_type = br.get("policy_type", "")
+            br_time = br.get("time", "")
+            br_status = br.get("result", {}).get("message", "已执行")
+            ban_summary_rows += f"| {br_target} | {'端口 ACL' if br_type == 'port' else 'IP 封禁'} | {br_time} | ✅ {br_status} |\n"
 
         # 生成完整写死的 Markdown 报告
         now = datetime.now()
         five_min_ago = (now - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        ban_table = ""
+        if ban_summary_rows:
+            ban_table = (
+                "\n### 封禁执行记录\n\n"
+                "| 封禁目标 | 封禁方式 | 执行时间 | 执行状态 |\n"
+                "|----------|----------|----------|----------|\n"
+                + ban_summary_rows
+            )
+
+        packet_block = f"```\n{packet_result}\n```" if packet_result else "> ⚠️ 数据包数据暂未获取"
+
         report = (
 """# 🚨 安全应急响应报告
 
-> **生成时间: """ + now_str + """**
+> **生成时间**: """ + now_str + """
 > **事件类型**: 批量电脑蓝屏安全事件
-> **分析结论**: 攻击者利用极域电子教室软件漏洞，在4705端口进行网络攻击
+> **漏洞利用**: 极域电子教室软件 UDP 4705 端口远程命令执行漏洞
+> **分析结论**: 攻击者向课堂内多台主机广播恶意 UDP 数据包，触发系统蓝屏
 
 ---
 
@@ -233,72 +288,106 @@ Data (906 bytes)
 |------|------|
 | 事件名称 | 批量电脑蓝屏安全事件 |
 | 发生时间 | """ + five_min_ago + """ |
-| 影响范围 | 极域电子教室课堂环境 |
-| 事件分类 | 疑似网络攻击 |
-| 紧急程度 | 高危 |
+| 影响范围 | 极域电子教室课堂环境（内网 10.24.102.0/24 网段） |
+| 事件分类 | 网络攻击 — 远程命令执行（RCE） |
+| 紧急程度 | 🔴 高危 |
+| 攻击者 IP | 10.24.101.246 |
+| 受害网段 | 10.24.102.0/24（教室终端） |
 
 ---
 
-## 二、流量分析结果
+## 二、受影响主机清单
 
-**检测结果**：
-- 异常端口：**4705**（极域电子教室软件常用端口）
-- 协议类型：UDP
-- 流量特征：大量对4705端口的异常UDP数据包
-
-**攻击源分析**：
-- 攻击者IP：192.168.0.5
-- 攻击端口：63265 → 4705
-
----
-
-## 三、数据包分析详情
-
-**抓包结果**：
-""" + packet_result + """
-
-**攻击特征**：
-- 协议：UDP
-- 端口：4705（极域电子教室软件）
-- 行为：远程命令执行，可导致系统蓝屏
-
-**Payload分析**：
-- 发现可执行代码片段：`cmd.exe /k start`
-- 确认存在远程命令执行攻击
-- 攻击 payload 旨在触发目标主机蓝屏
+| 主机 IP | MAC 地址 | 状态 | 首次攻击时间 |
+|---------|----------|------|--------------|
+| 10.24.102.83 | 40:c2:ba:6e:4c:bb | 🔴 已蓝屏 | """ + five_min_ago + """ |
+| 10.24.102.113 | 00:50:56:89:8f:f7 | 🔴 已蓝屏 | """ + five_min_ago + """ |
+| 10.24.102.150 | 40:c2:ba:6e:4d:22 | 🟡 已接收攻击包 | """ + five_min_ago + """ |
+| 10.24.102.176 | 40:c2:ba:6e:4e:01 | 🟡 已接收攻击包 | """ + five_min_ago + """ |
+| 10.24.102.200 | 40:c2:ba:6e:4f:88 | ⚪ 疑似受影响 | """ + five_min_ago + """ |
 
 ---
 
-## 四、攻击手法分析
+## 三、流量分析结果
 
-**初步判定**：极域电子教室软件漏洞利用
+**流量统计**：
 
-**攻击原理**：
-1. 攻击者向4705端口发送精心构造的UDP数据包
-2. 数据包包含恶意Payload，利用极域电子教室软件漏洞
-3. 受害者收到攻击数据包后触发系统蓝屏
+| 指标 | 数值 |
+|------|------|
+| 异常数据包总数 | 128 个 |
+| 攻击源 IP | 10.24.101.246 |
+| 攻击源端口 | 63265 |
+| 目标端口 | **4705**（极域电子教室） |
+| 协议 | UDP |
+| 单包大小 | 948 字节（Payload 906 字节） |
+| 攻击持续时间 | 约 5 分钟 |
+
+**流量特征**：
+- 单一源 IP 向同网段多台主机 **广播式** 发送相同恶意 UDP 包
+- 目标端口固定为 4705（极域电子教室软件监听端口）
+- Payload 含 DMOC/OONC 协议魔数，利用软件解析漏洞执行系统命令
 
 ---
 
-## 五、封禁建议
+## 四、数据包捕获分析
+
+**Wireshark 抓包结果**：
+
+""" + packet_block + """
+
+**Payload 解码**：
+
+```
+UTF-16LE 解码结果:
+  C:\Windows\system32\cmd.exe
+  /c start cmd /k taskkill /im svchost.exe /f
+```
+
+> 攻击者通过极域教室协议漏洞，在目标主机上以 **SYSTEM 权限** 执行上述命令，
+> 强制终止 `svchost.exe` 进程，导致系统立即蓝屏崩溃（BSOD）。
+
+---
+
+## 五、攻击手法分析
+
+**漏洞类型**：极域电子教室 UDP 4705 端口远程命令执行（RCE）
+
+**CVE 参考**：与极域电子教室软件 UDP 广播解析缺陷相关（类似 CVE 漏洞模式）
+
+**攻击链**：
+1. 攻击者在课堂内网扫描运行极域电子教室的主机（端口 4705）
+2. 构造含恶意 Payload 的 UDP 数据包（DMOC 协议头 + UTF-16LE 命令字符串）
+3. 向整个 10.24.102.0/24 网段广播，一次攻击影响多台主机
+4. 目标主机接收后，极域进程以 SYSTEM 权限解析并执行嵌入命令
+5. `taskkill /im svchost.exe /f` 强制终止关键系统进程，触发蓝屏
+
+---
+
+## 六、封禁措施
 
 | 封禁目标 | 封禁方式 | 优先级 |
 |----------|----------|--------|
-| 端口 4705 | 交换机ACL策略 | 紧急 |
-| 攻击源IP | IP封禁 | 高 |
-
+| 端口 4705 (UDP) | 交换机 ACL 入站规则 | 🔴 紧急 |
+| 10.24.101.246 | 交换机 IP 封禁 | 🔴 紧急 |
+""" + ban_table + """
 ---
 
-## 六、修复建议
+## 七、修复建议
 
 ### 立即措施
-1. 执行封禁策略，阻断4705端口流量
-2. 断开受影响网络区域的连接
+1. 在接入交换机上封禁 UDP 4705 端口的入站流量
+2. 隔离攻击源主机 10.24.101.246（拔网线 / VLAN 隔离）
+3. 重启受影响主机，检查系统日志确认无持久化后门
+
+### 短期方案
+1. 将极域电子教室软件升级至最新版本（厂商已发布补丁）
+2. 在课堂网络部署 IDS/IPS，配置 UDP 4705 异常流量告警规则
+3. 审查所有教师机账户，排查账户是否被攻击者利用
 
 ### 长期方案
-1. 升级极域电子教室软件到最新版本
-2. 部署入侵检测系统（IDS）监控异常流量
-3. 定期进行安全漏洞扫描和修复
+1. 对课堂内网实施 VLAN 隔离，限制主机间横向通信
+2. 建立网络安全基线，定期扫描高危端口
+3. 部署网络行为分析（NBA）系统，识别广播式攻击模式
 
 ---
 

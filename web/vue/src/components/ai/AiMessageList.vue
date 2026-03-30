@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import {
@@ -38,6 +39,8 @@ interface Message {
   tool_calls?: ToolCall[]
   tool_results?: ToolResult[]
 }
+
+const router = useRouter()
 
 const props = defineProps<{
   messages: Message[]
@@ -95,7 +98,23 @@ function renderMd(text: string): string {
     ADD_ATTR: ['target'],
     ADD_TAGS: ['details', 'summary']
   })
-  return safeHtml.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
+  return safeHtml.replace(
+    /<a href="((?!https?:\/\/)[^"]+)"/g,
+    '<a href="$1"'
+  ).replace(
+    /<a href="(https?:\/\/[^"]+)"/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer"'
+  )
+}
+
+function handleMdClick(e: MouseEvent) {
+  const anchor = (e.target as HTMLElement).closest('a')
+  if (!anchor) return
+  const href = anchor.getAttribute('href')
+  if (href && href.startsWith('/') && !href.startsWith('//')) {
+    e.preventDefault()
+    router.push(href)
+  }
 }
 
 function formatToolResult(content: string): string {
@@ -178,6 +197,7 @@ function messageKey(message: Message, index: number): string {
                 v-if="msg.content"
                 class="ai-markdown px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
                 v-html="renderMd(msg.content)"
+                @click="handleMdClick"
               ></div>
 
               <!-- Tool Calls & Results (Individual & Sequential) -->
@@ -231,6 +251,7 @@ function messageKey(message: Message, index: number): string {
                 v-if="msg.post_content"
                 class="ai-markdown px-5 py-3 rounded-2xl bg-muted/40 border border-border/50 text-foreground shadow-sm text-[15px] leading-relaxed prose prose-sm dark:prose-invert max-w-none"
                 v-html="renderMd(msg.post_content)"
+                @click="handleMdClick"
               ></div>
             </template>
           </div>

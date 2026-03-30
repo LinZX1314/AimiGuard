@@ -677,14 +677,15 @@ class AiModel:
         tool_calls=None,
         tool_call_id=None,
         openai_content=None,
+        name=None,
     ):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO ai_chat_history (session_id, role, content, openai_content, tool_calls, tool_call_id, create_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ai_chat_history (session_id, role, content, openai_content, tool_calls, tool_call_id, name, create_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 session_id,
@@ -697,6 +698,7 @@ class AiModel:
                 if tool_calls is not None
                 else None,
                 tool_call_id,
+                name,
                 now,
             ),
         )
