@@ -198,6 +198,72 @@ const route = useRoute()
 const TTS_STORAGE_KEY = 'aimiguard.ai.tts-enabled'
 
 
+const LAST_SESSION_KEY = 'aimiguard.ai.last-session'
+
+
+function loadLastSession(): number | null {
+
+
+  try {
+
+
+    const saved = window.localStorage.getItem(LAST_SESSION_KEY)
+
+
+    if (!saved) return null
+
+
+    const sid = Number(saved)
+
+
+    return sid > 0 ? sid : null
+
+
+  } catch {
+
+
+    return null
+
+
+  }
+
+
+}
+
+
+
+
+
+function persistLastSession(sid: number | null) {
+
+
+  if (typeof window === 'undefined') return
+
+
+  try {
+
+
+    if (sid && sid > 0) {
+
+
+      window.localStorage.setItem(LAST_SESSION_KEY, String(sid))
+
+
+    }
+
+
+  } catch {
+
+
+    // 本地存储不可用时静默降级
+
+
+  }
+
+
+}
+
+
 
 
 
@@ -462,6 +528,9 @@ async function loadMessages(sid: number) {
 
 
   loading.value = true; currentSession.value = sid
+
+
+  persistLastSession(sid)
 
 
 
@@ -1288,6 +1357,9 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             setPendingMessages(resolvedSessionId, requestMessages)
 
 
+            persistLastSession(resolvedSessionId)
+
+
             await loadSessions()
 
 
@@ -1416,6 +1488,21 @@ onMounted(async () => {
 
 
     await send(`请帮我分析这个目标：${context_id}`, { context_type, context_id })
+
+
+  } else {
+
+
+    const lastSid = loadLastSession()
+
+
+    if (lastSid && sessions.value.some(s => s.id === lastSid)) {
+
+
+      await loadMessages(lastSid)
+
+
+    }
 
 
   }

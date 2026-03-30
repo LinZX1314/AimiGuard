@@ -456,15 +456,13 @@ def create_incident_stream(
             "INFO",
         )
 
-        # 发送步骤开始信息
-        yield (
-            json.dumps(
-                {
-                    "content": f"🤔 AI 正在分析并决策下一步行动... (第 {state.step_count} 步)"
-                }
-            )
-            + "\n\n"
-        )
+        # 工具名到描述的映射（提前定义，供步骤消息和工具执行使用）
+        tool_descriptions = {
+            "get_traffic_logs": "获取网络流量日志，分析异常流量",
+            "get_packet_capture": "获取数据包捕获内容，分析攻击特征",
+            "generate_incident_report": "生成安全应急响应报告",
+            "apply_ban_policy": "执行封禁策略，阻断攻击流量",
+        }
 
         # LLM 决策：是否调用工具
         # 第一步用 none 强制AI只输出文字（计划表格），不调用工具
@@ -475,6 +473,19 @@ def create_incident_stream(
             tc_choice = 'required'
         else:
             tc_choice = 'auto'
+
+        # 发送步骤开始信息
+        # required 模式（强制工具调用）：等待 LLM 决策后，再发送含工具名的步骤消息
+        if tc_choice != 'required':
+            yield (
+                json.dumps(
+                    {
+                        "content": f"🤔 AI 正在分析并决策下一步行动... (第 {state.step_count} 步)"
+                    }
+                )
+                + "\n\n"
+            )
+
         tool_calls = []
         text_chunks = []
 
@@ -494,6 +505,23 @@ def create_incident_stream(
 
         # 合并文本响应
         response_text = "".join(text_chunks)
+
+        # required 模式：工具决策完成后，发送含工具名的步骤消息
+        if tc_choice == 'required':
+            if tool_calls:
+                tools_info = "、".join([
+                    f"**{tc['name']}**（{tool_descriptions.get(tc['name'], tc['name'])}）"
+                    for tc in tool_calls
+                ])
+                yield (
+                    json.dumps({"content": f"🤔 AI 分析决策完成 (第 {state.step_count} 步)：准备调用 {tools_info}\n\n"})
+                    + "\n\n"
+                )
+            else:
+                yield (
+                    json.dumps({"content": f"🤔 AI 分析完成 (第 {state.step_count} 步)\n\n"})
+                    + "\n\n"
+                )
 
         # ─── 如果没有工具调用，结束循环 ─────────────────────────────────
         if not tool_calls:
@@ -526,14 +554,6 @@ def create_incident_stream(
                 f"🤖 执行工具: {tool_name} | 参数: {json.dumps(tool_args, ensure_ascii=False)[:200]}",
                 "INFO",
             )
-
-            # 工具名到描述的映射
-            tool_descriptions = {
-                "get_traffic_logs": "获取网络流量日志，分析异常流量",
-                "get_packet_capture": "获取数据包捕获内容，分析攻击特征",
-                "generate_incident_report": "生成安全应急响应报告",
-                "apply_ban_policy": "执行封禁策略，阻断攻击流量",
-            }
 
             # 发送工具调用开始
             yield (
