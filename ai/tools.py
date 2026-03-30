@@ -334,7 +334,7 @@ def _switch_acl_config(args: dict, cfg: dict = None) -> dict:
         rule_id = None
 
         # 白名单检查
-        whitelist = ["192.168.0.4"]
+        whitelist = cfg.get('ai', {}).get('whitelist', []) if cfg else []
         if action == 'ban' and target_ip in whitelist:
             results.append({
                 'host': host,

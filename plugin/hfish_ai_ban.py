@@ -36,7 +36,7 @@ def analyze_and_ban_attack_ips(logs: list, cfg: dict) -> dict:
         return {'success': True, 'analyzed': 0, 'ban_count': 0}
 
     # 获取所有唯一攻击IP（排除白名单）
-    skip_ips = ["192.168.0.3", "192.168.0.4"]
+    skip_ips = cfg.get('ai', {}).get('whitelist', [])
     attack_ips = list(set(log.get('attack_ip') for log in logs if log.get('attack_ip') and log.get('attack_ip') not in skip_ips))
 
     if not attack_ips:
@@ -146,7 +146,7 @@ IP信息：
         # 自动封禁
         if auto_ban and should_ban:
             # 白名单检查
-            whitelist = ["192.168.0.4"]
+            whitelist = cfg.get('ai', {}).get('whitelist', [])
             if ip in whitelist:
                 logger.info(f"IP {ip} 在白名单中，已跳过封禁")
                 AiModel.save_analysis(ip, analysis_text, '已跳过（白名单）', status='whitelisted')

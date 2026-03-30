@@ -413,7 +413,7 @@ UTF-16LE 解码结果:
             return {"ok": False, "error": "缺少封禁目标"}
 
         # 白名单检查
-        whitelist = ["192.168.0.4"]
+        whitelist = cfg.get('ai', {}).get('whitelist', []) if cfg else []
         if target in whitelist:
             result = {
                 "ok": True,

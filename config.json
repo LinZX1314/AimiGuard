@@ -14,7 +14,8 @@
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
     "model": "Qwen/Qwen3.5-9B-no-thinking",
     "timeout": 160,
-    "ban_threshold": 80
+    "ban_threshold": 80,
+    "whitelist": ["192.168.0.2", "192.168.0.1"]
   },
   "switches": [
     {
