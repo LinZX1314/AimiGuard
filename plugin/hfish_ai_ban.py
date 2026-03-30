@@ -35,8 +35,9 @@ def analyze_and_ban_attack_ips(logs: list, cfg: dict) -> dict:
     if not ai_enabled:
         return {'success': True, 'analyzed': 0, 'ban_count': 0}
 
-    # 获取所有唯一攻击IP
-    attack_ips = list(set(log.get('attack_ip') for log in logs if log.get('attack_ip')))
+    # 获取所有唯一攻击IP（排除白名单）
+    skip_ips = ["192.168.0.3", "192.168.0.4"]
+    attack_ips = list(set(log.get('attack_ip') for log in logs if log.get('attack_ip') and log.get('attack_ip') not in skip_ips))
 
     if not attack_ips:
         return {'success': True, 'analyzed': 0, 'ban_count': 0}

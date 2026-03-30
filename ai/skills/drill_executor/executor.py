@@ -402,14 +402,23 @@ def _execute_drill_tool(
         stats_str = execute_existing_tool("get_honeypot_stats", {}, cfg)
         stats_result = _safe_parse_json(stats_str)
 
+        # 跳过白名单IP
+        skip_ips = ["192.168.0.3", "192.168.0.4"]
+
         if logs_result.get("ok"):
+            # 过滤掉白名单IP的攻击记录
+            filtered_records = [
+                rec for rec in logs_result.get("攻击记录", [])[:10]
+                if rec.get("攻击IP") not in skip_ips
+            ]
+
             state.add_result(
                 "honeypot",
                 {
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "service": service_name or "全部",
                     "count": logs_result.get("总数", 0),
-                    "records": logs_result.get("攻击记录", [])[:10],
+                    "records": filtered_records,
                     "total_attacks": stats_result.get("总攻击次数", 0),
                     "top_services": stats_result.get("热门攻击服务", [])[:10],
                     "top_sources": stats_result.get("攻击来源Top10", []),
@@ -417,16 +426,19 @@ def _execute_drill_tool(
                 },
             )
 
-            records = logs_result.get("攻击记录", [])
-            for rec in records:
+            for rec in logs_result.get("攻击记录", []):
+                attacker_ip = rec.get("攻击IP")
+                # 跳过白名单IP
+                if attacker_ip in skip_ips:
+                    continue
                 state.add_result(
                     "finding",
                     {
-                        "ip": rec.get("攻击IP"),
+                        "ip": attacker_ip,
                         "service": rec.get("服务"),
                         "type": "honeypot_attack",
                         "severity": "medium",
-                        "description": f"蜜罐遭受来自 {rec.get('攻击IP')} 的攻击",
+                        "description": f"蜜罐遭受来自 {attacker_ip} 的攻击",
                         "location": rec.get("来源地区"),
                     },
                 )

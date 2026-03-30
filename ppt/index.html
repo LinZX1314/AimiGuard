@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>玄枢AI智能助手 - 网络安全攻防大赛</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- 动态背景特效 -->
+    <div id="bg-canvas">
+        <div class="scan-line"></div>
+    </div>
+
+    <!-- 底部全局控制栏 -->
+    <div class="controls">
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <button class="nav-btn" id="prevBtn" onclick="app.prevSlide()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m15 18-6-6 6-6" />
+            </svg>
+            上一页
+        </button>
+        <div class="slide-counter" id="slideCounter">01 / 12</div>
+        <button class="nav-btn" id="nextBtn" onclick="app.nextSlide()">
+            下一页
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m9 18 6-6-6-6" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- 幻灯片容器 -->
+    <main class="presentation-container" id="presentation">
+
+        <!-- ================= Slide 1: 封面 ================= -->
+        <section class="slide active" id="slide-1">
+            <div class="hero-container">
+                <div class="shield-icon fade-up">
+                    <img src="images/logo.png" alt="Logo" style="width: 180px; height: auto; object-fit: contain;">
+                </div>
+                <h1 class="main-title fade-up delay-100">玄枢AI攻防系统</h1>
+                <h2 class="sub-title fade-up delay-200">平行组3-3团队</h2>
+                <div class="event-badge fade-up delay-300">2026年网络安全攻防大赛</div>
+                <p class="press-start fade-up delay-500 cursor-blink">按 [空格键] 或 [右箭头] 开始</p>
+            </div>
+            <style>
+                #slide-1 {
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                }
+
+                .hero-container {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 2rem;
+                }
+
+                .shield-icon {
+                    margin-bottom: 2rem;
+                    /* 👈 图标与标题的间距 */
+                    filter: drop-shadow(0 4px 10px rgba(0, 136, 204, 0.3));
+                    /* 👈 图标阴影 */
+                    animation: float 4s ease-in-out infinite;
+                    /* 👈 漂浮动画：4s 为周期，可调慢或调快 */
+                }
+
+                .main-title {
+                    font-size: 6rem;
+                    /* 👈 封面主标题字号：已重置为标准大小 */
+                    font-weight: 800;
+                    letter-spacing: 0.6rem;
+                    /* 👈 字间距：封面标题建议设大一点，更有张力 */
+                    background: var(--grad-text);
+                    -webkit-background-clip: text;
+                    background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+                    margin: 0;
+                }
+
+                .sub-title {
+                    font-size: 2.8rem;
+                    /* 👈 副标题字号 */
+                    color: var(--text-muted);
+                    font-weight: 500;
+                    letter-spacing: 0.2rem;
+                    /* 👈 字间距 */
+                }
+
+                .event-badge {
+                    padding: 10px 30px;
+                    /* 👈 徽章内边距 */
+                    border: 1px solid var(--primary);
+                    border-radius: 25px;
+                    /* 👈 徽章圆角：越大越圆润 */
+                    color: var(--primary);
+                    font-size: 1.3rem;
+                    /* 👈 徽章字号 */
+                    background: rgba(0, 136, 204, 0.1);
+                }
+
+                .press-start {
+                    margin-top: 4rem;
+                    /* 👈 提示文字与上方内容的间距 */
+                    font-size: 1.3rem;
+                    /* 👈 提示文字字号 */
+                    color: var(--primary);
+                    font-family: 'Space Mono', monospace;
+                }
+
+                @keyframes float {
+                    0% {
+                        transform: translateY(0px);
+                    }
+
+                    50% {
+                        transform: translateY(-25px);
+                        /* 👈 向上漂浮的最大距离 */
+                    }
+
+                    100% {
+                        transform: translateY(0px);
+                    }
+                }
+            </style>
+        </section>
+
+        <!-- ================= Slide 2: 团队介绍 ================= -->
+        <section class="slide" id="slide-2">
+            <header class="slide-header fade-up">
+                <h2 class="slide-title">团队介绍</h2>
+            </header>
+            <div class="team-grid">
+                <!-- 成员 2 -->
+                <div class="team-card glass-panel fade-up delay-200">
+                    <div class="role-badge core">核心成员</div>
+                    <h3 class="member-name">童宇航</h3>
+                    <div class="member-role">网络安全工程师</div>
+                    <ul class="responsibility-list">
+                        <li>项目演讲规划</li>
+                        <li>对外沟通对接</li>
+                        <li>蜜罐系统开发与捕获</li>
+                    </ul>
+                </div>
+                <!-- 成员 1 -->
+                <div class="team-card glass-panel fade-up delay-100">
+                    <div class="role-badge leader">团队队长</div>
+                    <h3 class="member-name">林辉煌</h3>
+                    <div class="member-role">后端开发工程师</div>
+                    <ul class="responsibility-list">
+                        <li>项目统筹规划</li>
+                        <li>各类API接口对接</li>
+                        <li>后端架构设计与开发</li>
+                    </ul>
+                </div>
+
+                <!-- 成员 3 -->
+                <div class="team-card glass-panel fade-up delay-300">
+                    <div class="role-badge core">核心成员</div>
+                    <h3 class="member-name">林子翔</h3>
+                    <div class="member-role">运维工程师</div>
+                    <ul class="responsibility-list">
+                        <li>交换机局域网组建</li>
+                        <li>网络设备统一管理</li>
+                        <li>网页工具开发与实现</li>
+                    </ul>
+                </div>
+                <!-- 成员 4 -->
+                <div class="team-card glass-panel fade-up delay-400">
+                    <div class="role-badge core">核心成员</div>
+                    <h3 class="member-name">戴懿杰</h3>
+                    <div class="member-role">前端开发工程师</div>
+                    <ul class="responsibility-list">
+                        <li>网页整体架构编写</li>
+                        <li>高级交互视觉实现</li>
+                        <li>各类API接口对接调试</li>
+                    </ul>
+                </div>
+            </div>
+            <style>
+                .team-grid {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 3.5rem;
+                    /* 👈 增加卡片间距，解决拥挤感 */
+                    height: 100%;
+                    align-content: center;
+                }
+
+                .team-card {
+                    padding: 4.5rem 2.8rem;
+                    /* 👈 增加内边距，使内容更有呼吸感且页面更满 */
+                    align-items: center;
+                    text-align: center;
+                    transition: transform 0.4s;
+                    background: #ffffff;
+                    border-radius: 12px;
+                    /* 👈 边框圆角 */
+                }
+
+                .team-card:hover {
+                    transform: translateY(-15px);
+                    /* 👈 鼠标悬停时往上弹起的高度 */
+                    border-color: rgba(0, 136, 204, 0.4);
+                    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+                    /* 👈 悬停时的投影 */
+                }
+
+                .role-badge {
+                    padding: 8px 16px;
+                    /* 👈 稍微加大标签 */
+                    border-radius: 6px;
+                    font-size: 1rem;
+                    font-weight: bold;
+                    margin-bottom: 2rem;
+                    display: inline-block;
+                }
+
+                .role-badge.leader {
+                    background: rgba(112, 0, 255, 0.1);
+                    color: var(--secondary);
+                    border: 1px solid var(--secondary);
+                }
+
+                .role-badge.core {
+                    background: rgba(0, 136, 204, 0.1);
+                    color: var(--primary);
+                    border: 1px solid var(--primary);
+                }
+
+                .member-name {
+                    font-size: 2.4rem;
+                    /* 👈 姓名文字字号：已重置 */
+                    font-weight: 700;
+                    margin-bottom: 0.8rem;
+                    /* 👈 姓名与职位的间距 */
+                    color: var(--text-main);
+                }
+
+                .member-role {
+                    font-size: 1.2rem;
+                    /* 👈 职位文字字号：已重置 */
+                    color: var(--text-muted);
+                    margin-bottom: 2.5rem;
+                    /* 👈 职位与职责列表的间距 */
+                    font-family: 'Space Mono', monospace;
+                }
+
+                .responsibility-list {
+                    list-style: none;
+                    text-align: left;
+                    width: 100%;
+                    border-top: 1px dashed rgba(0, 0, 0, 0.1);
+                    padding-top: 1.5rem;
+                }
+
+                .responsibility-list li {
+                    margin-bottom: 1rem;
+                    color: #444;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                    font-size: 1.1rem;
+                }
+
+                .responsibility-list li::before {
+                    content: '>';
+                    color: var(--primary);
+                    font-family: monospace;
+                    font-weight: bold;
+                }
+            </style>
+        </section>
+
+        <!-- ================= Slide 3: 项目背景 ================= -->
+        <section class="slide" id="slide-3">
+            <header class="slide-header fade-up">
+                <h2 class="slide-title">项目背景</h2>
+            </header>
+            <div class="content-split">
+                <div class="glass-panel text-content fade-up delay-100">
+                    <div class="quote-box">
+                        <svg class="quote-icon" width="40" height="40" viewBox="0 0 24 24" fill="none"
+                            stroke="var(--primary)">
+                            <path
+                                d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                            <path
+                                d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.667c.866 0 1.441.747 1.114 1.534-.14.336-.312.628-.48.914C17.784 16.51 15 17.653 15 19v2z" />
+                        </svg>
+                        <h3>没有网络安全就没有国家安全，没有信息化就没有现代化。</h3>
+                        <div class="quote-author">— 《国家安全法》《数据安全法》核心指引</div>
+                    </div>
+
+                    <div class="pain-point-list mt-4">
+                        <div class="point-item delay-200">
+                            <div class="point-icon text-alert">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path
+                                        d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                                    <path d="M12 9v4" />
+                                    <g stroke-linecap="round">
+                                        <path d="M12 17h.01" />
+                                    </g>
+                                </svg>
+                            </div>
+                            <div class="point-text">
+                                <h4>复杂威胁与预算超支</h4>
+                                <p>卡巴斯基研究显示：72%企业依赖多厂商生态，<span class="text-highlight">42%</span>组织因解决方案重叠导致预算超支。</p>
+                            </div>
+                        </div>
+                        <div class="point-item delay-300">
+                            <div class="point-icon text-alert">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    <path d="m9 12 2 2 4-4" />
+                                </svg>
+                            </div>
+                            <div class="point-text">
+                                <h4>中小企业防线薄弱</h4>
+                                <p>ConnectWise统计：高达 <span class="text-alert">94%</span> 的中小企业曾遭遇网络攻击，78%难以阻挡复杂威胁。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="visual-panel fade-up delay-400">
+                    <div class="image-stack-container">
+                        <img src="images/复杂威胁与预算超支.png" alt="复杂威胁与预算超支" class="stack-img img-bottom">
+                        <img src="images/中小企业防线薄弱.png" alt="中小企业防线薄弱" class="stack-img img-middle">
+                        <img src="images/习近平：没有网络安全就没有国家安全_中央网络安全和信息化委员会办公室_1.webp" alt="习近平重要讲话"
+                            class="stack-img img-top">
+                    </div>
+                </div>
+            </div>
+            <style>
+                #slide-3 .content-split {
+                    display: grid;
+                    grid-template-columns: 1.2fr 1fr;
+                    gap: 8rem;
+                    /* 👈 增加左右两栏的间距，解决拥挤和太空问题 */
+                    height: 100%;
+                    align-items: center;
+                }
+
+                #slide-3 .text-content {
+                    padding: 3.5rem;
+                }
+
+                #slide-3 .visual-panel {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    gap: 2rem;
+                }
+
+                .quote-box {
+                    background: rgba(0, 136, 204, 0.03);
+                    border-left: 4px solid var(--primary);
+                    padding: 3.5rem;
+                    border-radius: 0 16px 16px 0;
+                    margin-bottom: 4rem;
+                    position: relative;
+                }
+
+                .quote-icon {
+                    position: absolute;
+                    top: -15px;
+                    left: -20px;
+                    opacity: 0.2;
+                }
+
+                .quote-box h3 {
+                    font-size: 2.2rem;
+                    /* 👈 核心金句字号：已重置 */
+                    font-weight: 600;
+                    /* 👈 字体粗度：400常规，600半粗，700粗体，800极粗 */
+                    line-height: 1.5;
+                    /* 👈 文本行高：数值越大文字越稀疏，建议 1.4 - 1.8 */
+                    letter-spacing: 0.05rem;
+                    /* 👈 字间距：让文字呼吸感更强，建议 0.02rem - 0.1rem */
+                    margin-bottom: 1.2rem;
+                    /* 👈 下方间距：调整金句与署名之间的垂直距离 */
+                    color: var(--text-main);
+                    /* 👈 文字颜色：默认深色，可改为 var(--primary) 变成蓝色 */
+                    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                    /* 👈 文字阴影：给文字一点立体感 */
+                }
+
+                .quote-author {
+                    font-size: 1.4rem;
+                    /* 👈 署名字号：已重置 */
+                    font-weight: 500;
+                    /* 👈 署名粗细 */
+                    color: var(--primary);
+                    /* 👈 署名颜色：目前是主题蓝 */
+                    opacity: 0.8;
+                    /* 👈 透明度：0.1(透明) 到 1(不透明)，用来调对比度 */
+                }
+
+                .mt-4 {
+                    margin-top: 2rem;
+                }
+
+                .point-item {
+                    display: flex;
+                    gap: 2.5rem;
+                    /* 👈 增加图标与文字的距离 */
+                    margin-bottom: 4rem;
+                    /* 👈 增加痛点项之间的纵向间距，解决“空”的问题 */
+                }
+
+                .point-icon {
+                    margin-top: 5px;
+                }
+
+                .point-text h4 {
+                    font-size: 1.8rem;
+                    /* 👈 痛点小标题字号：建议 1.6rem - 2.2rem */
+                    font-weight: 700;
+                    /* 👈 标题粗度：加粗会让内容更聚焦 */
+                    color: var(--text-main);
+                    margin-bottom: 1rem;
+                    /* 👈 标题与下方描述的间距增加，更透气 */
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    /* 👈 标题内部（如有图标）的间距 */
+                }
+
+                .point-text p {
+                    font-size: 1.4rem;
+                    /* 👈 痛点描述字号：已重置为舒适阅读大小 */
+                    color: var(--text-muted);
+                    /* 👈 文字颜色：这里用的是偏淡的灰色 */
+                    line-height: 1.8;
+                    /* 👈 加大行高，让文字读起来不累 */
+                    max-width: 90%;
+                    /* 👈 最大宽度：控制换行位置，避免一行太长很难看 */
+                    opacity: 0.9;
+                }
+
+                .text-highlight {
+                    font-weight: 800;
+                    /* 👈 关键词加粗程度 */
+                    color: var(--primary);
+                    /* 👈 关键词颜色 */
+                    text-decoration: underline;
+                    /* 👈 是否加下划线，可以删掉 */
+                }
+
+                .text-alert {
+                    color: #ff3b30;
+                    /* 👈 警示文本颜色（如 94% 那个数字） */
+                    font-weight: 800;
+                    /* 👈 警示文本加粗 */
+                }
+
+                #slide-3 .image-stack-container {
+                    width: 100%;
+                    height: 650px;
+                    position: relative;
+                    margin-top: 1rem;
+                    perspective: 1000px;
+                }
+
+                #slide-3 .stack-img {
+                    position: absolute;
+                    border-radius: 8px;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+                    transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+                    border: 2px solid rgba(255, 255, 255, 0.8);
+                    object-fit: contain;
+                    background: #fff;
+                }
+
+                /* 底层图片：复杂威胁。进一步放大，往下靠 */
+                #slide-3 .img-bottom {
+                    height: 105%;
+                    width: auto;
+                    top: 30px;
+                    right: -20px;
+                    z-index: 1;
+                    opacity: 0;
+                    transform: rotate(10deg) translateZ(-40px);
+                    animation: stackInRight 0.8s forwards;
+                    animation-delay: 0.6s;
+                }
+
+                /* 中层图片：中小企业。进一步放大，往外侧延展 */
+                #slide-3 .img-middle {
+                    height: 105%;
+                    width: auto;
+                    bottom: -20px;
+                    left: -20px;
+                    z-index: 2;
+                    opacity: 0;
+                    transform: rotate(-8deg) translateZ(-20px);
+                    animation: stackInLeft 0.8s forwards;
+                    animation-delay: 0.8s;
+                }
+
+                /* 顶层主席文章。继续放大到130%，并用translateY(-20%)让视觉中心下沉 */
+                #slide-3 .img-top {
+                    height: 130%;
+                    max-height: 850px;
+                    width: auto;
+                    top: 60%;
+                    left: 50%;
+                    z-index: 3;
+                    box-shadow: 0 15px 40px rgba(0, 136, 204, 0.25);
+                    border: 2px solid rgba(0, 136, 204, 0.3);
+                    opacity: 0;
+                    transform: translate(-50%, -20%) rotate(0deg) translateZ(0);
+                    animation: stackTopIn 0.8s forwards;
+                    animation-delay: 1.0s;
+                }
+
+                @keyframes stackInRight {
+                    from {
+                        opacity: 0;
+                        transform: translateX(50px) translateY(-50px) rotate(20deg) translateZ(-100px);
+                    }
+
+                    to {
+                        opacity: 1;
+                        transform: rotate(10deg) translateZ(-40px);
+                    }
+                }
+
+                @keyframes stackInLeft {
+                    from {
+                        opacity: 0;
+                        transform: translateX(-50px) translateY(0) rotate(-20deg) translateZ(-100px);
+                    }
+
+                    to {
+                        opacity: 1;
+                        transform: rotate(-8deg) translateZ(-20px);
+                    }
+                }
+
+                @keyframes stackTopIn {
+                    from {
+                        opacity: 0;
+                        transform: translate(-50%, 0%) scale(0.8) translateZ(-50px);
+                    }
+
+                    to {
+                        opacity: 1;
+                        transform: translate(-50%, -20%) rotate(0deg) translateZ(0);
+                    }
+                }
+            </style>
+        </section>
+
+        <!-- ================= Slide 4: 解决方案玄枢AI ================= -->
+        <section class="slide" id="slide-4">
+            <!-- 全景大屏图作为背景，移除 fade-up 防止覆盖 transform 导致偏移 -->
+            <div class="bg-dashboard"></div>
+
+            <header class="slide-header fade-up">
+                <h2 class="slide-title">核心产品方案</h2>
+            </header>
+            <div class="product-layout fade-up delay-100">
+                <div class="core-concept" style="margin-bottom: 0;">
+                    <h1 class="main-title"
+                        style="font-size: 5rem; letter-spacing: 4px; text-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);">玄枢
+                        AI 智能助手</h1>
+                    <div class="concept-tags">
+                        <span class="tag">AI赋能</span>
+                        <span class="tag">主动防御</span>
+                        <span class="tag">低成本高效率</span>
+                    </div>
+                </div>
+
+                <div class="architecture-diagram delay-300">
+                    <!-- 中央AI核心 -->
+                    <div class="ai-core">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2Z" />
+                            <path d="M12 12 2.1 7.1" />
+                            <path d="m22 12-4 4" />
+                        </svg>
+                        <span>AI 指挥官</span>
+                    </div>
+
+                    <!-- 连接线与模块 -->
+                    <div class="module mod-1">蜜罐诱捕系统</div>
+                    <div class="module mod-2">资产自动探测</div>
+                    <div class="module mod-3">知识库引擎 (RAG)</div>
+                    <div class="module mod-4">设备统一管控</div>
+
+                    <svg class="connection-lines" width="100%" height="100%">
+                        <line x1="50%" y1="50%" x2="20%" y2="20%" />
+                        <line x1="50%" y1="50%" x2="80%" y2="20%" />
+                        <line x1="50%" y1="50%" x2="20%" y2="80%" />
+                        <line x1="50%" y1="50%" x2="80%" y2="80%" />
+                    </svg>
+                </div>
+
+                <p class="product-desc delay-400">
+                    以“AI + 网络安全”技术深度融合为核心，精准适配中小企业与校园两大核心场景，<br>推动网络防护从传统的“被动应对”向<span
+                        class="text-highlight">“主动防御”</span>历史性跨越。
+                </p>
+            </div>
+
+            <style>
+                .bg-dashboard {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 100vw;
+                    height: 100vh;
+                    background: url('images/总揽大屏.jpeg') center/cover no-repeat;
+                    opacity: 0.7;
+                    z-index: -1;
+                    filter: blur(0.5px) brightness(0.95);
+                    pointer-events: none;
+                }
+
+                #slide-4 .product-layout {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 1.5rem;
+                    text-align: center;
+
+                    /* 偏白的磨砂玻璃效果，只针对有内容的地方 */
+                    background: rgba(255, 255, 255, 0.35);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.6);
+                    border-radius: 20px;
+                    padding: 3rem 2rem;
+                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+
+                    width: 95%;
+                    max-width: 1400px;
+                    margin: 0 auto;
+                }
+
+                .concept-tags {
+                    display: flex;
+                    gap: 1.2rem;
+                    /* 👈 标签之间的水平距离 */
+                    margin-top: 1.5rem;
+                    /* 👈 标签组与上方标题的距离 */
+                    justify-content: center;
+                }
+
+                .tag {
+                    padding: 8px 24px;
+                    /* 👈 标签内边距 */
+                    border: 1px solid var(--primary);
+                    border-radius: 20px;
+                    font-size: 1.4rem;
+                    /* 👈 标签文字大小 */
+                    color: var(--primary);
+                    background: rgba(0, 136, 204, 0.1);
+                    font-weight: bold;
+                    box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+                }
+
+                .product-desc {
+                    font-size: 2.2rem;
+                    /* 👈 底部描述文字的大号字体 */
+                    max-width: 1400px;
+                    /* 👈 文字最大显示宽度：控制换行位置 */
+                    margin: 0 auto;
+                    color: var(--text-muted);
+                    padding-bottom: 1rem;
+                    line-height: 1.6;
+                    /* 👈 文字行高 */
+                    font-weight: 500;
+                }
+
+                .architecture-diagram {
+                    position: relative;
+                    width: 650px;
+                    /* 👈 架构图整体宽度 */
+                    height: 400px;
+                    /* 👈 架构图整体高度 */
+                    margin: 0;
+                    transform: scale(1.1);
+                }
+
+                .ai-core {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 150px;
+                    /* 👈 中央 AI 核心圆形的直径 */
+                    height: 150px;
+                    border-radius: 50%;
+                    background: #ffffff;
+                    border: 2px solid var(--primary);
+                    box-shadow: var(--glow-primary);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10;
+                    color: var(--primary);
+                    font-weight: bold;
+                    font-size: 1.3rem;
+                    /* 👈 “AI 指挥官”文字字号 */
+                    gap: 12px;
+                    animation: pulseCore 3s infinite;
+                    /* 👈 呼吸动画：3s 为一次起伏周期 */
+                }
+
+                .module {
+                    position: absolute;
+                    width: 160px;
+                    padding: 15px;
+                    background: #ffffff;
+                    border: 1px solid rgba(0, 0, 0, 0.1);
+                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+                    border-radius: 8px;
+                    z-index: 10;
+                    font-weight: bold;
+                    color: var(--text-main);
+                }
+
+                .mod-1 {
+                    top: 10%;
+                    left: 5%;
+                    border-color: var(--accent);
+                }
+
+                .mod-2 {
+                    top: 10%;
+                    right: 5%;
+                }
+
+                .mod-3 {
+                    bottom: 10%;
+                    left: 5%;
+                }
+
+                .mod-4 {
+                    bottom: 10%;
+                    right: 5%;
+                }
+
+                .connection-lines {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    z-index: 5;
+                }
+
+                .connection-lines line {
+                    stroke: rgba(0, 136, 204, 0.3);
+                    stroke-width: 2.5;
+                    /* 👈 连接线的粗细 */
+                    stroke-dasharray: 6, 6;
+                    /* 👈 虚线的间距 */
+                    animation: dashMove 15s linear infinite;
+                    /* 👈 流动动画速度：越小流得越快 */
+                }
+
+                @keyframes pulseCore {
+                    0% {
+                        box-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);
+                        transform: translate(-50%, -50%) scale(1);
+                        /* 👈 呼吸起始缩放比例 */
+                    }
+
+                    50% {
+                        box-shadow: 0 4px 35px rgba(0, 136, 204, 0.5), inset 0 0 15px rgba(0, 136, 204, 0.1);
+                        transform: translate(-50%, -50%) scale(1.05);
+                        /* 👈 呼吸到顶峰时的放大比例 */
+                    }
+
+                    100% {
+                        box-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);
+                        transform: translate(-50%, -50%) scale(1);
+                    }
+                }
+
+                @keyframes dashMove {
+                    to {
+                        stroke-dashoffset: 1000;
+                    }
+                }
+            </style>
+        </section>
+        <!-- ================= Slide 6: 演示 - 局域网探测 ================= -->
+        <section class="slide" id="slide-5">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-online">Demo 01</div>
+                <h2 class="slide-title" style="margin-top: 0;">局域网资产探测 & 违规识别</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff;">
+                    <p>针对校园或企业内网环境的“暗网”搭建问题，提供智能化巡检能力。</p>
+                    <ul class="responsibility-list">
+                        <li>主动探测内网存活资产与开启端口</li>
+                        <li>自动化网页爬取与违规分析</li>
+                        <li>截图留存提供直观证据</li>
+                    </ul>
+
+                    <div class="demo-image-container mt-4">
+                        <img src="images/违规取证.png" alt="违规取证数据" class="demo-img">
+                    </div>
+                </div>
+
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">编写多款扫描脚本，逐个IP人工验证排查违规站点，耗时且极易漏报盲区。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">一句话自然语言下发，全自动工具链巡检，秒级生成含截图的直观违规证据报告。</div>
+                        </div>
+                    </div>
+
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--primary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>人机交互指令</strong>
+                                <p>用户通过自然语言询问内网资产状况</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--secondary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8" />
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>主动自动化探测</strong>
+                                <p>AI 调用探针插件全量扫描存活 IP 与端口</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--accent);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>违规站点画像</strong>
+                                <p>自动爬取网页内容并截取违规站点画面</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Slide 7: 演示 - 蜜罐系统 ================= -->
+        <section class="slide" id="slide-6">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-online">Demo 02</div>
+                <h2 class="slide-title" style="margin-top: 0;">蜜罐诱捕系统演示</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff;">
+                    <p>通过部署看似脆弱的虚假系统（如网页后台文件系统），故意引诱黑客发起攻击。</p>
+                    <ul class="responsibility-list">
+                        <li>IP定位追踪与溯源分析</li>
+                        <li>桌面监控捕获摄像头反制抓拍</li>
+                        <li>自动化固定证据链生成</li>
+                    </ul>
+
+                    <div class="action-btn-container mt-4" style="display:none;">
+                        <button class="btn-demo" id="triggerAttackBtn">模拟黑客攻击</button>
+                    </div>
+
+                    <div class="demo-image-container">
+                        <img src="images/蜜罐数据.jpeg" alt="蜜罐数据" class="demo-img">
+                    </div>
+                </div>
+
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">部署昂贵且厚重的商业硬件蜜罐，产生的报警信息往往混杂在海量日志中难以溯源，且缺乏物理反制能力。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">轻量化部署高仿真虚拟靶机，AI全自动反演画像，一键追踪攻击者真实IP并固化录屏/抓拍证据链。</div>
+                        </div>
+                    </div>
+
+                    <!-- 可视化流程图 (初始隐藏，对比完成后显示) -->
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--accent);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M12 2v8" />
+                                    <path d="m4.93 4.93 4.24 4.24" />
+                                    <path d="M22 12h-8" />
+                                    <path d="m19.07 4.93-4.24 4.24" />
+                                    <path d="M12 22v-8" />
+                                    <path d="m19.07 19.07-4.24-4.24" />
+                                    <path d="M2 12h8" />
+                                    <path d="m4.93 19.07 4.24-4.24" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>第一阶段：黑客入侵</strong>
+                                <p>攻击者扫描并进入预设的伪装管理后台</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #ff9900;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>第二阶段：诱导下载</strong>
+                                <p>黑客下载并运行含探针的伪装依赖插件</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--secondary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path
+                                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                    <circle cx="12" cy="13" r="4" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>第三阶段：静默取证</strong>
+                                <p>系统自动截取黑客桌面并开启摄像头抓拍</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--primary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M5 12h14" />
+                                    <path d="m12 5 7 7-7 7" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>第四阶段：证据固化</strong>
+                                <p>所有敏感信息加密回传至玄枢控制中心</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <style>
+                .demo-layout {
+                    display: flex;
+                    gap: 2rem;
+                    height: 100%;
+                    align-items: stretch;
+                }
+
+                .honeypot-flow-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0;
+                }
+
+                .flow-step {
+                    display: flex;
+                    gap: 20px;
+                    align-items: flex-start;
+                }
+
+                .flow-icon {
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+                }
+
+                .flow-text {
+                    flex: 1;
+                }
+
+                .flow-text strong {
+                    display: block;
+                    font-size: 1.8rem;
+                    /* 👈 流程步骤标题字号 */
+                    color: var(--text-main);
+                    margin-bottom: 8px;
+                    /* 👈 步骤标题与描述文字的间距 */
+                }
+
+                .flow-text p {
+                    font-size: 1.4rem !important;
+                    /* 👈 流程描述文字字号 */
+                    color: var(--text-muted);
+                    margin: 0 !important;
+                    line-height: 1.5 !important;
+                }
+
+                .flow-connector {
+                    width: 3px;
+                    /* 👈 连接直线的宽度 */
+                    height: 35px;
+                    /* 👈 连接直线的高度 */
+                    background: linear-gradient(to bottom, var(--primary), transparent);
+                    margin-left: 24px;
+                    /* 👈 调整直线使其水平对齐图标中心 */
+                }
+
+                .btn-demo {
+                    background: var(--grad-primary);
+                    color: #fff;
+                    border: none;
+                    padding: 15px 30px;
+                    font-size: 1.2rem;
+                    font-weight: bold;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    box-shadow: var(--glow-primary);
+                }
+
+                .btn-demo:hover {
+                    transform: scale(1.05);
+                }
+
+                .btn-demo.btn-alert {
+                    background: linear-gradient(135deg, #ff0033, #990000);
+                    box-shadow: var(--glow-alert);
+                }
+            </style>
+        </section>
+
+        <!-- ================= Slide 8: 演示 - 交换机 ================= -->
+        <section class="slide" id="slide-7">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-online">Demo 03</div>
+                <h2 class="slide-title" style="margin-top: 0;">设备统一管控与情景模式</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff;">
+                    <p>面对庞大网络设备数量，摒弃逐台命令配置的繁琐工作，引入AI驱动的自动化命令下发配置。</p>
+
+
+
+                    <div class="demo-image-container mt-4">
+                        <img src="images/ai交换机.png" alt="AI交换机管控" class="demo-img">
+                    </div>
+                </div>
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">运维人员需要通过SSH登录每一台设备，手动输入生涩的CLI命令行，操作繁琐易输入错误。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">AI直接识别运维意图并翻译为底层指令下发全局应用，甚至仅需一键切换业务情景模式。</div>
+                        </div>
+                    </div>
+
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--primary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M12 2a10 10 0 1 0 10 10H12V2Z" />
+                                    <path d="M12 12 2.1 7.1" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>意图理解</strong>
+                                <p>AI 实时分析专家下达的配置变更请求</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--secondary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <polyline points="16 18 22 12 16 6" />
+                                    <polyline points="8 6 2 12 8 18" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>指令自动化转换</strong>
+                                <p>根据设备型号自动翻译为 CLI 或 Netconf 脚本</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #00c850;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>全局快速下发</strong>
+                                <p>秒级完成全网交换机配置同步与情景切换</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Script 占位 -->
+
+
+        <!-- ================= Slide 9: 实战 - AI封禁IP ================= -->
+        <section class="slide" id="slide-8">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-alert">Real-Combat</div>
+                <h2 class="slide-title" style="margin-top: 0;">实战 01: AI 智能封禁</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff;">
+                    <p>直面海量日志分析难题，依托AI实现：智能识别 -> 秒级响应 -> 自动隔离。</p>
+                    <div class="mt-4">
+                        <ul class="responsibility-list">
+                            <li><strong>自动协同联动：</strong>结合日志分析与交换机控制</li>
+                            <li><strong>处置无延时：</strong>无需人工介入，切断攻击面</li>
+                            <li><strong>一键解封：</strong>可通过自然语言随时恢复正常业务IP</li>
+                        </ul>
+                    </div>
+
+                    <div class="demo-image-container">
+                        <img src="images/封禁报告.jpeg" alt="封禁数据展示" class="demo-img">
+                    </div>
+                </div>
+
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">日志推送到SOC平台积压成海，人工过滤并判断是否封禁，往往安全事件恶化后才被响应。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">AI进行7x24小时全自动日志嗅探，一旦确认高危动作立刻协同网络设备实现“秒级防御联动”。</div>
+                        </div>
+                    </div>
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--accent);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>全时流量嗅探</strong>
+                                <p>AI 探针 7x24 小时不间断分析核心交换机流量</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #ff0033;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path
+                                        d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>高危异常识别</strong>
+                                <p>精准捕捉暴力破解、DDoS 等攻击特征</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #000;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>秒级联动隔离</strong>
+                                <p>自动下发封禁指令，瞬间切断黑客物理连接</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= Slide 10: 实战 - 文件分析 ================= -->
+        <section class="slide" id="slide-9">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-alert">Real-Combat</div>
+                <h2 class="slide-title" style="margin-top: 0;">实战 02: AI 文件分析</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff; padding: 1.5rem;">
+                    <p>智能分析政策文件。核心特性：<span class="text-highlight">快捷上传，自动分析，给出建议</span>。</p>
+                    <div class="mt-4"
+                        style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
+                        <ol style="margin-left: 20px; margin-top: 10px; color: var(--text-muted); line-height: 1.8;">
+                            <li>上传待执行的政策文件</li>
+                            <li>AI解读样本并生成检查报告</li>
+                        </ol>
+                    </div>
+
+                    <div class="demo-image-container">
+                        <img src="images/文件分析.jpeg" alt="文件分析系统展示" class="demo-img">
+                    </div>
+                </div>
+
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">分析专家将政策文件，耗费大量时间阅读冗长的纯技术检测报告评估风险。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">只需上传文件，AI全权接管整个分析工具链，最终直接输出给人类可读的结论及“阻断或放行”建议。</div>
+                        </div>
+                    </div>
+
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--primary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <circle cx="10" cy="13" r="2" />
+                                    <line x1="11.5" y1="14.5" x2="14" y2="17" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>AI解读文件</strong>
+                                <p>自动精准解析未知的目标文件结构与关键元数据</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--secondary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path
+                                        d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                                    <path d="M9 14h6" />
+                                    <path d="M9 10h6" />
+                                    <path d="M9 18h6" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>指定执行计划</strong>
+                                <p>基于文件静态特征自动编排多阶段动态检测策略</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--accent);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path
+                                        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>调用工具</strong>
+                                <p>智能调度AI工具获取信息</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #00c850;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <polyline points="9 15 11 17 15 13" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>生成报告</strong>
+                                <p>输出直观的风险画像并提供确切的拦截与放行建议</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Slide 10: 实战痛点 - 威胁录像 ================= -->
+        <section class="slide" id="slide-10">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-alert">Threat-Alert</div>
+                <h2 class="slide-title">直击痛点：大规模攻击后果</h2>
+            </header>
+            <div class="video-preview-container fade-up delay-200">
+                <div class="glass-panel video-card">
+                    <div class="video-status-bar">
+                        <span class="status-dot pulse"></span>
+                        LIVE EVIDENCE: ENDPOINT COLLAPSE
+                    </div>
+                    <video muted loop playsinline class="threat-video" id="threatVideo">
+                        <source src="images/微信视频2026-03-30_112259_043.mp4" type="video/mp4">
+                    </video>
+                </div>
+                <div class="threat-details">
+                    <div class="threat-item fade-up delay-300">
+                        <div class="threat-icon alert">!</div>
+                        <div class="threat-text">
+                            <h3>全屏蓝屏崩溃</h3>
+                            <p>实测由于软件漏洞被恶意利用，导致局域网内数十台终端同步进入蓝屏状态，业务瞬间停摆。</p>
+                        </div>
+                    </div>
+                    <div class="threat-footer fade-up delay-500">
+                        <p class="impact-statement">针对突发重大事件，玄枢 AI 预设了一站式自主研判追踪方案。</p>
+                    </div>
+                </div>
+            </div>
+            <style>
+                #slide-10 .video-preview-container {
+                    display: grid;
+                    grid-template-columns: 1.25fr 1fr;
+                    gap: 6rem;
+                    flex: 1;
+                    align-items: center;
+                    padding-bottom: 3rem;
+                }
+
+                .video-card {
+                    padding: 0px !important;
+                    overflow: hidden;
+                    border: 2px solid rgba(255, 59, 48, 0.4);
+                    box-shadow: 0 20px 50px rgba(255, 59, 48, 0.2);
+                    border-radius: 16px;
+                    background: #000;
+                    height: fit-content;
+                }
+
+                .video-status-bar {
+                    background: rgba(255, 59, 48, 0.1);
+                    color: #ff3b30;
+                    padding: 12px 20px;
+                    font-size: 1.2rem;
+                    font-weight: 700;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    border-bottom: 1px solid rgba(255, 59, 48, 0.2);
+                    letter-spacing: 1px;
+                }
+
+                .status-dot {
+                    width: 10px;
+                    height: 10px;
+                    background: #ff3b30;
+                    border-radius: 50%;
+                }
+
+                .threat-video {
+                    width: 100%;
+                    height: auto;
+                    max-height: 580px;
+                    display: block;
+                    object-fit: cover;
+                }
+
+                .threat-details {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4.5rem;
+                }
+
+                .threat-item {
+                    display: flex;
+                    gap: 2.5rem;
+                    align-items: flex-start;
+                }
+
+                .threat-icon.alert {
+                    width: 50px;
+                    height: 50px;
+                    background: rgba(255, 59, 48, 0.1);
+                    color: #ff3b30;
+                    border: 2px solid #ff3b30;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 800;
+                    font-size: 2rem;
+                    flex-shrink: 0;
+                    box-shadow: 0 0 15px rgba(255, 59, 48, 0.2);
+                }
+
+                .threat-text h3 {
+                    font-size: 2.4rem;
+                    margin-bottom: 1rem;
+                    color: var(--text-main);
+                    font-weight: 700;
+                }
+
+                .threat-text p {
+                    font-size: 1.6rem;
+                    color: var(--text-muted);
+                    line-height: 1.7;
+                    opacity: 0.9;
+                }
+
+                .impact-statement {
+                    background: linear-gradient(135deg, #ff3b30 0%, #ff7b00 100%);
+                    -webkit-background-clip: text;
+                    background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    font-weight: 800;
+                    font-size: 2.2rem;
+                    line-height: 1.4;
+                    filter: drop-shadow(0 2px 4px rgba(255, 59, 48, 0.1));
+                }
+
+                .pulse {
+                    animation: pulse-red 2s infinite;
+                }
+
+                @keyframes pulse-red {
+                    0% {
+                        transform: scale(0.95);
+                        box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+                    }
+
+                    70% {
+                        transform: scale(1);
+                        box-shadow: 0 0 0 10px rgba(255, 59, 48, 0);
+                    }
+
+                    100% {
+                        transform: scale(0.95);
+                        box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+                    }
+                }
+            </style>
+        </section>
+
+        <!-- ================= Slide 11: 实战 - 应急响应 ================= -->
+        <section class="slide" id="slide-11">
+            <header class="slide-header fade-up">
+                <div class="status-badge status-alert">Real-Combat</div>
+                <h2 class="slide-title" style="margin-top: 0;">实战 03: AI 自动化应急响应</h2>
+            </header>
+
+            <div class="demo-layout">
+                <div class="glass-panel text-content fade-up delay-100" style="background: #ffffff; padding: 1.5rem;">
+                    <p>重塑应急响应流程，将无序的排查转化为标准化的智能追踪。核心特性：<span class="text-highlight">自动推演，自主取证，秒级定性</span>。</p>
+                    <div class="mt-4"
+                        style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
+                        <ol style="margin-left: 20px; margin-top: 10px; color: var(--text-muted); line-height: 1.8;">
+                            <li>自动化分析问题与告警事件的内在逻辑</li>
+                            <li>自动调度运行专属工具，精准提取对应日志</li>
+                            <li>分析提炼多维证据，直接总结出问题根本原因</li>
+                        </ol>
+                    </div>
+
+                    <div
+                        style="margin-top: 4rem; padding: 20px; background: rgba(0,136,204,0.05); border: 1px dashed var(--primary); border-radius: 8px; text-align: center;">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--primary)"
+                            stroke-width="1.5" style="opacity: 0.8; margin-bottom: 15px;">
+                            <path
+                                d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                        </svg>
+                        <p style="color: var(--primary); font-weight: bold; font-size: 1.4rem;">AI 响应中心正在溯源追踪中...</p>
+                    </div>
+                </div>
+
+                <div class="visual-panel fade-up delay-300">
+                    <div class="comparison-box" data-state="0" style="margin-top: 0;">
+                        <div class="comp-row comp-traditional">
+                            <span class="comp-label">传统工作流</span>
+                            <div class="comp-content">面对突发安全事件经常毫无思路，不知从何种方向和节点进行排查，只能人工盲目搜寻设备和日志，极易错失抢救良机。</div>
+                        </div>
+                        <div class="comp-row comp-ai">
+                            <span class="comp-label">玄枢 AI</span>
+                            <div class="comp-content">全自动分析问题特征，自主选择并调用安全工具获取目标节点的对应日志，最终精准总结出事件的根本原因。</div>
+                        </div>
+                    </div>
+
+                    <div class="flow-container">
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--primary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="16" x2="12" y2="12" />
+                                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>自主分析问题</strong>
+                                <p>在事件发生第一时间自动启动智能化研判推演能力</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--secondary);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path
+                                        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>自动调用工具</strong>
+                                <p>基于分析结果，自动选择并执行专属探针与工具链</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: var(--accent);"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <line x1="9" y1="3" x2="9" y2="21" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>提取目标日志</strong>
+                                <p>快速获取并解析对应的网络流量、主机终端、应用日志</p>
+                            </div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-icon" style="background: #00c850;"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <polyline points="9 15 11 17 15 13" />
+                                </svg></div>
+                            <div class="flow-text">
+                                <strong>总结问题原因</strong>
+                                <p>将证据链贯通合并为结论报告，直接定性安全事件</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Slide 12: 社会价值与结语 ================= -->
+        <section class="slide" id="slide-12" style="align-items: center; text-align: center;">
+            <header class="slide-header fade-up" style="border: none; margin-bottom: 0;">
+                <h2 class="slide-title" style="font-size: 3.5rem;">价值愿景与致谢</h2>
+            </header>
+
+            <div class="team-grid fade-up delay-200"
+                style="grid-template-columns: repeat(3, 1fr); max-width: 1400px; margin: 4rem 0; /* 👈 底部三栏卡片的宽度与间距 */">
+                <div class="glass-panel" style="padding: 3rem; background: #ffffff; /* 👈 愿景卡片内边距 */">
+                    <h3 style="color: var(--primary); font-size: 2.4rem; margin-bottom: 1.5rem; /* 👈 内容标题字号 */">用户价值
+                    </h3>
+                    <p style="font-size: 1.6rem; color: var(--text-muted); line-height: 1.6; /* 👈 内容文字字号 */">
+                        降低安全门槛，削减冗余开支，实现中小企业“开箱即用”的安全防护圈。</p>
+                </div>
+                <div class="glass-panel" style="padding: 3rem; background: #ffffff;">
+                    <h3 style="color: var(--secondary); font-size: 2.4rem; margin-bottom: 1.5rem;">社会价值</h3>
+                    <p style="font-size: 1.6rem; color: var(--text-muted); line-height: 1.6;">
+                        响应国家安全战略，保护个人与企业数字资产，维系社会数字化运转的底座安全。</p>
+                </div>
+                <div class="glass-panel" style="padding: 3rem; background: #ffffff;">
+                    <h3 style="color: var(--primary); font-size: 2.4rem; margin-bottom: 1.5rem;">行业价值</h3>
+                    <p style="font-size: 1.6rem; color: var(--text-muted); line-height: 1.6;">
+                        推动安全产品向AI自驱转型，打造下一代主动防护体系的标准样板。</p>
+                </div>
+            </div>
+
+            <div class="fade-up delay-400" style="margin-top: 3rem;">
+                <h1 style="font-size: 4rem; margin-bottom: 1rem; text-shadow: 0 4px 10px rgba(0,0,0,0.1);">守护数字主权，筑牢安全防线
+                </h1>
+                <p style="color: var(--primary); font-size: 1.5rem;">感谢各位评委专家的聆听与指导！</p>
+            </div>
+        </section>
+
+    </main>
+    <script src="script.js"></script>
+</body>
+
+</html>

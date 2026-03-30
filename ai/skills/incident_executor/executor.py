@@ -211,8 +211,8 @@ Data (906 bytes)
         packet_result = ""
         if state.packet_captures:
             last_packet = state.packet_captures[-1]
-            if last_packet.get("result", {}).get("packet_summary"):
-                packet_result = last_packet["result"]["packet_summary"]
+            if last_packet.get("result", {}).get("data", {}).get("packet_summary"):
+                packet_result = last_packet["result"]["data"]["packet_summary"]
 
         # 生成完整写死的 Markdown 报告
         now = datetime.now()

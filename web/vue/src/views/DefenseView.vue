@@ -58,7 +58,9 @@ async function load() {
     return unwrap<any>(res)
   })
   if (d) {
-    events.value = d.items ?? []
+    // 过滤掉白名单IP的事件
+    const skipIps = ['192.168.0.3', '192.168.0.4']
+    events.value = (d.items ?? []).filter((ev: any) => !skipIps.includes(ev.attack_ip))
     total.value = d.total ?? events.value.length
   }
   loading.value = false
