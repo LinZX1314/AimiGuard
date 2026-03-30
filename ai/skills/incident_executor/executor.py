@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Generator
 
 # 确保能导入项目模块
@@ -109,12 +109,15 @@ def _execute_incident_tool(
     if tool_name == "get_traffic_logs":
         time_range = arguments.get("time_range", "1小时内")
         port_filter = arguments.get("port_filter", "4705")
+        # 流量时间设置为报告生成前的5分钟（预估值）
+        log_time = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
 
         # 返回提示词，告诉 AI 流量日志已获取
         result = {
             "ok": True,
             "message": f"流量日志已获取，发现对{port_filter}端口的异常UDP流量，建议继续获取数据包详情",
             "data": {
+                "log_time": log_time,
                 "time_range": time_range,
                 "port_filter": port_filter,
                 "异常流量": f"检测到对{port_filter}端口的大量异常UDP数据包",
@@ -128,7 +131,7 @@ def _execute_incident_tool(
         state.add_result(
             "traffic",
             {
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "time": log_time,
                 "time_range": time_range,
                 "port_filter": port_filter,
                 "result": result,
@@ -142,12 +145,41 @@ def _execute_incident_tool(
     if tool_name == "get_packet_capture":
         source_ip = arguments.get("source_ip", "192.168.0.5")
         port = arguments.get("port", "4705")
+        # 数据包时间设置为报告生成前的5分钟（预估值）
+        packet_time = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
 
         # 返回提示词，告诉 AI 数据包已捕获
+        packet_summary = """No.     Time           Source                Destination           Protocol Length Info
+    997 """ + packet_time + """   10.24.101.246         10.24.102.113         UDP      948    63265 → 4705 Len=906
+
+Frame 997: Packet, 948 bytes on wire (7584 bits), 948 bytes captured (7584 bits) on interface \\Device\\NPF_{DEE85806-3469-4370-84A6-CCE3A4CD90A4}, id 0
+Ethernet II, Src: CompalInform_6e:4d:63 (40:c2:ba:6e:4d:63), Dst: VMware_89:8f:f7 (00:50:56:89:8f:f7)
+Internet Protocol Version 4, Src: 10.24.101.246, Dst: 10.24.102.113
+User Datagram Protocol, Src Port: 63265, Dst Port: 4705
+Data (906 bytes)
+
+0000  44 4d 4f 43 00 00 01 00 6e 03 00 00 5b 68 2b 25   DMOC....n...[h+%
+0010  6f 61 64 4d a7 92 f0 47 00 c5 a4 0e 20 4e 00 00   oadM...G.... N..
+0020  c0 a8 64 86 61 03 00 00 61 03 00 00 00 02 00 00   ..d.a...a.......
+0030  00 00 00 00 0f 00 00 00 01 00 00 00 43 00 3a 00   ............C.:.
+0040  5c 00 57 00 69 00 6e 00 64 00 6f 00 77 00 73 00   \\.W.i.n.d.o.w.s.
+0050  5c 00 73 00 79 00 73 00 74 00 65 00 6d 00 33 00   \\.s.y.s.t.e.m.3.
+0060  32 00 5c 00 63 00 6d 00 64 00 2e 00 65 00 78 00   2.\\.c.m.d...e.x.
+0070  65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   e...............
+0230  00 00 00 00 00 00 00 00 00 00 00 00 2f 00 63 00   ............/.c.
+0240  20 00 73 00 74 00 61 00 72 00 74 00 20 00 63 00    .s.t.a.r.t. .c.
+0250  6d 00 64 00 20 00 2f 00 6b 00 20 00 74 00 61 00   m.d. ./.k. .t.a.
+0260  73 00 6b 00 6b 00 69 00 6c 00 6c 00 20 00 2f 00   s.k.k.i.l.l. ./.
+0270  69 00 6d 00 20 00 73 00 76 00 63 00 68 00 6f 00   i.m. .s.v.c.h.o.
+0280  73 00 74 00 2e 00 65 00 78 00 65 00 20 00 2f 00   s.t...e.x.e. ./.
+0290  66 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   f..............."""
+
         result = {
             "ok": True,
             "message": f"数据包已捕获，包含对{port}端口的UDP数据包，Payload包含可执行命令，建议生成分析报告",
             "data": {
+                "packet_time": packet_time,
+                "packet_summary": packet_summary,
                 "source_ip": source_ip,
                 "target_port": port,
                 "protocol": "UDP",
@@ -161,7 +193,7 @@ def _execute_incident_tool(
         state.add_result(
             "packet",
             {
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "time": packet_time,
                 "source_ip": source_ip,
                 "port": port,
                 "result": result,
@@ -175,10 +207,21 @@ def _execute_incident_tool(
     if tool_name == "generate_incident_report":
         exec_summary = arguments.get("exec_summary", state.get_exec_summary())
 
-        # 生成完整写死的 Markdown 报告
-        report = f"""# 🚨 安全应急响应报告
+        # 获取数据包分析结果
+        packet_result = ""
+        if state.packet_captures:
+            last_packet = state.packet_captures[-1]
+            if last_packet.get("result", {}).get("packet_summary"):
+                packet_result = last_packet["result"]["packet_summary"]
 
-> **生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        # 生成完整写死的 Markdown 报告
+        now = datetime.now()
+        five_min_ago = (now - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+        now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        report = (
+"""# 🚨 安全应急响应报告
+
+> **生成时间: """ + now_str + """**
 > **事件类型**: 批量电脑蓝屏安全事件
 > **分析结论**: 攻击者利用极域电子教室软件漏洞，在4705端口进行网络攻击
 
@@ -189,7 +232,7 @@ def _execute_incident_tool(
 | 项目 | 内容 |
 |------|------|
 | 事件名称 | 批量电脑蓝屏安全事件 |
-| 发生时间 | {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} |
+| 发生时间 | """ + five_min_ago + """ |
 | 影响范围 | 极域电子教室课堂环境 |
 | 事件分类 | 疑似网络攻击 |
 | 紧急程度 | 高危 |
@@ -212,10 +255,7 @@ def _execute_incident_tool(
 ## 三、数据包分析详情
 
 **抓包结果**：
-- 检测到对**4705端口**的异常UDP流量
-- 来源IP：192.168.0.5
-- 目标端口：4705
-- Payload包含可执行命令：`cmd.exe /k start`
+""" + packet_result + """
 
 **攻击特征**：
 - 协议：UDP
@@ -262,8 +302,8 @@ def _execute_incident_tool(
 
 ---
 
-> 本报告由 **玄枢指挥官** AI 自动生成 | 应急响应完成时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-"""
+> 本报告由 **玄枢指挥官** AI 自动生成 | 应急响应完成时间：""" + now_str + """
+""")
 
         state.report_content = report
         state.is_complete = True

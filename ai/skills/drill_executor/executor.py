@@ -558,12 +558,15 @@ def _generate_markdown_report(
 
 **截图数量**: {len(state.screenshot_results)} 张
 
-| # | IP | 端口 | URL | 采集时间 |
-|---|----|------|-----|----------|
 """
-
     for i, sr in enumerate(state.screenshot_results, 1):
-        report += f"| {i} | `{sr.get('ip', 'N/A')}` | {sr.get('port', 'N/A')} | {sr.get('url', 'N/A')} | {sr.get('time', 'N/A')} |\n"
+        screenshot_url = sr.get('screenshot_url', '')
+        report += f"### 截图 {i}: {sr.get('ip', 'N/A')}:{sr.get('port', 'N/A')}\n\n"
+        report += f"- **URL**: {sr.get('url', 'N/A')}\n"
+        report += f"- **采集时间**: {sr.get('time', 'N/A')}\n"
+        if screenshot_url:
+            report += f"\n![截图 {i}]({screenshot_url})\n"
+        report += "\n"
 
     report += f"""
 ---
@@ -600,13 +603,52 @@ def _generate_markdown_report(
 
 ## 七、蜜罐态势分析
 
-"""
+**总攻击次数**: {total_attacks} 次
+
+""".format(total_attacks=sum(hr.get("total_attacks", 0) for hr in state.honeypot_results))
+
     for hr in state.honeypot_results:
+        service_name = hr.get("service", "N/A")
         report += f"""
-### 服务: {hr.get("service", "N/A")} ({hr.get("count", 0)} 次攻击)
+### 服务: {service_name} ({hr.get("count", 0)} 次攻击)
+
 """
-        for rec in hr.get("records", [])[:10]:
-            report += f"- **{rec.get('攻击IP', 'N/A')}** ({rec.get('来源地区', '未知')}) @ {rec.get('攻击时间', 'N/A')}\n"
+        # 攻击来源 Top10
+        top_sources = hr.get("top_sources", [])
+        if top_sources:
+            report += f"**攻击来源 Top10**:\n"
+            for idx, src in enumerate(top_sources[:10], 1):
+                src_ip = src if isinstance(src, str) else src.get("ip", "N/A")
+                count = src.get("count", src.get("次数", 0)) if isinstance(src, dict) else "N/A"
+                area = src.get("来源地区", src.get("area", "")) if isinstance(src, dict) else ""
+                report += f"{idx}. `{src_ip}` {area} ({count}次)\n"
+            report += "\n"
+
+        # 热门攻击服务
+        top_services = hr.get("top_services", [])
+        if top_services:
+            report += f"**热门攻击服务**:\n"
+            for svc in top_services[:5]:
+                svc_name = svc if isinstance(svc, str) else svc.get("service", "N/A")
+                svc_count = svc.get("count", svc.get("次数", 0)) if isinstance(svc, dict) else "N/A"
+                report += f"- {svc_name}: {svc_count}次\n"
+            report += "\n"
+
+        # 7天攻击趋势
+        trend = hr.get("trend", {})
+        if trend:
+            report += f"**7天攻击趋势**:\n"
+            for date, count in trend.items():
+                report += f"- {date}: {count}次\n"
+            report += "\n"
+
+        # 攻击记录
+        records = hr.get("records", [])
+        if records:
+            report += f"**最近攻击记录**:\n"
+            for rec in records[:10]:
+                report += f"- **{rec.get('攻击IP', 'N/A')}** ({rec.get('来源地区', '未知')}) @ {rec.get('攻击时间', 'N/A')}\n"
+            report += "\n"
 
     if state.ban_records:
         report += """
@@ -641,7 +683,7 @@ def _generate_markdown_report(
    - {f.get("vuln", f.get("description", "及时更新补丁"))}
 """
 
-    report += """
+    report += f"""
 ### 9.3 长期加固
 1. 定期更换所有服务密码，启用双因素认证
 2. 部署入侵检测系统（IDS）
@@ -652,7 +694,7 @@ def _generate_markdown_report(
 
 ## 十、演练结论
 
-本次安全演练共发现 **严重风险 {len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(medium)} 项**。
+本次安全演练共发现 **{len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(info)} 项**。
 
 """
     if critical:
