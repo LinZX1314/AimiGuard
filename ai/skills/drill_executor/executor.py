@@ -683,7 +683,7 @@ def _generate_markdown_report(
    - {f.get("vuln", f.get("description", "及时更新补丁"))}
 """
 
-    report += """
+    report += f"""
 ### 9.3 长期加固
 1. 定期更换所有服务密码，启用双因素认证
 2. 部署入侵检测系统（IDS）
@@ -694,7 +694,7 @@ def _generate_markdown_report(
 
 ## 十、演练结论
 
-本次安全演练共发现 **严重风险 {len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(medium)} 项**。
+本次安全演练共发现 **{len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(info)} 项**。
 
 """
     if critical:
