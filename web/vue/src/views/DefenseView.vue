@@ -14,6 +14,7 @@ import {
   X,
   ShieldMinus,
   ShieldCheck,
+  Shield,
   RotateCw,
   Bot,
   Globe,
@@ -22,12 +23,13 @@ import {
 } from 'lucide-vue-next'
 
 const loading = ref(false)
+const whitelist = ref<string[]>([])
 const events  = ref<any[]>([])
 const page    = ref(1)
 const pageSize = ref(50)
 const total   = ref(0)
 
-const headers = ['来源资产', '次数', '威胁指纹', 'AI 深度研判', '状态', '处理建议']
+const headers = ['来源资产', '次数', '威胁指纹', 'AI 深度研判', '状态', '操作']
 
 
 
@@ -58,9 +60,7 @@ async function load() {
     return unwrap<any>(res)
   })
   if (d) {
-    // 过滤掉白名单IP的事件
-    const skipIps = ['192.168.0.3', '192.168.0.4']
-    events.value = (d.items ?? []).filter((ev: any) => !skipIps.includes(ev.attack_ip))
+    events.value = (d.items ?? []).filter((ev: any) => !whitelist.value.includes(ev.attack_ip))
     total.value = d.total ?? events.value.length
   }
   loading.value = false
@@ -88,7 +88,33 @@ async function markFP(id: number) {
   if (ok) load()
 }
 
-onMounted(load)
+async function loadWhitelist() {
+  try {
+    const res = await api.get<{ whitelist: string[] }>('/api/v1/system/ai-whitelist')
+    whitelist.value = (res as any)?.whitelist ?? []
+  } catch (e) {
+    console.error('加载白名单失败:', e)
+  }
+}
+
+async function addToWhitelist(ip: string) {
+  if (whitelist.value.includes(ip)) return
+  whitelist.value.push(ip)
+  await api.post('/api/v1/system/ai-whitelist', { whitelist: whitelist.value })
+}
+
+async function unban(id: number) {
+  await apiCall(async () => {
+    await api.post(`/api/v1/defense/events/${id}/unban`, {})
+    load()
+  }, { errorMsg: '解封失败' })
+  load()
+}
+
+onMounted(async () => {
+  await loadWhitelist()
+  load()
+})
 </script>
 
 <template>
@@ -185,25 +211,30 @@ onMounted(load)
                     </Badge>
                   </td>
 
-                  <!-- 管理操作 -->
+                  <!-- 操作 -->
                   <td class="py-5 px-5 align-top">
                     <div class="flex flex-col gap-1.5">
-                      <template v-if="ev.status === 'pending'">
-                        <Button variant="outline" size="sm" class="h-7 bg-emerald-500/5 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all text-[11px] px-3 font-bold" 
-                                @click="approve(ev.id)">
-                          <Check class="h-3 w-3 mr-1.5" /> 确认阻断
-                        </Button>
-                        <Button variant="ghost" size="sm" class="h-7 text-muted-foreground hover:bg-muted transition-all text-[11px] px-3 font-bold" 
-                                @click="reject(ev.id)">
-                          <X class="h-3 w-3 mr-1.5" /> 忽略风险
+                      <template v-if="ev.status === 'approved'">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-7 text-orange-500 hover:text-orange-600 hover:bg-orange-500/5 transition-all text-[10px] px-3"
+                          @click="unban(ev.id)">
+                          <X class="h-3 w-3 mr-1.5 opacity-70" /> 解封
                         </Button>
                       </template>
-                      <Button variant="ghost" size="sm" class="h-7 text-sky-500 hover:text-sky-600 hover:bg-sky-500/5 transition-all text-[10px] px-3" 
-                              @click="markFP(ev.id)">
-                        <ShieldMinus class="h-3 w-3 mr-1.5 opacity-70" /> 报备为误报
+                      <Button
+                        v-if="!whitelist.includes(ev.attack_ip)"
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 text-green-500 hover:text-green-600 hover:bg-green-500/5 transition-all text-[10px] px-3"
+                        @click="addToWhitelist(ev.attack_ip)">
+                        <Shield class="h-3 w-3 mr-1.5 opacity-70" /> 加入白名单
                       </Button>
+                      <span v-else class="text-[10px] text-muted-foreground/60">已白名单</span>
                     </div>
                   </td>
+
                 </tr>
               </template>
               <tr v-else>

@@ -844,3 +844,34 @@ def defense_event_false_positive(event_id: int):
     conn.close()
     return ok({'message': '已标记为误报并尝试解除封禁'})
 
+@defense_bp.route('\events/<int:event_id>/unban', methods=['POST'])
+@require_auth
+def defense_event_unban(event_id: int):
+    """Unban an IP from ACL"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT attack_ip FROM attack_logs WHERE id = ?", (event_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return err('事件不存在')
+    attack_ip = row['attack_ip']
+
+    # 执行物理解封
+    cfg = _load_cfg()
+    from ai.tools import execute_tool
+    res_str = execute_tool('switch_acl_config', {'action': 'unban', 'target_ip': attack_ip}, cfg)
+    try:
+        res = json.loads(res_str)
+        if not res.get('ok'):
+            conn.close()
+            return err(res.get('message', '解封失败'))
+    except:
+        pass
+
+    # 更新数据库状态
+    c.execute("UPDATE ai_analysis_logs SET status = 'rejected', decision = '已解封' WHERE ip = ?", (attack_ip,))
+    conn.commit()
+    conn.close()
+    return ok({'message': f'IP {attack_ip} 已解除封禁'})
+
