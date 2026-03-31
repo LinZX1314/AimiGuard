@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from database.models import NmapModel
 from .helpers import (
     require_auth, ok, err, _body, _load_cfg, _save_cfg,
-    _parse_int_arg, _normalize_host_fields
+    _parse_int_arg, _normalize_host_fields, _as_bool
 )
 from .runtime import (
     get_runtime_scan_status, run_nmap_scan,
@@ -104,6 +104,7 @@ def legacy_system_config_get():
         'ai_enabled': cfg.get('ai', {}).get('enabled', False),
         'ai_url': cfg.get('ai', {}).get('api_url', ''),
         'ai_model': cfg.get('ai', {}).get('model', ''),
+        'auto_ban': cfg.get('ai', {}).get('auto_ban', False),
     })
 
 
@@ -145,6 +146,8 @@ def legacy_system_config_save():
         ai['api_url'] = str(body.get('ai_url', '')).strip()
     if 'ai_model' in body:
         ai['model'] = str(body.get('ai_model', '')).strip()
+    if 'auto_ban' in body:
+        ai['auto_ban'] = _as_bool(body.get('auto_ban', False))
 
     _save_cfg(cfg)
     return ok({'success': True})

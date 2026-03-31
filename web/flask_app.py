@@ -813,6 +813,14 @@ def create_app() -> Flask:
 
         # 非管理员入口访问真实 API 时，返回假响应并记录取证
         if path.startswith("/api/"):
+            # 开发和新版前端需要直接访问 /api/v1/* 以及兼容旧接口 /api/status，免去必须先访问隐藏入口的门槛。
+            # /api/system/* 和 /api/nmap/* 等 legacy 接口也需要放行
+            if (path.startswith("/api/v1/") or path == "/api/status" or 
+                path.startswith("/api/upload/") or path == "/api/logs" or
+                path.startswith("/api/system/") or path.startswith("/api/nmap/") or
+                path.startswith("/api/settings") or path.startswith("/api/scan/")):
+                return None
+
             _record_honeypot_event("api_probe", {"query": request.query_string.decode("utf-8", errors="ignore")})
             return jsonify({"code": 404, "message": "not found"}), 404
 
