@@ -68,7 +68,10 @@ def main():
     import flask.cli
     flask.cli.show_server_banner = lambda *a, **kw: None
 
-    app.run(host=host, port=port, debug=debug, threaded=True)
+    if hasattr(app, 'socketio') and getattr(app, 'socketio', None):
+        app.socketio.run(app, host=host, port=port, debug=debug)
+    else:
+        app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == "__main__":

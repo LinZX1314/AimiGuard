@@ -177,6 +177,26 @@ const switchStatusItems = ref<Array<{ host: string; port: number; aclNumber: num
 let statusPollTimer: ReturnType<typeof setInterval> | null = null
 
 
+const loadSwitchConfigCompat = async () => {
+  // 优先新接口，避免在蜜罐门禁下访问 /api/settings 触发 404 噪音。
+  try {
+    const devices: any = await api.get('/api/v1/switch-workbench/devices/config')
+    const switches = Array.isArray(devices) ? devices : []
+    return {
+      switches,
+      strictMode: false,
+    }
+  } catch {
+    const cfg: any = await api.get('/api/settings')
+    const cfgData = cfg?.data ?? cfg
+    return {
+      switches: Array.isArray(cfgData?.switches) ? cfgData.switches : [],
+      strictMode: !!cfgData?.switch_status?.strict_mode,
+    }
+  }
+}
+
+
 
 
 
@@ -199,21 +219,10 @@ const loadTopbarStatus = async () => {
 
 
     // 获取交换机配置数量（优先新接口，兼容旧接口）
+    const { switches, strictMode } = await loadSwitchConfigCompat()
 
 
-    const cfg: any = await api.get('/api/settings')
-
-
-
-
-
-    const cfgData = cfg?.data ?? cfg
-
-
-    const switches = cfgData?.switches || []
-
-
-    switchCount.value = Array.isArray(switches) ? switches.length : 1
+    switchCount.value = switches.length
 
 
 
@@ -268,9 +277,6 @@ const loadTopbarStatus = async () => {
 
 
     // 获取交换机在线状态
-
-
-    const strictMode = !!cfgData?.switch_status?.strict_mode
 
 
     try {
@@ -429,7 +435,7 @@ const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
 
 
-{ title: '蜜罐', icon: Bug,             to: '/hfish' },
+{ title: '蜜罐管理', icon: Bug,             to: '/hfish' },
 
 
   { title: '主机探测',  icon: Radar,           to: '/nmap' },

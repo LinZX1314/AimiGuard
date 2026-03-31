@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify, request, send_from_directory, Response, redirect, send_file
+from flask_socketio import SocketIO
 
 import sys
 
@@ -31,6 +32,9 @@ from utils.logger import log as unified_log
 
 
 HONEYPOT_SERVICE_NAME = "反制蜜罐·伪后台"
+
+# 注意：socketio 由 create_app 初始化，用于 switch-workbench 终端连接
+socketio: SocketIO | None = None
 
 
 def _load_runtime_config() -> dict:
@@ -664,7 +668,22 @@ def _log(level: str, msg: str, category: str = "system"):
 
 def create_app() -> Flask:
     """构建 Flask 应用：注册蓝图、中间件、SPA 路由。"""
+    global socketio
     app = Flask(__name__)
+
+    # 初始化 SocketIO（切换终端依赖）
+    if socketio is None:
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+    else:
+        socketio.init_app(app)
+
+    try:
+        from web.api.switch_workbench_ws import init_socketio as _init_switch_ws_socketio
+        _init_switch_ws_socketio(socketio)
+    except Exception:
+        pass
+
+    app.socketio = socketio
 
     # 关闭 Werkzeug 访问日志
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
@@ -794,6 +813,14 @@ def create_app() -> Flask:
 
         # 非管理员入口访问真实 API 时，返回假响应并记录取证
         if path.startswith("/api/"):
+            # 开发和新版前端需要直接访问 /api/v1/* 以及兼容旧接口 /api/status，免去必须先访问隐藏入口的门槛。
+            # /api/system/* 和 /api/nmap/* 等 legacy 接口也需要放行
+            if (path.startswith("/api/v1/") or path == "/api/status" or 
+                path.startswith("/api/upload/") or path == "/api/logs" or
+                path.startswith("/api/system/") or path.startswith("/api/nmap/") or
+                path.startswith("/api/settings") or path.startswith("/api/scan/")):
+                return None
+
             _record_honeypot_event("api_probe", {"query": request.query_string.decode("utf-8", errors="ignore")})
             return jsonify({"code": 404, "message": "not found"}), 404
 

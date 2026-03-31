@@ -3,11 +3,39 @@ HFish AI 分析与自动封禁模块
 """
 import json
 import logging
+import os
 import re
 
 from ai import call_openai_chat_completion
 from ai.tools import execute_tool
 from database.models import AiModel, HFishModel, SwitchAclModel
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(value)
+
+
+def _is_auto_ban_enabled_realtime(default_ai_enabled: bool, default_auto_ban: bool) -> bool:
+    """封禁动作执行前实时读取开关状态，确保动态配置立即生效。"""
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            latest_cfg = json.load(f)
+        ai_cfg = latest_cfg.get('ai', {}) if isinstance(latest_cfg, dict) else {}
+        latest_enabled = _as_bool(ai_cfg.get('enabled', default_ai_enabled))
+        latest_auto_ban = _as_bool(ai_cfg.get('auto_ban', default_auto_ban))
+        return bool(latest_enabled and latest_auto_ban)
+    except Exception:
+        return bool(_as_bool(default_ai_enabled) and _as_bool(default_auto_ban))
 
 
 def analyze_and_ban_attack_ips(logs: list, cfg: dict) -> dict:
@@ -143,8 +171,10 @@ IP信息：
         AiModel.save_analysis(ip, analysis_text, decision, status='approved')
         analysis_results[ip] = decision
 
-        # 自动封禁
-        if auto_ban and should_ban:
+        # 自动封禁前做实时开关校验，避免关闭开关后仍继续封禁。
+        realtime_auto_ban_enabled = _is_auto_ban_enabled_realtime(ai_enabled, auto_ban) if should_ban else False
+
+        if realtime_auto_ban_enabled and should_ban:
             # 白名单检查
             whitelist = cfg.get('ai', {}).get('whitelist', [])
             if ip in whitelist:
@@ -176,6 +206,8 @@ IP信息：
                 AiModel.save_analysis(ip, analysis_text, '封禁失败', status='error')
                 logger.error(f"IP {ip} 封禁失败: {ban_result.get('error', '未知错误')}")
         else:
+            if should_ban and not realtime_auto_ban_enabled:
+                logger.info(f"实时开关未开启，跳过自动封禁: {ip}")
             # 不需要封禁或封禁未启用，更新状态
             AiModel.save_analysis(ip, analysis_text, decision, status='analyzed')
 

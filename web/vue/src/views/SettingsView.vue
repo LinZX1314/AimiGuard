@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,26 +15,45 @@ const whitelist = ref<string[]>([])
 const newIp = ref('')
 const whitelistMsg = ref('')
 
-// 系统配置
-const systemConfig = ref({
-  hfish_url: '',
-  hfish_token: '',
-  switch_ip: '',
-  switch_username: '',
-  switch_password: '',
-  ai_enabled: false,
-  ai_url: '',
-  ai_model: '',
-})
+// 系统配置 - 使用独立的 ref 变量
+const hfish_url = ref('')
+const hfish_token = ref('')
+const switch_ip = ref('')
+const switch_username = ref('')
+const switch_password = ref('')
+const ai_enabled = ref(false)
+const ai_url = ref('')
+const ai_model = ref('')
+const auto_ban = ref(false)
 
 // 加载配置
 async function loadConfig() {
   loading.value = true
   try {
-    const res = await api.get<Partial<typeof systemConfig.value>>('/api/system/config')
-    const configData = res as Partial<typeof systemConfig.value>
-    if (configData) {
-      systemConfig.value = { ...systemConfig.value, ...configData }
+    // 使用 legacy 系统配置接口
+    const res = await api.get<{
+      hfish_url?: string
+      hfish_token?: string
+      switch_ip?: string
+      switch_username?: string
+      switch_password?: string
+      ai_enabled?: boolean
+      ai_url?: string
+      ai_model?: string
+      auto_ban?: boolean
+    }>('/api/system/config')
+    console.log('[Settings] System Config loaded:', res)
+    if (res) {
+      hfish_url.value = res.hfish_url ?? ''
+      hfish_token.value = res.hfish_token ?? ''
+      switch_ip.value = res.switch_ip ?? ''
+      switch_username.value = res.switch_username ?? ''
+      switch_password.value = res.switch_password ?? ''
+      ai_enabled.value = res.ai_enabled ?? false
+      ai_url.value = res.ai_url ?? ''
+      ai_model.value = res.ai_model ?? ''
+      auto_ban.value = res.auto_ban ?? false
+      console.log('[Settings] Config loaded, auto_ban:', auto_ban.value)
     }
   } catch (err) {
     console.error('加载配置失败:', err)
@@ -46,8 +65,22 @@ async function loadConfig() {
 // 保存配置
 async function saveConfig() {
   loading.value = true
+  console.log('[Settings] 保存前 auto_ban 值:', auto_ban.value)
   try {
-    await api.post('/api/system/config', systemConfig.value)
+    // 使用 legacy 系统配置保存接口
+    const payload = {
+      hfish_url: hfish_url.value,
+      hfish_token: hfish_token.value,
+      switch_ip: switch_ip.value,
+      switch_username: switch_username.value,
+      switch_password: switch_password.value,
+      ai_enabled: ai_enabled.value,
+      ai_url: ai_url.value,
+      ai_model: ai_model.value,
+      auto_ban: auto_ban.value,
+    }
+    console.log('[Settings] 发送的 payload:', payload)
+    await api.post('/api/system/config', payload)
     alert('配置保存成功')
   } catch (err) {
     console.error('保存配置失败:', err)
@@ -138,26 +171,28 @@ onMounted(() => {
             <CardTitle>HFish 蜜罐配置</CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="hfish_url">HFish API 地址</Label>
-              <Input
-                id="hfish_url"
-                v-model="systemConfig.hfish_url"
-                placeholder="http://192.168.1.100:4433/api/v1"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="hfish_token">API Token</Label>
-              <Input
-                id="hfish_token"
-                v-model="systemConfig.hfish_token"
-                type="password"
-                placeholder="请输入 HFish API Token"
-              />
-            </div>
-            <Button @click="saveConfig" :disabled="loading">
-              保存配置
-            </Button>
+            <form @submit.prevent="saveConfig" class="space-y-4">
+              <div class="space-y-2">
+                <Label for="hfish_url">HFish API 地址</Label>
+                <Input
+                  id="hfish_url"
+                  v-model="hfish_url"
+                  placeholder="http://192.168.1.100:4433/api/v1"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="hfish_token">API Token</Label>
+                <Input
+                  id="hfish_token"
+                  v-model="hfish_token"
+                  type="password"
+                  placeholder="请输入 HFish API Token"
+                />
+              </div>
+              <Button type="submit" :disabled="loading">
+                保存配置
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </TabsContent>
@@ -169,34 +204,36 @@ onMounted(() => {
             <CardTitle>交换机配置</CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="switch_ip">交换机 IP</Label>
-              <Input
-                id="switch_ip"
-                v-model="systemConfig.switch_ip"
-                placeholder="192.168.1.1"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="switch_username">用户名</Label>
-              <Input
-                id="switch_username"
-                v-model="systemConfig.switch_username"
-                placeholder="admin"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="switch_password">密码</Label>
-              <Input
-                id="switch_password"
-                v-model="systemConfig.switch_password"
-                type="password"
-                placeholder="请输入交换机密码"
-              />
-            </div>
-            <Button @click="saveConfig" :disabled="loading">
-              保存配置
-            </Button>
+            <form @submit.prevent="saveConfig" class="space-y-4">
+              <div class="space-y-2">
+                <Label for="switch_ip">交换机 IP</Label>
+                <Input
+                  id="switch_ip"
+                  v-model="switch_ip"
+                  placeholder="192.168.1.1"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="switch_username">用户名</Label>
+                <Input
+                  id="switch_username"
+                  v-model="switch_username"
+                  placeholder="admin"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="switch_password">密码</Label>
+                <Input
+                  id="switch_password"
+                  v-model="switch_password"
+                  type="password"
+                  placeholder="请输入交换机密码"
+                />
+              </div>
+              <Button type="submit" :disabled="loading">
+                保存配置
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </TabsContent>
@@ -209,34 +246,44 @@ onMounted(() => {
               <CardTitle>AI 配置</CardTitle>
             </CardHeader>
             <CardContent class="space-y-4">
-              <div class="flex items-center space-x-2">
-                <Switch
-                  id="ai_enabled"
-                  v-model:checked="systemConfig.ai_enabled"
-                />
-                <Label for="ai_enabled">启用 AI 功能</Label>
-              </div>
-              <div class="space-y-2">
-                <Label for="ai_url">AI API 地址</Label>
+              <form @submit.prevent="saveConfig" class="space-y-4">
+                <div class="flex items-center space-x-2">
+                  <Switch
+                    id="ai_enabled"
+                    v-model:checked="ai_enabled"
+                  />
+                  <Label for="ai_enabled">启用 AI 功能</Label>
+                </div>
+                <div class="space-y-2">
+                  <Label for="ai_url">AI API 地址</Label>
                 <Input
                   id="ai_url"
-                  v-model="systemConfig.ai_url"
+                  v-model="ai_url"
                   placeholder="https://api.openai.com/v1"
-                  :disabled="!systemConfig.ai_enabled"
+                  :disabled="!ai_enabled"
                 />
               </div>
               <div class="space-y-2">
                 <Label for="ai_model">AI 模型</Label>
                 <Input
                   id="ai_model"
-                  v-model="systemConfig.ai_model"
+                  v-model="ai_model"
                   placeholder="gpt-4"
-                  :disabled="!systemConfig.ai_enabled"
+                  :disabled="!ai_enabled"
                 />
               </div>
-              <Button @click="saveConfig" :disabled="loading">
+              <div class="flex items-center space-x-2">
+                <Switch
+                  id="auto_ban"
+                  v-model:checked="auto_ban"
+                  :disabled="!ai_enabled"
+                />
+                <Label for="auto_ban">AI 自动封禁 IP</Label>
+              </div>
+              <Button type="submit" :disabled="loading">
                 保存配置
               </Button>
+            </form>
             </CardContent>
           </Card>
 
