@@ -88,6 +88,68 @@ def legacy_settings_save():
     return jsonify({'success': True, 'message': '设置已保存', 'status': _legacy_module_status(cfg)})
 
 
+@legacy_bp.route('/system/config', methods=['GET'])
+@require_auth
+def legacy_system_config_get():
+    cfg = _load_cfg()
+    hfish = cfg.get('hfish', {})
+    switches = cfg.get('switches', [])
+    first_switch = switches[0] if switches else {}
+    return ok({
+        'hfish_url': hfish.get('api_base_url', '') or hfish.get('host_port', ''),
+        'hfish_token': hfish.get('api_key', ''),
+        'switch_ip': first_switch.get('host', ''),
+        'switch_username': first_switch.get('username', ''),
+        'switch_password': first_switch.get('password', ''),
+        'ai_enabled': cfg.get('ai', {}).get('enabled', False),
+        'ai_url': cfg.get('ai', {}).get('api_url', ''),
+        'ai_model': cfg.get('ai', {}).get('model', ''),
+    })
+
+
+@legacy_bp.route('/system/config', methods=['POST'])
+@require_auth
+def legacy_system_config_save():
+    body = _body()
+    cfg = _load_cfg()
+
+    hfish = cfg.setdefault('hfish', {})
+    if 'hfish_url' in body:
+        hfish_url = str(body.get('hfish_url', '')).strip()
+        hfish['api_base_url'] = hfish_url
+        if hfish_url and hfish_url.startswith('http'):
+            from urllib.parse import urlparse
+            parsed = urlparse(hfish_url)
+            if parsed.netloc:
+                hfish['host_port'] = parsed.netloc
+    if 'hfish_token' in body:
+        hfish_token = str(body.get('hfish_token', '')).strip()
+        if hfish_token:
+            hfish['api_key'] = hfish_token
+
+    switches = cfg.setdefault('switches', [])
+    if not switches:
+        switches.append({})
+    switch = switches[0]
+    if 'switch_ip' in body:
+        switch['host'] = str(body.get('switch_ip', '')).strip()
+    if 'switch_username' in body:
+        switch['username'] = str(body.get('switch_username', '')).strip()
+    if 'switch_password' in body:
+        switch['password'] = str(body.get('switch_password', '')).strip()
+
+    ai = cfg.setdefault('ai', {})
+    if 'ai_enabled' in body:
+        ai['enabled'] = _as_bool(body.get('ai_enabled', False))
+    if 'ai_url' in body:
+        ai['api_url'] = str(body.get('ai_url', '')).strip()
+    if 'ai_model' in body:
+        ai['model'] = str(body.get('ai_model', '')).strip()
+
+    _save_cfg(cfg)
+    return ok({'success': True})
+
+
 @legacy_bp.route('/nmap/scans', methods=['GET'])
 @require_auth
 def legacy_nmap_scans():

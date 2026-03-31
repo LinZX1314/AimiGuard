@@ -138,26 +138,28 @@ onMounted(() => {
             <CardTitle>HFish 蜜罐配置</CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="hfish_url">HFish API 地址</Label>
-              <Input
-                id="hfish_url"
-                v-model="systemConfig.hfish_url"
-                placeholder="http://192.168.1.100:4433/api/v1"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="hfish_token">API Token</Label>
-              <Input
-                id="hfish_token"
-                v-model="systemConfig.hfish_token"
-                type="password"
-                placeholder="请输入 HFish API Token"
-              />
-            </div>
-            <Button @click="saveConfig" :disabled="loading">
-              保存配置
-            </Button>
+            <form @submit.prevent="saveConfig" class="space-y-4">
+              <div class="space-y-2">
+                <Label for="hfish_url">HFish API 地址</Label>
+                <Input
+                  id="hfish_url"
+                  v-model="systemConfig.hfish_url"
+                  placeholder="http://192.168.1.100:4433/api/v1"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="hfish_token">API Token</Label>
+                <Input
+                  id="hfish_token"
+                  v-model="systemConfig.hfish_token"
+                  type="password"
+                  placeholder="请输入 HFish API Token"
+                />
+              </div>
+              <Button type="submit" :disabled="loading">
+                保存配置
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </TabsContent>
@@ -169,34 +171,36 @@ onMounted(() => {
             <CardTitle>交换机配置</CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="space-y-2">
-              <Label for="switch_ip">交换机 IP</Label>
-              <Input
-                id="switch_ip"
-                v-model="systemConfig.switch_ip"
-                placeholder="192.168.1.1"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="switch_username">用户名</Label>
-              <Input
-                id="switch_username"
-                v-model="systemConfig.switch_username"
-                placeholder="admin"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="switch_password">密码</Label>
-              <Input
-                id="switch_password"
-                v-model="systemConfig.switch_password"
-                type="password"
-                placeholder="请输入交换机密码"
-              />
-            </div>
-            <Button @click="saveConfig" :disabled="loading">
-              保存配置
-            </Button>
+            <form @submit.prevent="saveConfig" class="space-y-4">
+              <div class="space-y-2">
+                <Label for="switch_ip">交换机 IP</Label>
+                <Input
+                  id="switch_ip"
+                  v-model="systemConfig.switch_ip"
+                  placeholder="192.168.1.1"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="switch_username">用户名</Label>
+                <Input
+                  id="switch_username"
+                  v-model="systemConfig.switch_username"
+                  placeholder="admin"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="switch_password">密码</Label>
+                <Input
+                  id="switch_password"
+                  v-model="systemConfig.switch_password"
+                  type="password"
+                  placeholder="请输入交换机密码"
+                />
+              </div>
+              <Button type="submit" :disabled="loading">
+                保存配置
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </TabsContent>
@@ -209,15 +213,16 @@ onMounted(() => {
               <CardTitle>AI 配置</CardTitle>
             </CardHeader>
             <CardContent class="space-y-4">
-              <div class="flex items-center space-x-2">
-                <Switch
-                  id="ai_enabled"
-                  v-model:checked="systemConfig.ai_enabled"
-                />
-                <Label for="ai_enabled">启用 AI 功能</Label>
-              </div>
-              <div class="space-y-2">
-                <Label for="ai_url">AI API 地址</Label>
+              <form @submit.prevent="saveConfig" class="space-y-4">
+                <div class="flex items-center space-x-2">
+                  <Switch
+                    id="ai_enabled"
+                    v-model:checked="systemConfig.ai_enabled"
+                  />
+                  <Label for="ai_enabled">启用 AI 功能</Label>
+                </div>
+                <div class="space-y-2">
+                  <Label for="ai_url">AI API 地址</Label>
                 <Input
                   id="ai_url"
                   v-model="systemConfig.ai_url"
@@ -234,9 +239,10 @@ onMounted(() => {
                   :disabled="!systemConfig.ai_enabled"
                 />
               </div>
-              <Button @click="saveConfig" :disabled="loading">
+              <Button type="submit" :disabled="loading">
                 保存配置
               </Button>
+            </form>
             </CardContent>
           </Card>
 

@@ -507,6 +507,7 @@ onBeforeUnmount(() => {
 }
 
 
+
 :global(html.dark) .world-map-shell__status {
   color: rgb(186 230 253);
   background: rgb(15 23 42 / 0.65);

@@ -99,12 +99,12 @@ const trendData = computed(() => {
       return gradient
     },
     fill: true,
-    tension: 0.4,
-    pointRadius: 4,
+    tension: 0.5, // 平滑曲线
+    pointRadius: 0, // 不显示折点
     pointBackgroundColor: '#ffffff',
     pointBorderColor: '#34d399',
     pointBorderWidth: 2,
-    pointHoverRadius: 6,
+    pointHoverRadius: 0, // 也不要悬浮点
     borderWidth: 2,
   }],
   }

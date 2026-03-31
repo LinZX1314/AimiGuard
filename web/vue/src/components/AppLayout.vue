@@ -429,7 +429,7 @@ const navItems = [
   { title: '总览大屏',   icon: LayoutDashboard, to: '/' },
 
 
-{ title: '蜜罐', icon: Bug,             to: '/hfish' },
+{ title: '蜜罐管理', icon: Bug,             to: '/hfish' },
 
 
   { title: '主机探测',  icon: Radar,           to: '/nmap' },
