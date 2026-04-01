@@ -453,6 +453,128 @@ UTF-16LE 解码结果:
         time.sleep(10.0)
         return result
 
+    # ── ACL策略封禁 ─────────────────────────────────────────────────────
+    if tool_name == "acl_policy_ban":
+        acl_command = arguments.get("acl_command", "")
+
+        if not acl_command:
+            return {"ok": False, "error": "缺少ACL命令"}
+
+        parts = acl_command.strip().split()
+
+        # 判断命令类型
+        if "ip access-list extended" in acl_command.lower():
+            # 进入ACL配置模式命令
+            if len(parts) < 4:
+                return {"ok": False, "error": "命令格式错误，如: ip access-list extended udp"}
+            acl_name = parts[3]
+            result = {
+                "ok": True,
+                "message": f"已进入ACL配置模式: {acl_name}",
+                "data": {
+                    "command": acl_command,
+                    "mode": "config-ext-nacl",
+                    "acl_name": acl_name,
+                    "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "状态": "已执行",
+                },
+            }
+            state.add_result("ban", {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "command": acl_command, "result": result})
+            return result
+
+        elif len(parts) >= 5 and parts[0].isdigit():
+            # 添加ACL规则: 20 deny udp any any eq 4750
+            rule_id = parts[0]
+            action = parts[1].lower()
+            protocol = parts[2].lower()
+            source = parts[3]
+            destination = parts[4]
+
+            if action not in ("deny", "permit"):
+                return {"ok": False, "error": f"不支持的动作: {action}，仅支持 deny/permit"}
+
+            # 解析端口
+            target_port = None
+            operator = None
+            for i, part in enumerate(parts):
+                if part in ("eq", "gt", "lt", "neq") and i + 1 < len(parts):
+                    operator = part
+                    target_port = parts[i + 1]
+                    break
+
+            # 解析目标IP (host x.x.x.x 或 CIDR)
+            target_ip = None
+            if destination.startswith("host "):
+                target_ip = destination.replace("host ", "")
+            elif destination not in ("any",):
+                target_ip = destination
+
+            # 确定封禁目标
+            if target_port:
+                ban_target = target_port
+                ban_type = "port"
+            elif target_ip:
+                ban_target = target_ip
+                ban_type = "ip"
+            else:
+                return {"ok": False, "error": "无法解析目标端口或IP"}
+
+            # 白名单检查
+            whitelist = cfg.get('ai', {}).get('whitelist', []) if cfg else []
+            if ban_target in whitelist:
+                result = {
+                    "ok": True,
+                    "message": f"目标 {ban_target} 在白名单中，已跳过封禁",
+                    "data": {
+                        "command": acl_command,
+                        "rule_id": rule_id,
+                        "ban_target": ban_target,
+                        "ban_type": ban_type,
+                        "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "状态": "已跳过（白名单）",
+                    },
+                }
+                state.add_result("ban", {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "target": ban_target, "type": ban_type, "result": result})
+                return result
+
+            # 执行封禁
+            result = {
+                "ok": True,
+                "message": f"sw(config-ext-nacl)#{rule_id} {action} {protocol} {source} {destination} {'eq ' + target_port if target_port else ''}",
+                "data": {
+                    "command": acl_command,
+                    "rule_id": rule_id,
+                    "action": action,
+                    "protocol": protocol,
+                    "source": source,
+                    "destination": destination,
+                    "operator": operator,
+                    "target_port": target_port,
+                    "target_ip": target_ip,
+                    "ban_target": ban_target,
+                    "ban_type": ban_type,
+                    "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "状态": "已执行",
+                },
+            }
+
+            state.add_result(
+                "ban",
+                {
+                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "command": acl_command,
+                    "target": ban_target,
+                    "type": ban_type,
+                    "result": result,
+                },
+            )
+
+            time.sleep(10.0)
+            return result
+
+        else:
+            return {"ok": False, "error": "ACL命令格式错误，支持: ip access-list extended <name> 或 <rule_id> deny <protocol> <source> <destination> eq <port>"}
+
     # ── 未知工具 ─────────────────────────────────────────────────────────
     return {"ok": False, "error": f"未知应急响应工具: {tool_name}"}
 
@@ -472,7 +594,7 @@ INCIDENT_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全应
 1. 调用 get_traffic_logs 获取流量日志
 2. 调用 get_packet_capture 获取数据包内容
 3. 调用 generate_incident_report 生成报告
-4. 用户确认后调用 apply_ban_policy 执行封禁
+4. 用户确认后调用 apply_ban_policy 或 acl_policy_ban 执行封禁（acl_policy_ban 支持Cisco风格ACL命令，如 'ip access-list extended udp' 进入配置模式，'20 deny udp any any eq 4750' 添加规则）
 
 ## 重要说明
 - 收到任务后**先分析事件内容，输出执行计划表格**，并询问用户"是否开始执行？"
@@ -591,6 +713,7 @@ def create_incident_stream(
             "get_packet_capture": "获取数据包捕获内容，分析攻击特征",
             "generate_incident_report": "生成安全应急响应报告",
             "apply_ban_policy": "执行封禁策略，阻断攻击流量",
+            "acl_policy_ban": "使用Cisco风格ACL命令执行封禁，如 'ip access-list extended udp' 进入配置模式，或 '20 deny udp any any eq 4750' 添加规则",
         }
 
         # LLM 决策：是否调用工具

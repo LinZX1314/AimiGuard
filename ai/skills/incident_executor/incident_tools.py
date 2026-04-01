@@ -101,5 +101,23 @@ def get_incident_tool_definitions() -> list[dict]:
                     },
                 },
             },
+            # ── ACL策略封禁 ──────────────────────────────────────────────────
+            {
+                "type": "function",
+                "function": {
+                    "name": "acl_policy_ban",
+                    "description": "使用Cisco风格ACL命令执行封禁。进入配置模式: ip access-list extended <name>，添加规则: <rule_id> deny <protocol> <source> <destination> eq <port>",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "acl_command": {
+                                "type": "string",
+                                "description": "完整ACL命令，如 'ip access-list extended udp' 或 '20 deny udp any any eq 4750'",
+                            },
+                        },
+                        "required": ["acl_command"],
+                    },
+                },
+            },
         ]
     return _TOOL_DEFS_CACHE
