@@ -407,6 +407,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
 
         try {
           const parsed = JSON.parse(data)
+          console.log('[SSE] 收到事件:', parsed)
           if (parsed.content) { typeQueue += parsed.content; startTypewriter() }
           if (parsed.tool_call) {
             if (typeQueue) {
@@ -415,7 +416,17 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             }
             if (!(assistantMsg as any).tool_calls) (assistantMsg as any).tool_calls = []
             const tcId = parsed.tool_call.id || 'tc_' + Date.now()
-            ;(assistantMsg as any).tool_calls.push({ id: tcId, name: parsed.tool_call.name, description: parsed.tool_call.description, arguments: parsed.tool_call.arguments })
+            console.log('[SSE] tool_call 事件, id=', tcId, '当前数量=', (assistantMsg as any).tool_calls.length)
+            // 去重：如果已存在相同 id 的工具调用，则更新而不是添加
+            const existingIndex = (assistantMsg as any).tool_calls.findIndex((tc: any) => tc.id === tcId)
+            const newToolCall = { id: tcId, name: parsed.tool_call.name, description: parsed.tool_call.description, arguments: parsed.tool_call.arguments }
+            if (existingIndex >= 0) {
+              console.log('[SSE] 去重：更新已有 tool_call, index=', existingIndex)
+              (assistantMsg as any).tool_calls[existingIndex] = newToolCall
+            } else {
+              console.log('[SSE] 新增 tool_call, id=', tcId)
+              ;(assistantMsg as any).tool_calls.push(newToolCall)
+            }
           }
           if (parsed.tool_result) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
@@ -433,7 +444,19 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
               || ''
 
             const resultStr = typeof innerResult === 'string' ? innerResult : JSON.stringify(innerResult, null, 2)
-            ;(assistantMsg as any).tool_results.push({ name: (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool', tool_call_id: tcId, content: resultStr })
+            const toolName = (assistantMsg as any).tool_calls?.find((tc: any) => tc.id === tcId)?.name || 'tool'
+            console.log('[SSE] tool_result 事件, tcId=', tcId, '当前结果数量=', (assistantMsg as any).tool_results?.length || 0)
+            
+            // 去重：如果已存在相同 tool_call_id 的工具结果，则更新而不是添加
+            const existingIndex = (assistantMsg as any).tool_results.findIndex((tr: any) => tr.tool_call_id === tcId)
+            const newToolResult = { name: toolName, tool_call_id: tcId, content: resultStr }
+            if (existingIndex >= 0) {
+              console.log('[SSE] 去重：更新已有 tool_result, index=', existingIndex)
+              (assistantMsg as any).tool_results[existingIndex] = newToolResult
+            } else {
+              console.log('[SSE] 新增 tool_result, tcId=', tcId)
+              ;(assistantMsg as any).tool_results.push(newToolResult)
+            }
           }
           // 演练报告内容 - 直接作为 post_content 显示
           if (parsed.drill_report) {

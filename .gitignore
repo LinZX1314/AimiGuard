@@ -58,3 +58,5 @@ fscan_result_*.json
 docs/
 screenshots
 web/vue/public/uploads/camera/
+
+golang

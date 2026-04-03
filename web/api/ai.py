@@ -525,7 +525,7 @@ def ai_chat_stream():
         # 普通对话只使用普通工具，演练工具在演练模式单独处理
         all_tools_normal = AI_TOOLS
 
-        # 第一轮：LLM 判断内容或调用工具
+        # 第一轮：LLM 判断内容或调用工具（只收集，不发送 tool_call，统一由 _run_agent_loop 处理）
         for chunk, error, tool_call in stream_openai_chat_with_tools(
             build_openai_messages(history), cfg_now, tools=all_tools_normal
         ):
@@ -537,7 +537,7 @@ def ai_chat_stream():
                 yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
             if tool_call:
                 tool_calls_received.append(tool_call)
-                yield f"data: {json.dumps({'tool_call': tool_call}, ensure_ascii=False)}\n\n"
+                # 注意：这里不发送 tool_call，统一由 _run_agent_loop 发送，避免重复
 
         # 如果没有工具调用，保存回复并结束
         if not tool_calls_received:
@@ -611,9 +611,46 @@ def ai_chat_stream():
             yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
             return
 
-        # 执行普通工具并处理（支持多轮循环）
-        for chunk in _run_agent_loop(history, all_tools_normal, cfg_now, sid):
-            yield f"data: {chunk}\n\n"
+        # 第一轮已收集到 tool_calls，直接执行工具（不再进入 _run_agent_loop 重新调用 LLM，避免双重调用导致变慢）
+        for tc in tool_calls_received:
+            tool_name = tc["name"]
+            tool_args = tc["arguments"]
+
+            # 发送 tool_call 给前端
+            yield f"data: {json.dumps({'tool_call': {'id': tc['id'], 'name': tool_name, 'arguments': tool_args}}, ensure_ascii=False)}\n\n"
+
+            # 执行工具
+            res = execute_tool(tool_name, tool_args, cfg_now)
+
+            # 发送结果
+            display = res[:800] + "..." if len(res) > 800 else res
+            yield f"data: {json.dumps({'tool_result': {'id': tc['id'], 'tool_call_id': tc['id'], 'name': tool_name, 'result': display, 'full_result': res, 'status': 'done'}}, ensure_ascii=False)}\n\n"
+
+            # 保存到 history
+            history.append({"role": "tool", "tool_call_id": tc["id"], "content": res, "ts": _now_iso()})
+            try:
+                AiModel.save_message(sid, "tool", res, tool_call_id=tc["id"])
+            except Exception:
+                pass
+
+        # 工具执行完后，让 LLM 生成最终回复
+        final_reply = []
+        for chunk, error, _ in stream_openai_chat_with_tools(
+            build_openai_messages(history), cfg_now, tools=all_tools_normal
+        ):
+            if error:
+                yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
+                return
+            if chunk:
+                final_reply.append(chunk)
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+
+        # 保存最终回复
+        if final_reply:
+            final_content = "".join(final_reply)
+            history.append({"role": "assistant", "content": final_content, "ts": _now_iso()})
+            AiModel.save_message(sid, "assistant", final_content)
+
         yield f"data: {json.dumps({'done': True, 'session_id': sid}, ensure_ascii=False)}\n\n"
 
     return Response(
@@ -684,6 +721,18 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int):
             )
             break
 
+        # ─── 发送 tool_call 给前端（先发送，让用户看到"执行中"）
+        for tc in tool_calls:
+            yield json.dumps(
+                {
+                    "tool_call": {
+                        "id": tc["id"],
+                        "name": tc["name"],
+                        "arguments": tc["arguments"],
+                    }
+                }
+            )
+
         # 保存 assistant tool_call 消息
         history.append(
             {
@@ -732,18 +781,6 @@ def _run_agent_loop(history: list, tools: list, cfg: dict, sid: int):
         for tc in tool_calls:
             tool_name = tc["name"]
             tool_args = tc["arguments"]
-
-            # 发送工具调用开始
-            yield json.dumps(
-                {
-                    "tool_call": {
-                        "id": tc["id"],
-                        "name": tool_name,
-                        "arguments": tool_args,
-                        "status": "executing",
-                    }
-                }
-            )
 
             # 执行工具
             res = _execute_tool(tool_name, tool_args)
