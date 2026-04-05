@@ -421,7 +421,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             const existingIndex = (assistantMsg as any).tool_calls.findIndex((tc: any) => tc.id === tcId)
             const newToolCall = { id: tcId, name: parsed.tool_call.name, description: parsed.tool_call.description, arguments: parsed.tool_call.arguments }
             if (existingIndex >= 0) {
-              console.log('[SSE] 去重：更新已有 tool_call, index=', existingIndex)
+              // [SSE] 去重：更新已有 tool_call, index= existingIndex
               (assistantMsg as any).tool_calls[existingIndex] = newToolCall
             } else {
               console.log('[SSE] 新增 tool_call, id=', tcId)
@@ -451,7 +451,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
             const existingIndex = (assistantMsg as any).tool_results.findIndex((tr: any) => tr.tool_call_id === tcId)
             const newToolResult = { name: toolName, tool_call_id: tcId, content: resultStr }
             if (existingIndex >= 0) {
-              console.log('[SSE] 去重：更新已有 tool_result, index=', existingIndex)
+              // [SSE] 去重：更新已有 tool_result, index= existingIndex
               (assistantMsg as any).tool_results[existingIndex] = newToolResult
             } else {
               console.log('[SSE] 新增 tool_result, tcId=', tcId)
