@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
 
         <Textarea
           v-model="input"
-          placeholder="给 AimiGuard AI 发送消息..."
+          placeholder="给 玄枢 AI 发送消息..."
           rows="4"
           class="border-none bg-transparent focus-visible:ring-0 min-h-[88px] max-h-[150px] resize-none text-[15px] p-2 placeholder:text-muted-foreground/50 transition-all font-medium"
           @keydown.enter.prevent="handleSend"

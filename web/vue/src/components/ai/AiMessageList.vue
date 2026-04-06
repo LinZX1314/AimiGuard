@@ -145,7 +145,7 @@ function messageKey(message: Message, index: number): string {
         <div class="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-full flex items-center justify-center text-muted-foreground shadow-2xl">
           <Bot :size="40" class="text-primary/80" />
         </div>
-        <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">AimiGuard AI 助手</h3>
+        <h3 class="text-2xl font-semibold mb-2 tracking-wide text-foreground">玄枢 AI 助手</h3>
         <p class="text-muted-foreground text-[15px] max-w-sm mx-auto leading-relaxed">输入你的问题开始对话，支持自然语言安全分析与排查。</p>
       </div>
 
