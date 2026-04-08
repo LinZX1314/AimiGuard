@@ -80,12 +80,12 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
   display: block;
   margin-top: 8px;
   font-size: 14px;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
 }
 
 .device-panel-card p {
   margin: 8px 0 0;
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   text-transform: lowercase;
 }
@@ -109,7 +109,7 @@ const honeypotNode = computed(() => topologyState.value.nodes.find((node) => nod
 }
 
 .device-panel-card__list span {
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
 }
 
 .device-panel-card__list strong {

@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import shutil
 import subprocess
 import socket
@@ -120,6 +121,9 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
         vulnerable_creds = []
         service_found = False
 
+        # 调试：打印原始输出
+        print(f"[DEBUG] fscan {service_type} output:\n{output[:2000]}")
+
         for line in output.split("\n"):
             line = line.strip()
             if not line:
@@ -127,15 +131,25 @@ def run_fscan_bruteforce(target: str, service_type: str, port: int = None) -> di
 
             # fscan 检测到弱口令时的输出特征
             if any(
-                kw in line.lower() for kw in ["weak", "password", "success", "login"]
+                kw in line.lower() for kw in ["weak", "password", "success", "login", "ssh", "+"]
             ):
                 service_found = True
-                # 尝试解析 [+] user password 格式
+                # 尝试解析 [+] user/password 或 [*] user/password 格式
                 if "[+]" in line or "[*]" in line:
                     parts = line.split()
                     for part in parts:
                         if "/" in part and not part.startswith("-"):
                             vulnerable_creds.append(part)
+                # 也尝试直接匹配 user/password 格式
+                cred_matches = re.findall(r'(\w+/\w+)', line)
+                vulnerable_creds.extend(cred_matches)
+                # fscan 输出格式: User:root Pass:admin123
+                user_pass_matches = re.findall(r'User:(\w+)\s+Pass:(\w+)', line)
+                for username, password in user_pass_matches:
+                    vulnerable_creds.append(f"{username}/{password}")
+
+        # 去重
+        vulnerable_creds = list(dict.fromkeys(vulnerable_creds))
 
         if vulnerable_creds:
             return {

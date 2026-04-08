@@ -146,7 +146,7 @@ def run_fscan(ip_range, timeout=6000):
                     'mac_address': '',
                     'vendor': '',
                     'hostname': '',
-                    'state': 'alive',
+                    'state': 'up',
                     'os_type': '',
                     'os_accuracy': '',
                     'os_tags': 'unknown',

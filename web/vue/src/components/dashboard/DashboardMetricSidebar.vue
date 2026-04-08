@@ -110,10 +110,12 @@ const trendData = computed(() => {
   }
 })
 
-const trendOptions = {
+const isDark = computed(() => uiStore.theme === 'dark')
+
+const trendOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { 
+  plugins: {
     legend: { display: false },
     tooltip: {
       mode: 'index' as const,
@@ -121,17 +123,17 @@ const trendOptions = {
     }
   },
   scales: {
-    x: { 
-      grid: { display: false }, 
-      ticks: { 
-        color: '#94a3b8', 
+    x: {
+      grid: { display: false },
+      ticks: {
+        color: isDark.value ? '#94a3b8' : 'hsl(var(--muted-foreground))',
         font: { size: 10 },
         maxRotation: 0,
         maxTicksLimit: 6
       },
       border: { display: false }
     },
-    y: { 
+    y: {
       display: false,
       beginAtZero: true
     },
@@ -149,7 +151,7 @@ const trendOptions = {
       right: 15
     }
   }
-}
+}))
 
 function getChainStatus(key: string): boolean {
   return props.payload.chain_status[key] ?? false

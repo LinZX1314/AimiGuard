@@ -1727,7 +1727,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  color: var(--primary);
+  color: hsl(var(--primary));
   border: 1px solid hsl(var(--primary) / 0.2);
   background: hsl(var(--primary) / 0.08);
 }
@@ -1780,7 +1780,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
 .switch-head__reload {
   border-color: var(--switch-border);
   background: rgba(125, 125, 125, 0.05);
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   gap: 10px;
 }
 
@@ -1885,7 +1885,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
   padding: 0;
   background: none;
   border: 0;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
 }
 
 .switch-port__jack {
@@ -2066,7 +2066,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
   padding: 0 10px;
   border-color: var(--border);
   background: transparent;
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
 }
 
 .switch-toggle-group {
@@ -2079,7 +2079,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
   padding: 0 12px;
   border-color: var(--border);
   background: var(--muted);
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
 }
 
 .switch-toggle--danger.switch-toggle--active {
@@ -2099,7 +2099,7 @@ class="w-full rounded-md border border-primary/25 bg-slate-200/76 px-3 py-2 text
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--input);
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   padding: 0 14px;
 }
 

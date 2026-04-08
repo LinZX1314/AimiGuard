@@ -21,7 +21,7 @@
   },
   "switches": [
     {
-      "host": "192.168.0.2",
+      "host": "192.168.0.1",
       "port": 23,
       "password": "admin",
       "acl_number": 30
@@ -33,7 +33,8 @@
     ],
     "fscan_timeout": 6000,
     "scan_interval": 604800,
-    "scan_enabled": true
+    "scan_enabled": true,
+    "fake_ips": []
   },
   "workflow": {
     "enabled": true,

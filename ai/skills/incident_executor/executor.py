@@ -391,7 +391,7 @@ UTF-16LE 解码结果:
         # 返回提示词，告诉 AI 封禁已执行
         result = {
             "ok": True,
-            "message": f"已对{'端口 ' + target if policy_type == 'port' else 'IP ' + target}执行封禁策略，攻击流量将被阻断",
+            "message": f"已对{'端口 ' + str(target) if policy_type == 'port' else 'IP ' + str(target)}执行封禁策略，攻击流量将被阻断",
             "data": {
                 "target": target,
                 "policy_type": policy_type,
@@ -546,7 +546,7 @@ INCIDENT_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全应
 
 ## 核心规则
 1. 收到安全事件后，**先用文字分析并列出执行计划表格**，询问用户确认后再执行
-2. 用户回复"开始"、"确认"或"继续"后，才开始按顺序调用工具
+2. 用户回复"开始"、"确认"、"继续"、"修复"后，才开始按顺序调用工具
 3. 每步工具执行完毕，根据结果决定下一步，直到 generate_incident_report 执行完毕
 4. 报告生成后，**必须询问用户是否同意执行封禁策略**
 
@@ -556,12 +556,19 @@ INCIDENT_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全应
 3. 调用 generate_incident_report 生成报告
 4. 用户确认后调用 apply_ban_policy 或 acl_policy_ban 执行封禁（acl_policy_ban 支持Cisco风格ACL命令，如 'ip access-list extended udp' 进入配置模式，'20 deny udp any any eq 4750' 添加规则）
 
+## 极域漏洞处置（重要）
+当用户说"修复"时，**立即调用 apply_ban_policy 工具**，参数为：
+- target: 4705（极域软件使用的端口）
+- policy_type: port（端口封禁）
+**不需要询问用户，直接执行封禁！**
+
 ## 重要说明
 - 收到任务后**先分析事件内容，输出执行计划表格**，并询问用户"是否开始执行？"
 - 用户确认后，才开始调用工具
 - 每步工具执行完毕看结果再决定下一步工具
 - 所有工具调用完毕后才输出总结文字
-- 报告生成后必须询问用户是否执行封禁策略"""
+- 报告生成后必须询问用户是否执行封禁策略
+- **当用户明确说"修复"时，立即执行端口封禁，不要询问！**"""
 
 
 # ─── 主执行器 ────────────────────────────────────────────────────────────────
@@ -853,7 +860,7 @@ def create_incident_stream(
                 for i in range(0, len(report_content), chunk_size):
                     chunk = report_content[i:i + chunk_size]
                     yield (json.dumps({"incident_report_chunk": chunk}) + "\n\n")
-                    time.sleep(0.3)
+                    time.sleep(0.1)
 
         # 发送步骤完成事件
         if tool_calls:

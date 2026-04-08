@@ -85,7 +85,6 @@ def _analyze_document(doc_content: str) -> dict:
         "web": ["web", "http", "https", "网站", "80", "443", "8080", "8443"],
         "ssh": ["ssh", "22", "远程登录", "linux", "服务器"],
         "rdp": ["rdp", "3389", "远程桌面", "windows"],
-        "mysql": ["mysql", "3306", "数据库", "db", "mariadb"],
         "redis": ["redis", "6379", "缓存"],
         "mongodb": ["mongodb", "27017", "nosql"],
         "ftp": ["ftp", "21", "文件传输"],
@@ -103,7 +102,7 @@ def _analyze_document(doc_content: str) -> dict:
 
     # 如果没找到明确服务，默认检查常见服务
     if not found_services:
-        found_services = ["web", "ssh", "rdp", "mysql"]
+        found_services = ["web", "ssh", "rdp"]
 
     # ── 提取演练要求 ────────────────────────────────────────────────────
     requirement_patterns = [
@@ -133,8 +132,6 @@ def _analyze_document(doc_content: str) -> dict:
         action_plan_lines.append("2. bruteforce_ssh → SSH检测")
     if "rdp" in found_services:
         action_plan_lines.append("3. bruteforce_rdp → RDP检测")
-    if "mysql" in found_services:
-        action_plan_lines.append("4. bruteforce_mysql → MySQL检测")
 
     action_plan_lines.extend(
         [
@@ -276,6 +273,21 @@ def _execute_drill_tool(
             hosts = result.get("主机列表", [])
             vuln_list = result.get("漏洞列表", [])
 
+            # 处理 Fallback 格式（概要字段）
+            if not hosts and result.get("概要"):
+                for item in result.get("概要", []):
+                    if ": " in item:
+                        ip, ports = item.split(": ", 1)
+                        state.add_result(
+                            "finding",
+                            {
+                                "ip": ip.strip(),
+                                "ports": ports.strip(),
+                                "type": "open_ports",
+                                "severity": "info",
+                            },
+                        )
+
             for h in hosts:
                 ports_str = h.get("ports", "")
                 if ports_str:
@@ -343,11 +355,10 @@ def _execute_drill_tool(
     if tool_name in (
         "bruteforce_ssh",
         "bruteforce_rdp",
-        "bruteforce_mysql",
     ):
         target_ip = arguments.get("target_ip", "")
         port = arguments.get(
-            "port", 22 if "ssh" in tool_name else (3389 if "rdp" in tool_name else 3306)
+            "port", 22 if "ssh" in tool_name else 3389
         )
 
         if not target_ip:
@@ -576,15 +587,24 @@ def _generate_markdown_report(
         r = sr.get("result", {})
         hosts = r.get("主机列表", [])
         vulns = r.get("漏洞列表", [])
+        summary = r.get("概要", [])
         report += f"""
 ### 扫描目标: `{sr.get("target", "N/A")}` @ {sr.get("time", "N/A")}
-- **发现主机**: {len(hosts)} 台
+- **发现主机**: {len(hosts) if hosts else len(summary)} 台
 - **发现漏洞**: {len(vulns)} 个
 
 **存活主机**:
 """
-        for h in hosts[:20]:
-            report += f"- `{h.get('ip', 'N/A')}` - 端口: {h.get('ports', 'N/A')}\n"
+        if hosts:
+            for h in hosts[:20]:
+                report += f"- `{h.get('ip', 'N/A')}` - 端口: {h.get('ports', 'N/A')}\n"
+        elif summary:
+            for item in summary[:20]:
+                if ": " in item:
+                    ip, ports = item.split(": ", 1)
+                    report += f"- `{ip.strip()}` - 端口: {ports.strip()}\n"
+                else:
+                    report += f"- {item}\n"
 
     report += f"""
 ---
@@ -642,7 +662,20 @@ def _generate_markdown_report(
 """
         if r.get("vulnerable_creds"):
             for cred in r.get("vulnerable_creds", []):
-                report += f"- **弱口令**: `{cred.get('username')}` / `{cred.get('password')}`\n"
+                # 兼容两种格式：fscan返回{"credential": "user/password"} 和 Python返回{"username": "x", "password": "y"}
+                if isinstance(cred, dict):
+                    if cred.get("credential"):
+                        # fscan格式：{"credential": "user/password"}
+                        parts = cred.get("credential", "").split("/", 1)
+                        username = parts[0] if len(parts) > 0 else "?"
+                        password = parts[1] if len(parts) > 1 else "?"
+                        report += f"- **弱口令**: `{username}` / `{password}`\n"
+                    elif cred.get("username"):
+                        # Python格式：{"username": "x", "password": "y"}
+                        report += f"- **弱口令**: `{cred.get('username')}` / `{cred.get('password')}`\n"
+                elif isinstance(cred, str):
+                    # 字符串格式：直接输出
+                    report += f"- **弱口令**: `{cred}`\n"
 
     report += """
 ---
@@ -675,7 +708,7 @@ def _generate_markdown_report(
         if top_services:
             report += f"**热门攻击服务**:\n"
             for svc in top_services[:5]:
-                svc_name = svc if isinstance(svc, str) else svc.get("service", "N/A")
+                svc_name = svc if isinstance(svc, str) else svc.get("name", "N/A")
                 svc_count = svc.get("count", svc.get("次数", 0)) if isinstance(svc, dict) else "N/A"
                 report += f"- {svc_name}: {svc_count}次\n"
             report += "\n"
@@ -693,7 +726,7 @@ def _generate_markdown_report(
         if records:
             report += f"**最近攻击记录**:\n"
             for rec in records[:10]:
-                report += f"- **{rec.get('攻击IP', 'N/A')}** ({rec.get('来源地区', '未知')}) @ {rec.get('攻击时间', 'N/A')}\n"
+                report += f"- **{rec.get('攻击IP', 'N/A')}** ({rec.get('服务', '未知')}) @ {rec.get('攻击时间', rec.get('time', 'N/A'))}\n"
             report += "\n"
 
     if state.ban_records:
@@ -781,9 +814,8 @@ DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent
 2. 扫描发现端口 80/443/8080/8443 的主机 → 调用 **web_screenshot** 截图
 3. 扫描发现端口 22 的主机 → 调用 **bruteforce_ssh**
 4. 扫描发现端口 3389 的主机 → 调用 **bruteforce_rdp**
-5. 扫描发现端口 3306 的主机 → 调用 **bruteforce_mysql**
-6. 所有检测完成后 → 调用 **honeypot_audit**
-7. 最后 → 调用 **generate_report** 生成报告
+5. 所有检测完成后 → 调用 **honeypot_audit**
+6. 最后 → 调用 **generate_report** 生成报告
 
 ## 重要说明
 - 收到任务后**先分析文档内容，输出执行计划表格**，并询问用户"是否开始执行？回复'开始'或'确认'即可"
@@ -982,7 +1014,6 @@ def create_drill_stream(
                 "web_screenshot": "对Web服务页面截图，验证服务可访问性",
                 "bruteforce_ssh": "检测SSH服务弱口令（端口22）",
                 "bruteforce_rdp": "检测RDP服务弱口令（端口3389）",
-                "bruteforce_mysql": "检测MySQL服务弱口令（端口3306）",
                 "honeypot_audit": "查询HFish蜜罐攻击日志，审计安全事件",
                 "generate_report": "生成安全演练报告，总结检测结果",
                 "get_local_ip": "获取本机IP地址",

@@ -746,7 +746,21 @@ def _run_fscan(args: dict, cfg: dict = None) -> dict:
                 with open(json_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                     if content.strip():
-                        scan_data = json.loads(content)
+                        # fscan 输出是 JSON Lines 格式（每行一个JSON），尝试解析
+                        try:
+                            scan_data = json.loads(content)
+                        except json.JSONDecodeError:
+                            # JSON Lines 格式：使用 }\n{ 分隔符分割
+                            items = []
+                            content_replaced = content.replace('}\n{', '}§{')
+                            for chunk in content_replaced.split('§'):
+                                chunk = chunk.strip()
+                                if chunk:
+                                    try:
+                                        items.append(json.loads(chunk))
+                                    except json.JSONDecodeError:
+                                        continue
+                            scan_data = items if items else None
             except Exception:
                 pass
             finally:
@@ -760,26 +774,54 @@ def _run_fscan(args: dict, cfg: dict = None) -> dict:
             hosts = []
             vulns = []
 
-            # 解析主机列表
-            items = scan_data if isinstance(scan_data, list) else scan_data.get('data', [])
-            for h in items:
-                host_info = {
-                    'ip': h.get('ip', ''),
-                    'hostname': h.get('host', ''),
-                }
-                ports = h.get('ports', [])
-                if ports:
-                    host_info['ports'] = ','.join(str(p.get('port', '')) for p in ports if p.get('port'))
-                hosts.append(host_info)
+            # 判断是否为 JSON Lines 格式（每行一个JSON对象）
+            if isinstance(scan_data, list) and len(scan_data) > 0:
+                # JSON Lines 格式：解析 fscan 的输出格式
+                host_ports = {}
+                for item in scan_data:
+                    item_type = item.get('type', '')
+                    target_ip = item.get('target', '')
+                    if not target_ip:
+                        continue
+                    if item_type == 'HOST':
+                        if target_ip not in host_ports:
+                            host_ports[target_ip] = []
+                    elif item_type == 'PORT':
+                        port = item.get('details', {}).get('port')
+                        if port and target_ip not in host_ports:
+                            host_ports[target_ip] = []
+                        if port:
+                            host_ports.setdefault(target_ip, []).append(str(port))
+                        elif target_ip not in host_ports:
+                            host_ports.setdefault(target_ip, [])
 
-            # 解析漏洞列表
-            for v in scan_data.get('vulns', []) if isinstance(scan_data, dict) else []:
-                vulns.append({
-                    'ip': v.get('ip', ''),
-                    'port': v.get('port', ''),
-                    'service': v.get('type', ''),
-                    'vuln': v.get('info', ''),
-                })
+                for ip in sorted(host_ports.keys()):
+                    hosts.append({
+                        'ip': ip,
+                        'hostname': '',
+                        'ports': ','.join(sorted(host_ports[ip], key=lambda x: int(x) if x.isdigit() else 0)) if host_ports[ip] else ''
+                    })
+            else:
+                # 旧格式：解析主机列表
+                items = scan_data if isinstance(scan_data, list) else scan_data.get('data', [])
+                for h in items:
+                    host_info = {
+                        'ip': h.get('ip', ''),
+                        'hostname': h.get('host', ''),
+                    }
+                    ports = h.get('ports', [])
+                    if ports:
+                        host_info['ports'] = ','.join(str(p.get('port', '')) for p in ports if p.get('port'))
+                    hosts.append(host_info)
+
+                # 解析漏洞列表
+                for v in scan_data.get('vulns', []) if isinstance(scan_data, dict) else []:
+                    vulns.append({
+                        'ip': v.get('ip', ''),
+                        'port': v.get('port', ''),
+                        'service': v.get('type', ''),
+                        'vuln': v.get('info', ''),
+                    })
 
             return {
                 'ok': True,

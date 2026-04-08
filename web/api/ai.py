@@ -288,8 +288,8 @@ def ai_chat_stream():
     is_incident_mode = "上课" in message
     incident_state: IncidentState | None = None
 
-    # 检查是否是继续执行演练的确认消息
-    CONFIRM_MSGS = {"开始", "继续", "确认", "开始执行", "继续执行"}
+    # 检查是否是继续执行演练/应急响应的确认消息
+    CONFIRM_MSGS = {"开始", "继续", "确认", "开始执行", "继续执行", "修复"}
     is_confirm_msg = message.strip() in CONFIRM_MSGS
 
     # 1. 确定会话 ID

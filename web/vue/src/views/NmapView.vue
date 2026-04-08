@@ -53,6 +53,11 @@ const search   = ref('')
 const vendorFlt= ref<string>("ALL")
 const currentScanId = ref<string>("NONE")
 
+// 探测地址配置
+const probeIps = ref<string[]>([])
+const probeIpPorts = ref<Record<string, number[]>>({})
+const probeIpHostnames = ref<Record<string, string>>({})
+
 // Pagination
 const page     = ref(1)
 const pageSize = ref(50)
@@ -74,6 +79,11 @@ const gallerySearch = ref('')
 const galleryPreviewDlg = ref(false)
 const galleryPreviewImg = ref('')
 const galleryPreviewTitle = ref('')
+
+// 探测地址配置弹窗
+const probeIpDlg = ref(false)
+const probeIpInput = ref('')
+const probeIpPortsInput = ref('')
 
 const filteredGalleryScreenshots = computed(() => {
   if (!gallerySearch.value) return galleryScreenshots.value
@@ -127,8 +137,28 @@ async function loadHosts() {
     return await api.get<any>(url)
   })
   if (d) {
-    hosts.value = d.items ?? (Array.isArray(d) ? d : (d.data ?? []))
-    total.value = d.total ?? hosts.value.length
+    let realHosts = d.items ?? (Array.isArray(d) ? d : (d.data ?? []))
+    total.value = d.total ?? realHosts.length
+
+    // 合并探测地址到主机列表
+    if (probeIps.value.length > 0) {
+      const probeHosts = probeIps.value.map(ip => ({
+        id: `probe_${ip}`,
+        ip: ip,
+        hostname: probeIpHostnames.value[ip] || '',
+        state: 'up',
+        vendor: '',
+        open_ports: probeIpPorts.value[ip] || [80, 443],
+        mac_address: '',
+        os_type: 'Unknown',
+        os_accuracy: 0,
+        os_tags: 'unknown'
+      }))
+      realHosts = [...realHosts, ...probeHosts]
+      total.value += probeHosts.length
+    }
+
+    hosts.value = realHosts
     const online = hosts.value.filter(h => h.state === 'up')
     stats.value.online = online.length
   }
@@ -300,8 +330,66 @@ function viewGalleryScreenshot(sh: any) {
   galleryPreviewDlg.value = true
 }
 
+// 探测地址配置函数
+function loadProbeIpConfig() {
+  try {
+    const saved = localStorage.getItem('nmap_probe_ips')
+    if (saved) {
+      const data = JSON.parse(saved)
+      probeIps.value = data.ips || []
+      probeIpPorts.value = data.ports || {}
+      probeIpHostnames.value = data.hostnames || {}
+    }
+  } catch {}
+}
+
+function openProbeIpDlg() {
+  probeIpInput.value = probeIps.value.join(',')
+  probeIpPortsInput.value = Object.entries(probeIpPorts.value)
+    .map(([ip, ports]) => `${ip}:${(ports as number[]).join(',')}`)
+    .join(';')
+  probeIpDlg.value = true
+}
+
+function saveProbeIpConfig() {
+  // 解析IP列表
+  const ips = probeIpInput.value.split(',').map(s => s.trim()).filter(s => s)
+  probeIps.value = ips
+
+  // 解析端口配置
+  const ports: Record<string, number[]> = {}
+  const hostnames: Record<string, string> = {}
+  const portLines = probeIpPortsInput.value.split(';')
+  for (const line of portLines) {
+    const parts = line.split(':').map(s => s.trim())
+    const ip = parts[0]
+    if (ip && parts[1]) {
+      ports[ip] = parts[1].split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+    }
+    if (ip && parts[2]) {
+      hostnames[ip] = parts[2]
+    }
+  }
+  probeIpPorts.value = ports
+  probeIpHostnames.value = hostnames
+
+  // 保存到 localStorage
+  localStorage.setItem('nmap_probe_ips', JSON.stringify({
+    ips: probeIps.value,
+    ports: probeIpPorts.value,
+    hostnames: probeIpHostnames.value
+  }))
+
+  probeIpDlg.value = false
+  loadHosts()
+}
+
 onUnmounted(() => clearInterval(progressTimer))
-onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") await loadHosts() })
+onMounted(async () => {
+  loadProbeIpConfig()
+  await loadScans()
+  if (currentScanId.value !== "NONE") await loadHosts()
+})
 </script>
 
 <template>
@@ -335,6 +423,15 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
           >
             <Trash2 :size="15" class="mr-2" />
             清理扫描历史
+          </Button>
+
+          <Button
+            variant="outline"
+            @click="openProbeIpDlg"
+            class="border-primary/40 text-primary hover:bg-primary/10"
+          >
+            <Monitor :size="15" class="mr-2" />
+            探测地址
           </Button>
 
           <div class="flex-1"></div>
@@ -420,14 +517,14 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
                       >{{ h.ip }}</span>
                     </div>
                   </td>
-                  <td class="py-3 px-4 text-slate-300 font-medium">{{ h.hostname || '-' }}</td>
+                  <td class="py-3 px-4 text-foreground font-medium">{{ h.hostname || '-' }}</td>
                   <td class="py-3 px-4">
-                    <div class="max-w-[200px] truncate text-xs text-slate-400 font-mono" :title="h.open_ports?.join(', ')">
+                    <div class="max-w-[200px] truncate text-xs text-muted-foreground font-mono" :title="h.open_ports?.join(', ')">
                       {{ Array.isArray(h.open_ports) ? h.open_ports.join(', ') : h.open_ports || '-' }}
                     </div>
                   </td>
                   <td class="py-3 px-4">
-                    <Button variant="ghost" size="icon" @click="openDetail(h)" class="h-8 w-8 text-slate-400 hover:text-primary hover:bg-primary/10">
+                    <Button variant="ghost" size="icon" @click="openDetail(h)" class="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
                       <Info class="h-4 w-4" />
                     </Button>
                   </td>
@@ -648,6 +745,59 @@ onMounted(async () => { await loadScans(); if (currentScanId.value !== "NONE") a
             截图加载中...
           </div>
         </ScrollArea>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 探测地址配置弹窗 -->
+    <Dialog v-model:open="probeIpDlg">
+      <DialogContent class="sm:max-w-[500px] bg-background border-border text-foreground p-0 overflow-hidden">
+        <div class="p-6 bg-gradient-to-r from-muted/70 to-primary/10 border-b border-border/60">
+          <DialogTitle class="flex items-center gap-3 text-xl">
+            <div class="h-10 w-10 flex items-center justify-center bg-primary/20 rounded-xl">
+              <Monitor class="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p class="text-[10px] uppercase tracking-widest text-primary/70 font-bold mb-0.5">网络探测</p>
+              <h2 class="font-bold">配置探测地址</h2>
+            </div>
+          </DialogTitle>
+        </div>
+
+        <div class="p-6 space-y-6">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-muted-foreground">IP地址（逗号分隔）</label>
+            <Input
+              v-model="probeIpInput"
+              placeholder="例如: 192.168.1.0/24"
+              class="bg-black/20 border-border/40"
+            />
+            <p class="text-xs text-muted-foreground/60">支持单个IP或IP段</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-muted-foreground">端口配置（可选）</label>
+            <Input
+              v-model="probeIpPortsInput"
+              placeholder="80,443,8080"
+              class="bg-black/20 border-border/40"
+            />
+            <p class="text-xs text-muted-foreground/60">格式: 端口1,端口2</p>
+          </div>
+
+          <div v-if="probeIps.length > 0" class="p-3 bg-muted/30 rounded-lg border border-border/40">
+            <p class="text-xs font-medium text-muted-foreground mb-2">当前探测地址:</p>
+            <div class="flex flex-wrap gap-2">
+              <Badge v-for="ip in probeIps" :key="ip" variant="outline" class="bg-primary/10 text-primary border-primary/20">
+                {{ ip }}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 bg-muted/30 border-t border-border/60 flex justify-end gap-3">
+          <Button variant="secondary" @click="probeIpDlg = false" class="bg-muted border-border hover:bg-muted/70">取消</Button>
+          <Button @click="saveProbeIpConfig" class="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">保存配置</Button>
+        </div>
       </DialogContent>
     </Dialog>
   </div>
