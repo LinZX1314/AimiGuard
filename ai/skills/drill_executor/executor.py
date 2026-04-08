@@ -333,6 +333,7 @@ def _execute_drill_tool(
                     "port": port,
                     "url": url,
                     "screenshot_url": result.get("screenshot_url", ""),
+                    "screenshot_path": result.get("screenshot_path", ""),
                 },
             )
 
@@ -488,6 +489,28 @@ def _execute_drill_tool(
     return {"ok": False, "error": f"未知演练工具: {tool_name}"}
 
 
+def _image_to_base64(image_path: str) -> str:
+    """将图片文件转换为 base64 内嵌格式，返回空字符串表示转换失败"""
+    import base64
+    try:
+        if not image_path or not os.path.exists(image_path):
+            return ""
+        with open(image_path, "rb") as f:
+            data = f.read()
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_type = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }.get(ext, "image/png")
+        b64 = base64.b64encode(data).decode("utf-8")
+        return f"data:{mime_type};base64,{b64}"
+    except Exception:
+        return ""
+
+
 def _generate_markdown_report(
     state: DrillState,
     exec_summary: str,
@@ -572,12 +595,23 @@ def _generate_markdown_report(
 
 """
     for i, sr in enumerate(state.screenshot_results, 1):
-        screenshot_url = sr.get('screenshot_url', '')
+        screenshot_path = sr.get('screenshot_path', '')
         report += f"### 截图 {i}: {sr.get('ip', 'N/A')}:{sr.get('port', 'N/A')}\n\n"
         report += f"- **URL**: {sr.get('url', 'N/A')}\n"
         report += f"- **采集时间**: {sr.get('time', 'N/A')}\n"
-        if screenshot_url:
-            report += f"\n![截图 {i}]({screenshot_url})\n"
+        # 优先使用 base64 内嵌图片，失败则回退到 URL
+        if screenshot_path:
+            b64_img = _image_to_base64(screenshot_path)
+            if b64_img:
+                report += f"\n![截图 {i}]({b64_img})\n"
+            else:
+                screenshot_url = sr.get('screenshot_url', '')
+                if screenshot_url:
+                    report += f"\n![截图 {i}]({screenshot_url})\n"
+        else:
+            screenshot_url = sr.get('screenshot_url', '')
+            if screenshot_url:
+                report += f"\n![截图 {i}]({screenshot_url})\n"
         report += "\n"
 
     report += f"""
@@ -784,6 +818,13 @@ def create_drill_stream(
     if state is None:
         state = DrillState()
     state.document_content = document_content
+
+    # 解析文档内容，提取结构化信息
+    doc_info = _analyze_document(document_content)
+    state.document_summary = doc_info["summary"]
+    state.action_plan = doc_info["action_plan"]
+    if not state.target_network and doc_info["target_network"]:
+        state.target_network = doc_info["target_network"]
 
     tools = get_drill_tool_definitions()
     history: list[dict] = []
@@ -1055,14 +1096,13 @@ def create_drill_stream(
             )
 
         # 检查是否已生成报告（演练完成）- generate_report 总是最后一个工具
+        # 注意：drill_report_link 在 ai.py 的 done: True 时发送，因为那时才知道 session_id
         if (
             last_tool_name == "generate_report"
             and last_tool_result
             and last_tool_result.get("ok")
         ):
             state.is_complete = True
-            # 发送报告链接，供前端跳转
-            yield (json.dumps({"drill_report_link": "/reports"}) + "\n\n")
 
     # ─── 循环结束 ────────────────────────────────────────────────────────────
     if not state.is_complete and state.step_count >= state.max_steps:

@@ -610,11 +610,28 @@ def _get_honeypot_stats(args: dict, cfg: dict = None) -> dict:
     try:
         stats = HFishModel.get_stats()
 
+        # 获取攻击来源Top10（按IP聚合）
+        from database.db import get_connection
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT attack_ip, COUNT(*) as count
+            FROM attack_logs
+            GROUP BY attack_ip
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        top_ips = [
+            {"ip": row["attack_ip"], "count": row["count"]}
+            for row in cursor.fetchall()
+        ]
+        conn.close()
+
         return {
             'ok': True,
             '总攻击次数': stats.get('total', 0),
             '热门攻击服务': stats.get('service_stats', []),
-            '攻击来源Top10': stats.get('ip_stats', []),
+            '攻击来源Top10': top_ips,
             '7天趋势': stats.get('time_stats', []),
         }
     except Exception as e:

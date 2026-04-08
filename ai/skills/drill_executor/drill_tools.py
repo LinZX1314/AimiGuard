@@ -78,45 +78,45 @@ def get_drill_tool_definitions() -> list[dict]:
                 },
             },
             # ── RDP弱口令 ───────────────────────────────────────────────────────
-            {
-                "type": "function",
-                "function": {
-                    "name": "bruteforce_rdp",
-                    "description": "检测RDP服务弱口令（端口3389）",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "target_ip": {"type": "string", "description": "目标IP"},
-                            "port": {
-                                "type": "integer",
-                                "description": "端口",
-                                "default": 3389,
-                            },
-                        },
-                        "required": ["target_ip"],
-                    },
-                },
-            },
+            # {
+            #     "type": "function",
+            #     "function": {
+            #         "name": "bruteforce_rdp",
+            #         "description": "检测RDP服务弱口令（端口3389）",
+            #         "parameters": {
+            #             "type": "object",
+            #             "properties": {
+            #                 "target_ip": {"type": "string", "description": "目标IP"},
+            #                 "port": {
+            #                     "type": "integer",
+            #                     "description": "端口",
+            #                     "default": 3389,
+            #                 },
+            #             },
+            #             "required": ["target_ip"],
+            #         },
+            #     },
+            # },
             # ── MySQL弱口令 ─────────────────────────────────────────────────────
-            {
-                "type": "function",
-                "function": {
-                    "name": "bruteforce_mysql",
-                    "description": "检测MySQL服务弱口令（端口3306）",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "target_ip": {"type": "string", "description": "目标IP"},
-                            "port": {
-                                "type": "integer",
-                                "description": "端口",
-                                "default": 3306,
-                            },
-                        },
-                        "required": ["target_ip"],
-                    },
-                },
-            },
+            # {
+            #     "type": "function",
+            #     "function": {
+            #         "name": "bruteforce_mysql",
+            #         "description": "检测MySQL服务弱口令（端口3306）",
+            #         "parameters": {
+            #             "type": "object",
+            #             "properties": {
+            #                 "target_ip": {"type": "string", "description": "目标IP"},
+            #                 "port": {
+            #                     "type": "integer",
+            #                     "description": "端口",
+            #                     "default": 3306,
+            #                 },
+            #             },
+            #             "required": ["target_ip"],
+            #         },
+            #     },
+            # },
             # ── 蜜罐审计 ────────────────────────────────────────────────────────
             {
                 "type": "function",
@@ -164,7 +164,7 @@ def get_drill_tool_definitions() -> list[dict]:
                 "function": {
                     "name": "get_local_ip",
                     "description": "获取本机IP",
-                    "parameters": {
+                    "parameters": { 
                         "type": "object",
                         "properties": {},
                         "required": [],

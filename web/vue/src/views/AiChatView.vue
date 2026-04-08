@@ -466,7 +466,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
           // 演练报告链接 - 显示跳转按钮
           if (parsed.drill_report_link) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
-            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](/reports)\n`
+            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](${parsed.drill_report_link})\n`
           }
           // 应急响应报告分块内容 - 通过post_typeQueue和postTypewriter显示
           if (parsed.incident_report_chunk) {
@@ -488,7 +488,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
           // 应急响应报告链接 - 显示跳转按钮
           if (parsed.incident_report_link) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
-            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](/reports)\n`
+            assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](${parsed.incident_report_link})\n`
           }
           if (parsed.session_id && !resolvedSessionId) {
             resolvedSessionId = Number(parsed.session_id)

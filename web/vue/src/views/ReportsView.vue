@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { api } from '@/api/index'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -45,7 +45,15 @@ async function loadReports() {
     const res = await api.get<any>('/api/v1/ai/reports')
     reports.value = res.data ?? res
     if (reports.value.length > 0) {
-      selectedReport.value = reports.value[0]
+      // 检查是否有 sid 查询参数，有则选中对应报告
+      const sidParam = route.query.sid
+      if (sidParam) {
+        const targetId = Number(sidParam)
+        const found = reports.value.find(r => r.session_id === targetId)
+        selectedReport.value = found || reports.value[0]
+      } else {
+        selectedReport.value = reports.value[0]
+      }
     }
   } catch (e) {
     console.error('Failed to load reports:', e)
@@ -107,6 +115,7 @@ function openInNewTab(report: Report) {
 }
 
 const router = useRouter()
+const route = useRoute()
 const confirmDeleteId = ref<number | null>(null)
 
 function goToChat(sessionId: number) {

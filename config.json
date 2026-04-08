@@ -1,8 +1,8 @@
 {
   "jwt_secret": "uNs6GAbbQaqw9Cx5qc9we9X7J27fCR0_W0G_3k0s6go",
   "hfish": {
-    "host_port": "192.168.0.5:4433",
-    "api_key": "wMstEwotBnpHcHuWFGMQYkOfSMKyfugzDTqnBxTFTVbsUuFhsmrSQiNELLwzYgWl",
+    "host_port": "127.0.0.1:4433",
+    "api_key": "OxUquIBdyUVvAGSgMlvStAtxsQOHakGLHllmFEbSfgamFoqoKxRJIzLagijXaMdG",
     "sync_interval": 6,
     "sync_enabled": true,
     "api_base_url": ""
@@ -10,27 +10,18 @@
   "ai": {
     "enabled": true,
     "auto_ban": true,
-    "api_url": "http://192.168.0.5:1234",
+    "api_url": "http://127.0.0.1:1234",
     "api_key": "sk-rmyzUGoXTLalfJIwyDjz7iQjDF5gMQSYU4QdC4rryFqImN1f",
-    "model": "Qwen/Qwen3.5-9B-no-thinking",
+    "model": "Qwen/Qwen3.5-4B-no-thinking",
     "timeout": 160,
     "ban_threshold": 80,
     "whitelist": [
-      "192.168.0.3",
-      "192.168.0.5",
-      "192.168.0.5",
-      "192.168.0.15"
+      "192.168.0.2"
     ]
   },
   "switches": [
     {
       "host": "192.168.0.2",
-      "port": 23,
-      "password": "admin",
-      "acl_number": 30
-    },
-    {
-      "host": "192.168.0.1",
       "port": 23,
       "password": "admin",
       "acl_number": 30
