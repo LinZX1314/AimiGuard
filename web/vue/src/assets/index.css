@@ -64,8 +64,17 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-bold;
     min-height: 100vh;
+  }
+
+  /* 全局加粗字体 */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold;
+  }
+
+  p, span, div, td, th, li, label, a {
+    @apply font-bold;
   }
 
   html:not(.dark) body {

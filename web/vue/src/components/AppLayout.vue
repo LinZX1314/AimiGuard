@@ -691,7 +691,7 @@ onUnmounted(() => {
               @click="navigate"
 
 
-              class="flex items-center px-3 py-2.5 rounded-md text-sm group relative overflow-hidden transition-all duration-300 ease-out cursor-pointer"
+              class="flex items-center px-3 py-2.5 rounded-md text-sm font-semibold group relative overflow-hidden transition-all duration-300 ease-out cursor-pointer"
 
 
               :class="[
@@ -703,7 +703,7 @@ onUnmounted(() => {
                   ? 'bg-primary/10 text-primary font-bold shadow-[0_0_15px_hsl(var(--primary)/0.15)]'
 
 
-                  : 'text-slate-500 hover:bg-muted/60 hover:text-foreground'
+                  : 'text-slate-300 hover:bg-muted/60 hover:text-foreground'
 
 
               ]"

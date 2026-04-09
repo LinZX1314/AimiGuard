@@ -4,6 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { api } from '@/api/index'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+
+// 配置 marked 支持 GFM 表格
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
 import {
   ClipboardList,
   Calendar,
@@ -93,7 +99,7 @@ function openInNewTab(report: Report) {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>${report.title} - 演练报告</title>
+        <title>${report.title} - 计划报告</title>
         <style>
           body { font-family: sans-serif; line-height: 1.6; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }
           img { max-width: 100%; border-radius: 8px; }
@@ -319,9 +325,9 @@ onMounted(() => {
           <div class="absolute inset-0 bg-primary/10 blur-2xl rounded-full scale-150 animate-pulse"></div>
           <ClipboardList class="h-20 w-20 relative opacity-20" />
         </div>
-        <h3 class="text-xl font-bold mb-2">欢迎查阅演练报告库</h3>
+        <h3 class="text-xl font-bold mb-2">欢迎查阅计划报告库</h3>
         <p class="text-sm max-w-md text-center opacity-60">
-          这里记录了所有 AI 攻防指挥官执行的安全演练成果，请从左侧列表中选择查看详细的分析报告。
+          这里记录了所有 AI 攻防指挥官执行的安全计划成果，请从左侧列表中选择查看详细的分析报告。
         </p>
       </div>
 
@@ -366,11 +372,11 @@ onMounted(() => {
 }
 
 .report-content h3 {
-  @apply text-lg font-bold mt-8 mb-4 text-foreground/90;
+  @apply text-lg font-bold mt-8 mb-4 text-foreground;
 }
 
 .report-content p {
-  @apply mb-4 text-muted-foreground leading-relaxed;
+  @apply mb-4 leading-relaxed;
 }
 
 .report-content ul, .report-content ol {
@@ -378,7 +384,7 @@ onMounted(() => {
 }
 
 .report-content li {
-  @apply text-muted-foreground relative;
+  @apply relative;
 }
 
 .report-content table {
@@ -390,7 +396,7 @@ onMounted(() => {
 }
 
 .report-content td {
-  @apply p-4 text-sm border-t border-border/50 text-muted-foreground;
+  @apply p-4 text-sm border-t border-border/50;
 }
 
 .report-content blockquote {
@@ -406,10 +412,16 @@ onMounted(() => {
 }
 
 .report-content pre {
-  @apply bg-zinc-950/80 p-6 rounded-xl my-6 border border-white/5 font-mono text-xs leading-relaxed overflow-x-auto;
+  @apply p-6 rounded-xl my-6 border border-white/5 font-mono text-xs leading-relaxed overflow-x-auto;
+  background-color: #fafafa;
+  color: #171717;
+}
+.dark .report-content pre {
+  background-color: #18181b;
+  color: #fafafa;
 }
 
 .report-content code {
-  @apply font-mono px-1.5 py-0.5 rounded bg-muted text-primary text-[0.85em];
+  @apply font-mono px-1.5 py-0.5 rounded text-primary text-[0.85em];
 }
 </style>

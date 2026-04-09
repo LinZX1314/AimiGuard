@@ -1,6 +1,6 @@
 """
 Drill Skill 专用工具定义
-这些工具会在演练模式下暴露给 AI Agent
+这些工具会在计划模式下暴露给 AI Agent
 """
 
 # ─── 工具定义缓存（避免每次调用重建）───────────────────────────────────
@@ -14,7 +14,7 @@ def clear_tool_cache():
 
 
 def get_drill_tool_definitions() -> list[dict]:
-    """返回演练 Skill 的工具定义列表（带缓存）"""
+    """返回计划 Skill 的工具定义列表（带缓存）"""
     global _TOOL_DEFS_CACHE
     if _TOOL_DEFS_CACHE is None:
         _TOOL_DEFS_CACHE = [
@@ -145,7 +145,7 @@ def get_drill_tool_definitions() -> list[dict]:
                 "type": "function",
                 "function": {
                     "name": "generate_report",
-                    "description": "生成安全演练报告",
+                    "description": "生成安全计划报告",
                     "parameters": {
                         "type": "object",
                         "properties": {

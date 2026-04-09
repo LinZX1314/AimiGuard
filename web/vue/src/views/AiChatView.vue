@@ -153,7 +153,7 @@ function persistTtsPreference(enabled: boolean) {
   }
 }
 
-// ─── 演练模式状态 ────────────────────────────────────────────────────────────
+// ─── 计划模式状态 ────────────────────────────────────────────────────────────
 
 function speak(text: string) {
   if (!ttsEnabled.value || !window.speechSynthesis) return
@@ -309,7 +309,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   const attachments = (extraParams?.attachments || []) as ChatAttachmentPayload[]
   const baseText = (text || '').trim() || (attachmentFiles.length ? '请分析我上传的文件/图片。' : '')
   const composedText = isDrill ? text : composeTextWithAttachments(baseText, attachments)
-  const displayText = isDrill ? `【演练文档】\n${effectiveDocContent}` : composedText
+  const displayText = isDrill ? `【计划文档】\n${effectiveDocContent}` : composedText
 
   messages.value.push({ role: 'user', content: displayText })
   sending.value = true
@@ -331,7 +331,7 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
   activeChatController.value = controller
 
   try {
-    const requestText = isDrill ? `【演练文档】${effectiveDocContent}` : baseText
+    const requestText = isDrill ? `【计划文档】${effectiveDocContent}` : baseText
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
@@ -458,12 +458,12 @@ async function send(text: string, extraParams: any = {}, documentContent?: strin
               ;(assistantMsg as any).tool_results.push(newToolResult)
             }
           }
-          // 演练报告内容 - 直接作为 post_content 显示
+          // 计划报告内容 - 直接作为 post_content 显示
           if (parsed.drill_report) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
             assistantMsg.post_content = (assistantMsg.post_content || '') + parsed.drill_report
           }
-          // 演练报告链接 - 显示跳转按钮
+          // 计划报告链接 - 显示跳转按钮
           if (parsed.drill_report_link) {
             if (typeQueue) { assistantMsg.content += typeQueue; typeQueue = '' }
             assistantMsg.post_content = (assistantMsg.post_content || '') + `\n\n[📋 查看完整报告 →](${parsed.drill_report_link})\n`

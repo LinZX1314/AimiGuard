@@ -79,43 +79,15 @@ def get_incident_tool_definitions() -> list[dict]:
                     },
                 },
             },
-            # ── 执行封禁 ────────────────────────────────────────────────────────
-            {
-                "type": "function",
-                "function": {
-                    "name": "apply_ban_policy",
-                    "description": "执行封禁策略，阻断攻击流量",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "target": {
-                                "type": "string",
-                                "description": "封禁目标，可以是IP或端口",
-                            },
-                            "policy_type": {
-                                "type": "string",
-                                "description": "封禁类型：port（端口封禁）或 ip（IP封禁）",
-                            },
-                        },
-                        "required": ["target", "policy_type"],
-                    },
-                },
-            },
             # ── ACL策略封禁 ──────────────────────────────────────────────────
             {
                 "type": "function",
                 "function": {
                     "name": "acl_policy_ban",
-                    "description": "使用Cisco风格ACL命令执行封禁。进入配置模式: ip access-list extended <name>，添加规则: <rule_id> deny <protocol> <source> <destination> eq <port>",
+                    "description": "acl封禁配置，使用Cisco风格ACL命令执行封禁，替换交换机 ACL30 规则",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "acl_command": {
-                                "type": "string",
-                                "description": "完整ACL命令，如 'ip access-list extended udp' 或 '20 deny udp any any eq 4750'",
-                            },
-                        },
-                        "required": ["acl_command"],
+                        "properties": {},
                     },
                 },
             },

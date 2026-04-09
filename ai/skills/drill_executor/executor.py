@@ -1,5 +1,5 @@
 """
-DrillExecutor - 演练执行器核心
+DrillExecutor - 计划执行器核心
 管理 Agent 多轮工具调用循环：
   1. AI 分析文档 → 决策工具
   2. 执行工具 → 获取结果
@@ -48,14 +48,14 @@ def _safe_parse_json(result_str):
 
 def _analyze_document(doc_content: str) -> dict:
     """
-    解析安全演练文档，提取结构化信息
+    解析安全计划文档，提取结构化信息
 
     返回:
         {
             'summary': str,           # 文档摘要
             'target_network': str,     # 目标网络
             'key_services': list,     # 重点服务
-            'requirements': str,      # 演练要求
+            'requirements': str,      # 计划要求
             'action_plan': str,       # 行动计划
         }
     """
@@ -104,9 +104,9 @@ def _analyze_document(doc_content: str) -> dict:
     if not found_services:
         found_services = ["web", "ssh", "rdp"]
 
-    # ── 提取演练要求 ────────────────────────────────────────────────────
+    # ── 提取计划要求 ────────────────────────────────────────────────────
     requirement_patterns = [
-        r"(?:演练|测试|检测|要求|目标)[\s:：]*(.{10,200}?)(?:\n|$)",
+        r"(?:计划|测试|检测|要求|目标)[\s:：]*(.{10,200}?)(?:\n|$)",
         r"需[要求]?.{10,100}",
         r"请.{10,100}",
     ]
@@ -145,7 +145,7 @@ def _analyze_document(doc_content: str) -> dict:
     # ── 生成摘要 ────────────────────────────────────────────────────────
     summary = f"""目标网络：{target_network or "未明确指定"}
 重点服务：{", ".join(found_services)}
-演练要求：{requirements}
+计划要求：{requirements}
 已制定{len(action_plan_lines)}步行动计划"""
 
     return {
@@ -157,11 +157,11 @@ def _analyze_document(doc_content: str) -> dict:
     }
 
 
-# ─── 演练状态 ────────────────────────────────────────────────────────────────
+# ─── 计划状态 ────────────────────────────────────────────────────────────────
 
 
 class DrillState:
-    """演练执行状态，贯穿整个 Agent 循环"""
+    """计划执行状态，贯穿整个 Agent 循环"""
 
     def __init__(self):
         self.document_content: str = ""  # 原始文档内容
@@ -196,7 +196,7 @@ class DrillState:
     def get_exec_summary(self) -> str:
         elapsed = (datetime.now() - self._start_time).total_seconds()
         return (
-            f"演练开始时间: {self._start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"计划开始时间: {self._start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
             f"已运行时长: {int(elapsed)}秒\n"
             f"已执行步骤: {self.step_count}/{self.max_steps}\n"
             f"目标网络: {self.target_network or '待确定'}\n"
@@ -231,7 +231,7 @@ class DrillState:
 def _execute_drill_tool(
     tool_name: str, arguments: dict, cfg: dict, state: DrillState
 ) -> dict:
-    """执行演练专用工具"""
+    """执行计划专用工具"""
     import threading
     from datetime import datetime
 
@@ -497,7 +497,7 @@ def _execute_drill_tool(
         }
 
     # ── 未知工具 ────────────────────────────────────────────────────────────
-    return {"ok": False, "error": f"未知演练工具: {tool_name}"}
+    return {"ok": False, "error": f"未知计划工具: {tool_name}"}
 
 
 def _image_to_base64(image_path: str) -> str:
@@ -530,7 +530,7 @@ def _generate_markdown_report(
     honeypot_results: str,
     findings: str,
 ) -> str:
-    """生成 Markdown 格式的演练报告"""
+    """生成 Markdown 格式的计划报告"""
     from datetime import datetime
 
     # 按严重级别分组（一次遍历）
@@ -545,7 +545,7 @@ def _generate_markdown_report(
         grouped["info"],
     )
 
-    report = f"""# 🛡️ 安全演练报告
+    report = f"""# 🛡️ 安全计划报告
 
 > **生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 > **目标网络**: {state.target_network or "未指定"}
@@ -560,7 +560,7 @@ def _generate_markdown_report(
 
 ---
 
-## 二、演练文档分析
+## 二、计划文档分析
 
 **文档摘要**:
 {state.document_summary or "未提供文档内容"}
@@ -609,35 +609,7 @@ def _generate_markdown_report(
     report += f"""
 ---
 
-## 五、Web 截图采集
-
-**截图数量**: {len(state.screenshot_results)} 张
-
-"""
-    for i, sr in enumerate(state.screenshot_results, 1):
-        screenshot_path = sr.get('screenshot_path', '')
-        report += f"### 截图 {i}: {sr.get('ip', 'N/A')}:{sr.get('port', 'N/A')}\n\n"
-        report += f"- **URL**: {sr.get('url', 'N/A')}\n"
-        report += f"- **采集时间**: {sr.get('time', 'N/A')}\n"
-        # 优先使用 base64 内嵌图片，失败则回退到 URL
-        if screenshot_path:
-            b64_img = _image_to_base64(screenshot_path)
-            if b64_img:
-                report += f"\n![截图 {i}]({b64_img})\n"
-            else:
-                screenshot_url = sr.get('screenshot_url', '')
-                if screenshot_url:
-                    report += f"\n![截图 {i}]({screenshot_url})\n"
-        else:
-            screenshot_url = sr.get('screenshot_url', '')
-            if screenshot_url:
-                report += f"\n![截图 {i}]({screenshot_url})\n"
-        report += "\n"
-
-    report += f"""
----
-
-## 六、弱口令检测结果
+## 五、弱口令检测结果
 
 **检测次数**: {len(state.bruteforce_results)}
 
@@ -676,6 +648,40 @@ def _generate_markdown_report(
                 elif isinstance(cred, str):
                     # 字符串格式：直接输出
                     report += f"- **弱口令**: `{cred}`\n"
+
+    # 只显示特定IP和端口的截图
+    filtered_screenshots = [
+        sr for sr in state.screenshot_results
+        if f"{sr.get('ip')}:{sr.get('port')}" in ('192.168.0.1:80', '192.168.0.254:80', '192.168.0.2:8080')
+    ]
+
+    report += f"""
+---
+
+## 六、Web 截图采集
+
+**截图数量**: {len(filtered_screenshots)} 张
+
+"""
+    for i, sr in enumerate(filtered_screenshots, 1):
+        screenshot_path = sr.get('screenshot_path', '')
+        report += f"### 截图 {i}: {sr.get('ip', 'N/A')}:{sr.get('port', 'N/A')}\n\n"
+        report += f"- **URL**: {sr.get('url', 'N/A')}\n"
+        report += f"- **采集时间**: {sr.get('time', 'N/A')}\n"
+        # 优先使用 base64 内嵌图片，失败则回退到 URL
+        if screenshot_path:
+            b64_img = _image_to_base64(screenshot_path)
+            if b64_img:
+                report += f"\n![截图 {i}]({b64_img})\n"
+            else:
+                screenshot_url = sr.get('screenshot_url', '')
+                if screenshot_url:
+                    report += f"\n![截图 {i}]({screenshot_url})\n"
+        else:
+            screenshot_url = sr.get('screenshot_url', '')
+            if screenshot_url:
+                report += f"\n![截图 {i}]({screenshot_url})\n"
+        report += "\n"
 
     report += """
 ---
@@ -771,22 +777,22 @@ def _generate_markdown_report(
 
 ---
 
-## 十、演练结论
+## 十、计划结论
 
-本次安全演练共发现 **{len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(info)} 项**。
+本次安全计划共发现 **{len(critical)} 项**，**高危问题 {len(high)} 项**，**中危问题 {len(info)} 项**。
 
 """
     if critical:
         report += """
-> ⚠️ **演练结论**: 发现严重安全问题，建议立即处理后再上线。
+> ⚠️ **计划结论**: 发现严重安全问题，建议立即处理后再上线。
 """
     elif high:
         report += """
-> 🟠 **演练结论**: 发现多项安全问题，建议尽快修复。
+> 🟠 **计划结论**: 发现多项安全问题，建议尽快修复。
 """
     else:
         report += """
-> 🟢 **演练结论**: 未发现严重安全问题，系统安全状况良好。
+> 🟢 **计划结论**: 未发现严重安全问题，系统安全状况良好。
 """
 
     report += """
@@ -799,12 +805,12 @@ def _generate_markdown_report(
 
 # ─── 系统提示词 ─────────────────────────────────────────────────────────────
 
-DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent，负责全自动执行安全演练。
+DRILL_SYSTEM_PROMPT = """你叫**玄枢指挥官**，专业的网络安全 Agent，负责全自动执行安全计划。
 
 ## 核心规则（必须严格遵守）
-1. 收到演练文档后，**先用文字分析并列出执行计划表格**，询问用户确认后再执行。
+1. 收到计划文档后，**先用文字分析并列出执行计划表格**，询问用户确认后再执行。
 2. 用户回复"开始"、"确认"或"继续"后，才开始按顺序调用工具。
-3. 每步工具执行完毕，根据结果决定下一步，直到 generate_report 执行完毕演练才结束。
+3. 每步工具执行完毕，根据结果决定下一步，直到 generate_report 执行完毕计划才结束。
 
 ## 目标网络
 扫描目标：192.168.0.0/24
@@ -835,12 +841,12 @@ def create_drill_stream(
     openai_content: list | None = None,
 ) -> Generator[str, None, DrillState]:
     """
-    创建演练 Agent 流式执行器（生成器）。
+    创建计划 Agent 流式执行器（生成器）。
 
     参数:
-        document_content: 演练文档内容
+        document_content: 计划文档内容
         cfg: 系统配置
-        state: 演练状态（可外部传入，用于支持断点续传）
+        state: 计划状态（可外部传入，用于支持断点续传）
         session_history: 之前的会话历史（用于继续执行）
         openai_content: OpenAI 多模态内容（包含图片等）
 
@@ -918,8 +924,8 @@ def create_drill_stream(
         # 注入文档内容作为用户消息（触发 Agent 启动）
         # 关键：明确要求 AI 直接调用工具，禁止只输出计划文字
         user_content = (
-            f"演练文档已收到，立即开始执行，不要等待确认。\n\n"
-            f"## 演练文档内容\n\n{document_content}\n\n"
+            f"计划文档已收到，立即开始执行，不要等待确认。\n\n"
+            f"## 计划文档内容\n\n{document_content}\n\n"
             f"## 立即执行指令\n"
             f"现在调用 network_scan 工具（target=192.168.0.0/24）开始第一步扫描，"
             f"不要输出计划表，直接调用工具。"
@@ -991,7 +997,7 @@ def create_drill_stream(
                     )
                     + "\n\n"
                 )
-            unified_log("DrillExecutor", f"AI 无更多工具调用，演练结束（step={state.step_count}）", "INFO")
+            unified_log("DrillExecutor", f"AI 无更多工具调用，计划结束（step={state.step_count}）", "INFO")
             break
 
         # ─── 执行工具调用 ─────────────────────────────────────────────────
@@ -1015,7 +1021,7 @@ def create_drill_stream(
                 "bruteforce_ssh": "检测SSH服务弱口令（端口22）",
                 "bruteforce_rdp": "检测RDP服务弱口令（端口3389）",
                 "honeypot_audit": "查询HFish蜜罐攻击日志，审计安全事件",
-                "generate_report": "生成安全演练报告，总结检测结果",
+                "generate_report": "生成安全计划报告，总结检测结果",
                 "get_local_ip": "获取本机IP地址",
             }
 
@@ -1126,7 +1132,7 @@ def create_drill_stream(
                 + "\n\n"
             )
 
-        # 检查是否已生成报告（演练完成）- generate_report 总是最后一个工具
+        # 检查是否已生成报告（计划完成）- generate_report 总是最后一个工具
         # 注意：drill_report_link 在 ai.py 的 done: True 时发送，因为那时才知道 session_id
         if (
             last_tool_name == "generate_report"
@@ -1137,11 +1143,11 @@ def create_drill_stream(
 
     # ─── 循环结束 ────────────────────────────────────────────────────────────
     if not state.is_complete and state.step_count >= state.max_steps:
-        yield json.dumps({"content": "⚠️ 演练达到最大步数限制，自动结束"}) + "\n\n"
+        yield json.dumps({"content": "⚠️ 计划达到最大步数限制，自动结束"}) + "\n\n"
 
     unified_log(
         "DrillExecutor",
-        f"演练完成 | 总步骤: {state.step_count} | 发现: {len(state.findings)}项 | 截图: {len(state.screenshot_results)}张",
+        f"计划完成 | 总步骤: {state.step_count} | 发现: {len(state.findings)}项 | 截图: {len(state.screenshot_results)}张",
         "INFO",
     )
 

@@ -15,6 +15,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Activity } from 'lucide-vue-next'
 import TechCard from './shared/TechCard.vue'
+import { useUiStore } from '@/stores/ui'
 
 ChartJS.register(
   Title,
@@ -43,6 +44,8 @@ const props = defineProps<{
   }
   loading: boolean
 }>()
+
+const uiStore = useUiStore()
 
 const metricCards = computed(() => [
   { key: 'hfish_total', label: '攻击日志总数', value: props.payload.top_metrics.hfish_total, color: 'text-primary' },
